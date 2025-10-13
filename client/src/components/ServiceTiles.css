@@ -119,6 +119,7 @@
 
 .child-item-modal {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 1rem;
   padding: 0.8rem;
