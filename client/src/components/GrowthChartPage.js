@@ -74,7 +74,7 @@ const GrowthChartPage = () => {
     const { childId } = useParams();
     const [child, setChild] = useState(null);
     const [modalIsOpen, setModalIsOpen] = useState(false);
-    const [newRecord, setNewRecord] = useState({ date: new Date(), height: '', weight: '', headCircumference: '' });
+    const [newRecord, setNewRecord] = useState({ date: null, height: '', weight: '', headCircumference: '' });
 
     const fetchChildData = useCallback(async () => {
         try {
@@ -97,6 +97,10 @@ const GrowthChartPage = () => {
             return;
         }
 
+        if (!newRecord.date) {
+            alert('لطفا تاریخ را انتخاب کنید.');
+            return;
+        }
         const gregorianDate = newRecord.date.toDate();
         const formattedDate = gregorianDate.toISOString().split('T')[0];
 
@@ -126,7 +130,7 @@ const GrowthChartPage = () => {
             }));
 
             setModalIsOpen(false);
-            setNewRecord({ date: new Date(), height: '', weight: '', headCircumference: '' });
+            setNewRecord({ date: null, height: '', weight: '', headCircumference: '' });
         } catch (error) {
             alert(error.message);
         }
