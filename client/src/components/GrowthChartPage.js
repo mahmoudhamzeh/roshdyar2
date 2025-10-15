@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
-import DatePicker from 'react-datepicker';
+import DatePicker from 'react-multi-date-picker';
+import persian from 'react-date-object/calendars/persian';
+import persian_fa from 'react-date-object/locales/persian_fa';
 import Modal from 'react-modal';
 import { whoStats } from '../who-stats';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
@@ -72,7 +74,7 @@ const GrowthChartPage = () => {
     const { childId } = useParams();
     const [child, setChild] = useState(null);
     const [modalIsOpen, setModalIsOpen] = useState(false);
-    const [newRecord, setNewRecord] = useState({ date: new Date(), height: '', weight: '', headCircumference: '' });
+    const [newRecord, setNewRecord] = useState({ date: null, height: '', weight: '', headCircumference: '' });
 
     const fetchChildData = useCallback(async () => {
         try {
@@ -95,8 +97,15 @@ const GrowthChartPage = () => {
             return;
         }
 
+        if (!newRecord.date) {
+            alert('لطفا تاریخ را انتخاب کنید.');
+            return;
+        }
+        const gregorianDate = newRecord.date.toDate();
+        const formattedDate = gregorianDate.toISOString().split('T')[0];
+
         const recordToAdd = {
-            date: newRecord.date.toISOString().split('T')[0],
+            date: formattedDate,
             height: newRecord.height ? parseFloat(newRecord.height) : undefined,
             weight: newRecord.weight ? parseFloat(newRecord.weight) : undefined,
             headCircumference: newRecord.headCircumference ? parseFloat(newRecord.headCircumference) : undefined,
@@ -121,7 +130,7 @@ const GrowthChartPage = () => {
             }));
 
             setModalIsOpen(false);
-            setNewRecord({ date: new Date(), height: '', weight: '', headCircumference: '' });
+            setNewRecord({ date: null, height: '', weight: '', headCircumference: '' });
         } catch (error) {
             alert(error.message);
         }
@@ -234,9 +243,14 @@ const GrowthChartPage = () => {
                 <h2>افزودن داده جدید</h2>
                 <div className="add-data-form">
                     <DatePicker
-                        selected={newRecord.date}
+                        value={newRecord.date}
                         onChange={(date) => setNewRecord(prev => ({ ...prev, date }))}
-                        dateFormat="yyyy/MM/dd"
+                        calendar={persian}
+                        locale={persian_fa}
+                        format="YYYY/MM/DD"
+                        placeholder="تاریخ را انتخاب کنید"
+                        inputClass="form-control"
+                        style={{ textAlign: 'center' }}
                     />
                     <input
                         type="number"
