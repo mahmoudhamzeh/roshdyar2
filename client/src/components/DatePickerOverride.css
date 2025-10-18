@@ -1,0 +1,31 @@
+/*
+ * DatePickerOverride.css
+ * This file contains overrides for the react-multi-date-picker component
+ * to ensure it is readable and consistent with the application's theme.
+ */
+
+/* Main container for the calendar */
+.rmdp-container {
+  background-color: #fff; /* Ensure background is white */
+  color: #333; /* Default text color for the calendar */
+}
+
+/* Day elements */
+.rmdp-day, .rmdp-week-day {
+  color: #333; /* Ensure day numbers and weekday names are dark */
+}
+
+/* Header (Month/Year) */
+.rmdp-header-values {
+  color: #333; /* Ensure month and year are dark */
+}
+
+/* Ensure selected day has readable text */
+.rmdp-day.rmdp-selected span {
+  color: #fff; /* White text on a dark background for selected day */
+}
+
+/* Ensure disabled days are visibly muted but still readable */
+.rmdp-day.rmdp-disabled {
+  color: #ccc;
+}
