@@ -8,6 +8,7 @@ import Modal from 'react-modal';
 import { whoStats } from '../who-stats';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
 import './GrowthChartPage.css';
+import './DatePickerOverride.css'; // Import the override styles
 
 Modal.setAppElement('#root');
 
