@@ -1,20 +1,50 @@
-/* Custom styles for react-responsive-carousel can go here */
-
 .presentation-mode {
-    max-width: 1200px;
-    margin: 2rem auto;
-    border-radius: 16px;
-    overflow: hidden; /* Ensures the border-radius is applied to images */
-    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-    direction: ltr; /* Force LTR for the carousel container */
+  max-width: 1200px;
+  margin: 1.5rem auto 0.5rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  direction: ltr;
+  animation: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .presentation-mode .carousel .slide img {
-    max-height: 400px; /* Or any desired height */
-    object-fit: cover;
+  max-height: 380px;
+  object-fit: cover;
 }
 
-/* The library uses a `legend` class for captions by default */
 .presentation-mode .legend {
-    display: none; /* Hide the legend as requested by the user */
+  display: none;
+}
+
+.presentation-mode .control-dots .dot {
+  background: rgba(255, 255, 255, 0.55) !important;
+  box-shadow: none !important;
+  opacity: 1 !important;
+}
+
+.presentation-mode .control-dots .dot.selected {
+  background: #fde68a !important;
+}
+
+.presentation-mode .control-arrow {
+  opacity: 0.75 !important;
+  transition: opacity 0.2s ease !important;
+}
+
+.presentation-mode .control-arrow:hover {
+  opacity: 1 !important;
+  background: rgba(15, 118, 110, 0.25) !important;
+}
+
+@media (max-width: 768px) {
+  .presentation-mode {
+    margin: 1rem 1rem 0.25rem;
+    border-radius: var(--radius-md);
+  }
+
+  .presentation-mode .carousel .slide img {
+    max-height: 220px;
+  }
 }

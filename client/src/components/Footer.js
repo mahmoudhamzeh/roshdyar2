@@ -6,6 +6,10 @@ const Footer = () => {
         <footer className="footer">
             <div className="footer-content">
                 <div className="footer-section">
+                    <p className="footer-brand">رشدیار</p>
+                    <p className="footer-tagline">همراه هوشمند رشد و سلامت کودک شما</p>
+                </div>
+                <div className="footer-section">
                     <h4>دسترسی سریع</h4>
                     <ul>
                         <li><a href="/faq">سوالات متداول</a></li>
@@ -15,12 +19,12 @@ const Footer = () => {
                 </div>
                 <div className="footer-section">
                     <h4>تماس با ما</h4>
-                    <p>آدرس: تهران، خیابان نوآوری، پلاک ۱۲۳</p>
-                    <p>شماره تماس: ۰۲۱-۱۲۳۴۵۶۷۸</p>
+                    <p>تهران، خیابان نوآوری، پلاک ۱۲۳</p>
+                    <p>۰۲۱-۱۲۳۴۵۶۷۸</p>
                 </div>
             </div>
             <div className="footer-bottom">
-                <p>تمامی حقوق برای رشدیار محفوظ است. © 2024</p>
+                <p>تمامی حقوق برای رشدیار محفوظ است. © ۱۴۰۴</p>
             </div>
         </footer>
     );

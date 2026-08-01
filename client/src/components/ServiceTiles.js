@@ -1,18 +1,29 @@
 import React, { useState } from 'react';
 import { Link, useHistory } from 'react-router-dom';
 import Modal from 'react-modal';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+    faChild,
+    faChartLine,
+    faSyringe,
+    faUserMd,
+    faBrain,
+    faFlask,
+    faStore,
+    faGamepad,
+} from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
-    { name: 'کودکان من', icon: '👶', link: '/my-children', id: 'my-children' },
-    { name: 'نمودار رشد', icon: '📈', link: '#', id: 'growth-chart' },
-    { name: 'واکسیناسیون', icon: '💉', link: '#', id: 'vaccination' },
-    { name: 'مشاوره با متخصص', icon: '👨‍⚕️', link: '#', id: 'consultant' },
-    { name: 'مشاوره روانشناسی', icon: '🧠', link: '#', id: 'psychology' },
-    { name: 'آزمایش در محل', icon: '🔬', link: '#', id: 'lab-test' },
-    { name: 'فروشگاه', icon: '🛒', link: '#', id: 'store' },
-    { name: 'سرگرمی', icon: '🎮', link: '#', id: 'entertainment' },
+    { name: 'کودکان من', icon: faChild, link: '/my-children', id: 'my-children', tone: 'teal' },
+    { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
+    { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
+    { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal' },
+    { name: 'مشاوره روانشناسی', icon: faBrain, link: '#', id: 'psychology', tone: 'amber' },
+    { name: 'آزمایش در محل', icon: faFlask, link: '#', id: 'lab-test', tone: 'mint' },
+    { name: 'فروشگاه', icon: faStore, link: '#', id: 'store', tone: 'teal' },
+    { name: 'سرگرمی', icon: faGamepad, link: '#', id: 'entertainment', tone: 'amber' },
 ];
 
 Modal.setAppElement('#root');
@@ -25,7 +36,6 @@ const ServiceTiles = () => {
     const [selectedService, setSelectedService] = useState('');
 
     const handleServiceClick = async (serviceId) => {
-        console.log(`handleServiceClick triggered for service: ${serviceId}`);
         try {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
             const userId = loggedInUser ? loggedInUser.id : null;
@@ -48,14 +58,11 @@ const ServiceTiles = () => {
             }
 
             const data = await response.json();
-            console.log(`Found ${data.length} children for user ${userId}.`);
 
             if (data.length === 0) {
-                console.log('No children found, navigating to /add-child');
                 alert('ابتدا باید حداقل یک کودک اضافه کنید.');
                 history.push('/add-child');
             } else {
-                console.log(`Found ${data.length} children. Opening child selection modal.`);
                 setChildren(data);
                 setSelectedService(serviceId);
                 setModalIsOpen(true);
@@ -68,42 +75,59 @@ const ServiceTiles = () => {
 
     const handleModalSubmit = () => {
         if (selectedChild && selectedService) {
-            const url = `/${selectedService}/${selectedChild}`;
-            console.log(`Modal submit: Navigating to: ${url}`);
-            history.push(url);
-        } else {
-            console.log('Modal submit failed: selectedChild or selectedService is missing.');
+            history.push(`/${selectedService}/${selectedChild}`);
         }
     };
 
+    const renderTile = (service) => (
+        <div className={`tile tile-${service.tone}`}>
+            <div className="tile-icon" aria-hidden="true">
+                <FontAwesomeIcon icon={service.icon} />
+            </div>
+            <div className="tile-name">{service.name}</div>
+        </div>
+    );
+
     return (
         <>
-            <div className="tiles-container">
-                {services.map(service => {
-                    const requiresChild = service.id === 'growth-chart' || service.id === 'vaccination';
-                    if (requiresChild) {
+            <section className="tiles-section">
+                <div className="tiles-header animate-fade-up">
+                    <h2>خدمات رشدیار</h2>
+                    <p>از پیگیری رشد تا مراقبت روزانه — همه در یک نگاه</p>
+                </div>
+                <div className="tiles-container">
+                    {services.map((service, index) => {
+                        const requiresChild = service.id === 'growth-chart' || service.id === 'vaccination';
+                        const style = { animationDelay: `${0.05 * index}s` };
+                        if (requiresChild) {
+                            return (
+                                <Link
+                                    to="#"
+                                    key={service.id}
+                                    className="tile-link animate-fade-up"
+                                    style={style}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        handleServiceClick(service.id);
+                                    }}
+                                >
+                                    {renderTile(service)}
+                                </Link>
+                            );
+                        }
                         return (
-                            <Link to="#" key={service.id} className="tile-link" onClick={(e) => {
-                                e.preventDefault();
-                                handleServiceClick(service.id);
-                            }}>
-                                <div className="tile">
-                                    <div className="tile-icon">{service.icon}</div>
-                                    <div className="tile-name">{service.name}</div>
-                                </div>
+                            <Link
+                                to={service.link}
+                                key={service.id}
+                                className="tile-link animate-fade-up"
+                                style={style}
+                            >
+                                {renderTile(service)}
                             </Link>
                         );
-                    }
-                    return (
-                        <Link to={service.link} key={service.id} className="tile-link">
-                            <div className="tile">
-                                <div className="tile-icon">{service.icon}</div>
-                                <div className="tile-name">{service.name}</div>
-                            </div>
-                        </Link>
-                    );
-                })}
-            </div>
+                    })}
+                </div>
+            </section>
             <Modal
                 isOpen={modalIsOpen}
                 onRequestClose={() => setModalIsOpen(false)}
@@ -119,7 +143,12 @@ const ServiceTiles = () => {
                             className={`child-item-modal ${selectedChild === child.id ? 'selected' : ''}`}
                             onClick={() => setSelectedChild(child.id)}
                         >
-                            <img src={child.avatar && child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/50')} alt={getChildDisplayName(child)} />
+                            <img
+                                src={child.avatar && child.avatar.startsWith('/uploads')
+                                    ? `http://localhost:5000${child.avatar}`
+                                    : (child.avatar || 'https://i.pravatar.cc/50')}
+                                alt={getChildDisplayName(child)}
+                            />
                             <div className="child-name">{getChildDisplayName(child)}</div>
                         </div>
                     ))}

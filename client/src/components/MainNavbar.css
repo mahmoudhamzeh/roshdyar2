@@ -1,101 +1,141 @@
-/* Reset‌های لازم و یکدست‌سازی رندر متن */
-html,body{margin:0;padding:0}
-html{ -webkit-text-size-adjust:100%; text-size-adjust:100% }
-*{ box-sizing:border-box }
-:root{
-  --primary:#1565c0;
-  --danger:#d32f2f;
-  --text-on-primary:#fff;
-}
-body{
-  font-family:'Vazirmatn', Tahoma, sans-serif;
-  background:#f5f7fb;
-  color:#1f2937;
-  line-height:1.6;
-}
-/* کمک به یکدست شدن رندر فارسی بین مرورگرها */
-body, .navbar{
-  -webkit-font-smoothing:antialiased; /* کروم/سافاری */
-  -moz-osx-font-smoothing:grayscale;  /* فایرفاکس روی مک */
-  font-kerning:normal;
-  font-feature-settings:"kern","liga","clig","calt";
-}
-
-/* ناوبَر */
-.navbar{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:1rem;
-  background-color:var(--primary);
-  color:var(--text-on-primary);
-  padding:.875rem 1.25rem;
-  border-bottom:1px solid rgba(255,255,255,.12);
-  position: relative;
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background:
+    linear-gradient(120deg, var(--brand-deep) 0%, var(--brand) 55%, #0d9488 100%);
+  color: var(--text-on-brand);
+  padding: 0.85rem clamp(1rem, 3vw, 1.75rem);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  position: sticky;
   top: 0;
   z-index: 1000;
+  backdrop-filter: blur(8px);
 }
-/* Desktop First Layout */
-.navbar-left, .navbar-center, .navbar-right {
+
+.navbar-left,
+.navbar-center,
+.navbar-right {
   display: flex;
   align-items: center;
 }
+
 .navbar-left { flex: 1; justify-content: flex-start; }
 .navbar-center { flex: 2; justify-content: center; }
 .navbar-right { flex: 1; justify-content: flex-end; }
 
 .navbar-brand a {
-  color: #fff; text-decoration: none;
-  font-weight: 700; font-size: 1.375rem; white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #fff;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.navbar-brand a:hover {
+  opacity: 0.92;
+  color: #fff;
+}
+
+.navbar-brand-icon {
+  width: 32px;
+  height: 32px;
+  display: block;
 }
 
 .navbar-links {
-  display: flex; align-items: center; gap: .75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
-.navbar-links a {
-  color: #fff; text-decoration: none;
-  padding: .4rem .6rem; border-radius: .5rem;
-  font-weight: 500; line-height: 1.4; white-space: nowrap;
-}
-.navbar-links a:hover { background-color: rgba(255,255,255,.12); }
 
-.navbar-profile { display: flex; align-items: center; gap: .5rem; }
-.navbar-profile span { font-size: 1.25rem; cursor: pointer; line-height: 1; }
+.navbar-links a {
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: none;
+  padding: 0.45rem 0.8rem;
+  border-radius: 10px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.navbar-links a:hover {
+  background-color: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.navbar-profile {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
 
 .btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  gap: .4rem; padding: .5rem .9rem; font-size: 1rem;
-  line-height: 1.5; border-radius: .5rem; cursor: pointer;
-  border: 1px solid #fff; background: transparent; color: #fff;
-  white-space: nowrap; text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.5;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
-.btn:focus { outline: 2px solid rgba(255,255,255,.6); outline-offset: 2px; }
 
-/* --- Responsive Profile Links --- */
-.mobile-only-profile { display: none; } /* Hidden on desktop */
-.desktop-only-profile { display: inline-flex; } /* Visible on desktop */
+.btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
 
-/* --- Toggler --- */
+.btn:focus {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+.mobile-only-profile { display: none; }
+.desktop-only-profile { display: inline-flex; }
+
 .navbar-toggler {
-  display: none; /* Hidden on desktop */
-  font-size: 1.5rem; background: transparent;
-  border: none; color: white; cursor: pointer;
+  display: none;
+  font-size: 1.5rem;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+  line-height: 1;
 }
 
 .admin-link {
-  color: #fdd835 !important; /* A distinct yellow color for visibility */
+  color: #fde68a !important;
   font-weight: 700;
 }
 
-/* --- Mobile View --- */
 .menu-backdrop {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 1999; /* Below the menu (2000), above everything else */
+  background-color: rgba(15, 61, 58, 0.45);
+  z-index: 1999;
+  animation: fade-up 0.25s ease both;
 }
 
 @media (max-width: 768px) {
@@ -103,14 +143,15 @@ body, .navbar{
     position: fixed;
     top: 0;
     right: 0;
-    width: 280px; /* A fixed width for the sidebar */
+    width: min(280px, 85vw);
     height: 100%;
-    background-color: var(--primary);
-    padding: 1.5rem 1rem;
+    background: linear-gradient(180deg, var(--brand-deep), var(--brand));
+    padding: 1.75rem 1rem;
     z-index: 2000;
     display: block;
     transform: translateX(100%);
     transition: transform 0.3s ease-in-out;
+    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.18);
   }
 
   .navbar-center.active {
@@ -119,14 +160,16 @@ body, .navbar{
 
   .navbar-links {
     flex-direction: column;
-    align-items: flex-start; /* Align links to the start (right in RTL) */
+    align-items: stretch;
     width: 100%;
+    gap: 0.25rem;
   }
 
   .navbar-links a {
-    text-align: center;
-    padding: .75rem 1rem;
+    text-align: right;
+    padding: 0.85rem 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
   }
 
   .navbar-links a:last-child {
@@ -140,8 +183,8 @@ body, .navbar{
   .mobile-only-profile {
     display: flex;
     justify-content: center;
-    background-color: rgba(0,0,0,0.1);
-    margin-top: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.12);
+    margin-top: 0.75rem;
   }
 
   .navbar-toggler {

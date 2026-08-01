@@ -1,183 +1,217 @@
 .profile-page {
-    direction: rtl;
-    font-family: 'Vazirmatn', sans-serif;
-    background-color: #f4f7f6;
-    min-height: 100vh;
+  direction: rtl;
+  font-family: var(--font-body);
+  background: transparent;
+  min-height: 100vh;
 }
 
 .profile-layout {
-    display: flex;
-    max-width: 1200px;
-    margin: 20px auto;
-    gap: 20px;
+  display: flex;
+  max-width: 1200px;
+  margin: 1.5rem auto;
+  gap: 1.25rem;
+  padding: 0 1rem;
 }
 
 .profile-sidebar {
-    flex: 0 0 250px;
-    background-color: #fff;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    align-self: flex-start;
+  flex: 0 0 250px;
+  background-color: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  align-self: flex-start;
 }
 
 .profile-sidebar button {
-    display: block;
-    width: 100%;
-    padding: 15px;
-    text-align: right;
-    background: none;
-    border: none;
-    border-bottom: 1px solid #f0f0f0;
-    font-size: 1rem;
-    cursor: pointer;
-    color: #333;
+  display: block;
+  width: 100%;
+  padding: 0.95rem 1rem;
+  text-align: right;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.98rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  color: var(--ink);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.profile-sidebar button:last-child {
-    border-bottom: none;
+.profile-sidebar button:hover {
+  background-color: var(--brand-wash);
 }
 
 .profile-sidebar button.active {
-    background-color: #e3f2fd;
-    color: #1565c0;
-    font-weight: bold;
+  background-color: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 700;
 }
 
 .profile-content {
-    flex-grow: 1;
+  flex-grow: 1;
 }
 
 .card {
-    background-color: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    padding: 20px;
+  background-color: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  padding: 1.35rem 1.5rem;
 }
 
 .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
-    margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.85rem;
+  margin-bottom: 1.25rem;
+  gap: 1rem;
 }
 
 .card-header h2 {
-    color: #333;
-    font-size: 1.2rem;
-    margin: 0;
+  font-family: var(--font-display);
+  color: var(--ink);
+  font-size: 1.25rem;
+  margin: 0;
 }
 
 .edit-btn {
-    background-color: #1565c0;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 5px;
-    cursor: pointer;
+  background-color: var(--brand);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: var(--font-body);
+  transition: background-color 0.2s ease;
+}
+
+.edit-btn:hover {
+  background-color: var(--brand-deep);
 }
 
 .info-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
 }
 
 .info-row {
-    display: flex;
-    flex-direction: column;
-    padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
 }
 
 .info-label {
-    font-weight: bold;
-    color: #555;
-    margin-bottom: 5px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
 }
 
 .info-label i {
-    margin-left: 8px;
-    color: #1565c0;
+  margin-left: 8px;
+  color: var(--brand);
 }
 
 .info-value {
-    color: #333;
+  color: var(--ink);
+  font-size: 1.02rem;
 }
 
 .info-input {
-    width: 60%;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+  width: 100%;
+  max-width: 280px;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--font-body);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.info-input:focus {
+  outline: none;
+  border-color: var(--brand-mid);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.18);
 }
 
 .form-group {
-    margin-bottom: 15px;
+  margin-bottom: 1rem;
 }
 
 .form-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: bold;
-    color: #555;
+  display: block;
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
 }
 
-.form-group input, .form-group select {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-sizing: border-box;
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--brand-mid);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.18);
 }
 
 .error-message {
-    color: #D8000C;
-    background-color: #FFD2D2;
-    padding: 10px;
-    border-radius: 4px;
-    margin-bottom: 15px;
-}
-
-/* --- Responsive Styles --- */
-@media (max-width: 768px) {
-    .profile-layout {
-        flex-direction: column;
-        margin: 10px;
-        gap: 10px;
-    }
-    .profile-sidebar {
-        flex-basis: auto; /* Let it take the width it needs */
-        display: flex;
-        flex-wrap: wrap;
-        padding: 5px;
-    }
-    .profile-sidebar button {
-        flex-grow: 1; /* Allow buttons to grow and fill space */
-        border-radius: 5px;
-        margin: 5px;
-        border: 1px solid #eee;
-        justify-content: center;
-        text-align: center;
-    }
-    .info-grid {
-        grid-template-columns: 1fr; /* Stack grid items */
-        gap: 10px;
-    }
-}
-
-.generate-reminders-btn {
-    margin-top: 15px;
-    background-color: #ffc107 !important; /* Different color to stand out */
-    color: #212529 !important;
-    font-weight: bold;
+  color: #991b1b;
+  background-color: var(--danger-soft);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
 }
 
 .success-message {
-    color: #4F8A10;
-    background-color: #DFF2BF;
-    padding: 10px;
-    border-radius: 4px;
-    margin-bottom: 15px;
+  color: #065f46;
+  background-color: var(--success-soft);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.generate-reminders-btn {
+  margin-top: 15px;
+  background-color: var(--accent) !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .profile-layout {
+    flex-direction: column;
+    margin: 0.75rem auto;
+    gap: 0.75rem;
+  }
+
+  .profile-sidebar {
+    flex-basis: auto;
+    display: flex;
+    flex-wrap: wrap;
+    padding: 0.4rem;
+  }
+
+  .profile-sidebar button {
+    flex-grow: 1;
+    text-align: center;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
 }

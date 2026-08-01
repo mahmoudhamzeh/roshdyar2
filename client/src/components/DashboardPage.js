@@ -4,10 +4,11 @@ import Footer from './Footer';
 import AppCarousel from './Carousel';
 import ServiceTiles from './ServiceTiles';
 import ContentRow from './ContentRow';
+import './DashboardPage.css';
 
 const mockVideos = Array.from({ length: 8 }, (_, i) => ({
     id: i, title: `ویدیو آموزشی ${i + 1}`,
-    image: `https://placehold.co/220x140/4CAF50/FFFFFF?text=ویدیو+${i+1}`
+    image: `https://placehold.co/220x140/0F766E/FFFFFF?text=ویدیو+${i+1}`
 }));
 
 const DashboardPage = () => {
@@ -16,7 +17,6 @@ const DashboardPage = () => {
 
     useEffect(() => {
         const fetchData = async () => {
-            // Fetch Banners
             try {
                 const bannersResponse = await fetch('http://localhost:5000/api/banners');
                 if (bannersResponse.ok) {
@@ -24,27 +24,26 @@ const DashboardPage = () => {
                     const formattedBanners = data
                         .filter(banner => banner.imageUrl && banner.imageUrl.trim() !== '')
                         .map(banner => ({
-                            id: banner.id, // Pass the id for the key prop
+                            id: banner.id,
                             image: `http://localhost:5000${banner.imageUrl}`,
-                        title: banner.title,
-                        link: banner.link,
-                    }));
+                            title: banner.title,
+                            link: banner.link,
+                        }));
                     setBanners(formattedBanners);
                 }
             } catch (error) {
                 console.error("Failed to fetch banners:", error);
             }
 
-            // Fetch Articles
             try {
                 const articlesResponse = await fetch('http://localhost:5000/api/news');
                 if (articlesResponse.ok) {
                     const data = await articlesResponse.json();
-                    const formattedArticles = data.slice(0, 5).map(article => ({ // Take first 5
+                    const formattedArticles = data.slice(0, 5).map(article => ({
                         id: article.id,
                         title: article.title,
-                        summary: article.summary, // Add summary
-                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/220x140/f44336/FFFFFF?text=مقاله`,
+                        summary: article.summary,
+                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/220x140/0F766E/FFFFFF?text=مقاله`,
                         link: `/news/${article.id}`
                     }));
                     setArticles(formattedArticles);
@@ -57,12 +56,11 @@ const DashboardPage = () => {
     }, []);
 
     return (
-        <div>
+        <div className="dashboard-page">
             <MainNavbar />
-            <main>
+            <main className="dashboard-main">
                 <AppCarousel slides={banners} />
                 <ServiceTiles />
-
                 <ContentRow title="ویدیوهای آموزشی و تربیتی" items={mockVideos} scrollable={true} />
                 <ContentRow title="جدیدترین مقالات" items={articles} viewAllLink="/news" />
             </main>
