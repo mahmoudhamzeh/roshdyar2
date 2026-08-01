@@ -26,12 +26,16 @@ const VaccinationStatus = () => {
         fetchStatus();
     }, [fetchStatus]);
 
-    const handleMarkAsDone = async (vaccineName, dose) => {
+    const handleMarkAsDone = async (vaccine) => {
         try {
             await fetch(`http://localhost:5000/api/vaccinate/${childId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ vaccineName, dose }),
+                body: JSON.stringify({
+                    vaccineName: vaccine.name,
+                    dose: vaccine.dose,
+                    age: vaccine.age ?? vaccine.month,
+                }),
             });
             fetchStatus(); // Refresh the status
         } catch (error) {
@@ -45,10 +49,11 @@ const VaccinationStatus = () => {
             {vaccines.length > 0 ? (
                 <ul>
                     {vaccines.map(v => (
-                        <li key={`${v.name}-${v.dose}`}>
-                            <span>{v.name} (Dose {v.dose}) - due at {v.month} months</span>
-                            {v.status !== 'done' && <button onClick={() => handleMarkAsDone(v.name, v.dose)}>Mark as Done</button>}
-                            {v.status === 'done' && <span className="done-date">Done on: {formatToShamsi(v.administeredDate)}</span>}
+                        <li key={`${v.name}-${v.age ?? v.month}-${v.dose}`}>
+                            <span>{v.name} ({v.dose}) - موعد: {v.month} ماهگی</span>
+                            {v.status !== 'done' && <button onClick={() => handleMarkAsDone(v)}>ثبت انجام</button>}
+                            {v.status === 'done' && v.administeredDate && <span className="done-date">انجام‌شده: {formatToShamsi(v.administeredDate)}</span>}
+                            {v.status === 'done' && !v.administeredDate && <span className="done-date">انجام شده</span>}
                         </li>
                     ))}
                 </ul>

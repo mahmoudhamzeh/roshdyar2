@@ -106,6 +106,7 @@ const AddChildPage = () => {
                 ...formData,
                 userId: loggedInUser.id,
                 birthDate: formattedBirthDate,
+                name: `${formData.firstName || ''} ${formData.lastName || ''}`.trim(),
                 avatar: '', // Will be updated in the next step
                 documents: []
             };

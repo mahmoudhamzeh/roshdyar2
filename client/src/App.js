@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Switch, Redirect } from 'react-router-d
 import LoginPage from './components/LoginPage';
 import AdminPage from './components/AdminPage';
 import AdminRoute from './components/AdminRoute';
+import PrivateRoute from './components/PrivateRoute';
 import DashboardPage from './components/DashboardPage';
 import MyChildrenPage from './components/MyChildrenPage';
 import AddChildPage from './components/AddChildPage';
@@ -19,23 +20,32 @@ import ArticleDetailPage from './components/ArticleDetailPage';
 import './App.css';
 
 const App = () => {
-    const isLoggedIn = () => localStorage.getItem('loggedInUser');
+    const isLoggedIn = () => {
+        try {
+            const loggedInUser = localStorage.getItem('loggedInUser');
+            if (!loggedInUser) return false;
+            const user = JSON.parse(loggedInUser);
+            return !!(user && user.id);
+        } catch (error) {
+            return false;
+        }
+    };
 
     return (
         <Router>
             <Switch>
                 <Route path="/login" component={LoginPage} />
-                <Route path="/dashboard" component={DashboardPage} />
-                <Route path="/my-children" component={MyChildrenPage} />
-                <Route path="/add-child" component={AddChildPage} />
-                <Route path="/edit-child/:id" component={EditChildPage} />
-                <Route path="/growth-chart/:childId" component={GrowthChartPage} />
-                <Route path="/health-profile/:childId" component={HealthProfilePage} />
-                <Route path="/health-analysis/:childId" component={HealthAnalysisPage} />
-                <Route path="/lab-tests/:childId" component={LabTestsPage} />
-                <Route path="/vaccination-status/:childId" component={VaccinationStatusPage} />
-                <Route path="/vaccination/:childId" component={VaccinationPage} />
-                <Route path="/profile" component={ProfilePage} />
+                <PrivateRoute path="/dashboard" component={DashboardPage} />
+                <PrivateRoute path="/my-children" component={MyChildrenPage} />
+                <PrivateRoute path="/add-child" component={AddChildPage} />
+                <PrivateRoute path="/edit-child/:id" component={EditChildPage} />
+                <PrivateRoute path="/growth-chart/:childId" component={GrowthChartPage} />
+                <PrivateRoute path="/health-profile/:childId" component={HealthProfilePage} />
+                <PrivateRoute path="/health-analysis/:childId" component={HealthAnalysisPage} />
+                <PrivateRoute path="/lab-tests/:childId" component={LabTestsPage} />
+                <PrivateRoute path="/vaccination-status/:childId" component={VaccinationStatusPage} />
+                <PrivateRoute path="/vaccination/:childId" component={VaccinationPage} />
+                <PrivateRoute path="/profile" component={ProfilePage} />
                 <Route exact path="/news" component={NewsPage} />
                 <Route path="/news/:id" component={ArticleDetailPage} />
                 <AdminRoute path="/admin" component={AdminPage} />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useHistory } from 'react-router-dom';
 import moment from 'jalali-moment';
 import { toShamsi } from '../utils/dateConverter';
@@ -7,54 +7,91 @@ import html2canvas from 'html2canvas';
 import { faCheckCircle, faTimesCircle, faExclamationTriangle, faInfoCircle } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Modal from 'react-modal';
+import { getChildDisplayName } from '../utils/childName';
 import './VaccinationPage.css';
 
-const vaccineSchedule = [
-    { name: 'BCG + OPV (قطره فلج اطفال)', dose: 'نوبت اول', dueAgeMonths: 0, type: 'تزریقی/خوراکی' },
-    { name: 'پنتاوالان (DTP, Hib, HepB) + OPV', dose: 'نوبت دوم', dueAgeMonths: 2, type: 'تزریقی/خوراکی' },
-    { name: 'پنتاوالان + OPV', dose: 'نوبت سوم', dueAgeMonths: 4, type: 'تزریقی/خوراکی' },
-    { name: 'پنتاوالان + IPV (فلج اطفال تزریقی)', dose: 'نوبت چهارم', dueAgeMonths: 6, type: 'تزریقی' },
-    { name: 'MMR (سرخک، اوریون، سرخجه)', dose: 'نوبت پنجم', dueAgeMonths: 12, type: 'تزریقی' },
-    { name: 'سه گانه (DTP) + OPV', dose: 'یادآور اول', dueAgeMonths: 18, type: 'تزریقی/خوراکی' },
-    { name: 'سه گانه + OPV', dose: 'یادآور دوم', dueAgeMonths: 72, type: 'تزریقی/خوراکی' } // 6 years
-];
-
 const vaccineDetails = {
-    'BCG + OPV (قطره فلج اطفال)': {
-        usage: 'پیشگیری از سل و فلج اطفال.',
+    'ب ث ژ': {
+        usage: 'پیشگیری از سل.',
         injectionTime: 'بدو تولد',
         symptoms: 'تب خفیف، بی‌قراری، تورم و قرمزی در محل تزریق.',
-        care: 'استفاده از کمپرس سرد در محل تزریق، در صورت تب بالا یا علائم شدید به پزشک مراجعه شود.'
+        care: 'استفاده از کمپرس سرد در محل تزریق؛ در صورت تب بالا یا علائم شدید به پزشک مراجعه شود.'
     },
-    'پنتاوالان (DTP, Hib, HepB) + OPV': {
-        usage: 'پیشگیری از دیفتری، کزاز، سیاه‌سرفه، هموفیلوس آنفولانزا نوع B و هپاتیت B.',
-        injectionTime: '۲، ۴ و ۶ ماهگی',
-        symptoms: 'تب، درد و تورم در محل تزریق، بی‌قراری و گریه.',
-        care: 'دادن قطره استامینوفن طبق دستور پزشک، استفاده از کمپرس سرد و سپس گرم.'
+    'هپاتیت ب': {
+        usage: 'پیشگیری از هپاتیت B.',
+        injectionTime: 'بدو تولد، ۲ و ۶ ماهگی',
+        symptoms: 'تب خفیف، درد در محل تزریق.',
+        care: 'استراحت و مایعات کافی؛ در صورت نیاز استامینوفن طبق دستور پزشک.'
     },
-    'MMR (سرخک، اوریون، سرخجه)': {
+    'سه‌گانه': {
+        usage: 'پیشگیری از دیفتری، کزاز و سیاه‌سرفه.',
+        injectionTime: '۲، ۴، ۶، ۱۸ ماهگی و ۴ تا ۶ سالگی',
+        symptoms: 'تب، درد و تورم در محل تزریق، بی‌قراری.',
+        care: 'کمپرس سرد و سپس گرم؛ استامینوفن طبق دستور پزشک.'
+    },
+    'فلج اطفال خوراکی': {
+        usage: 'پیشگیری از فلج اطفال.',
+        injectionTime: '۲، ۴، ۶، ۱۸ ماهگی و ۴ تا ۶ سالگی',
+        symptoms: 'معمولاً بدون علامت یا تب خفیف.',
+        care: 'نیاز به اقدام خاصی نیست مگر علائم شدید باشد.'
+    },
+    'MMR': {
         usage: 'پیشگیری از سرخک، اوریون و سرخجه.',
-        injectionTime: '۱۲ ماهگی و ۱۸ ماهگی (در برخی برنامه‌ها)',
+        injectionTime: '۱۲ و ۱۸ ماهگی',
         symptoms: 'تب، بثورات جلدی خفیف ۷ تا ۱۰ روز پس از تزریق.',
-        care: 'مایعات فراوان، استراحت. نیازی به اقدام خاصی نیست مگر علائم شدید باشد.'
+        care: 'مایعات فراوان و استراحت.'
     }
-    // Add other details as needed
 };
 
 const VaccinationPage = () => {
     const { childId } = useParams();
     const history = useHistory();
     const [child, setChild] = useState(null);
+    const [schedule, setSchedule] = useState([]);
     const [selectedVaccine, setSelectedVaccine] = useState(null);
     const [detailsModalIsOpen, setDetailsModalIsOpen] = useState(false);
     const [reminder, setReminder] = useState({ active: false, daysBefore: 7 });
     const [vaccinationRecords, setVaccinationRecords] = useState({});
     const printRef = useRef();
 
+    const childName = getChildDisplayName(child);
+
+    const fetchData = useCallback(async () => {
+        try {
+            const [childRes, scheduleRes] = await Promise.all([
+                fetch(`http://localhost:5000/api/children/${childId}`),
+                fetch('http://localhost:5000/api/vaccination-schedule')
+            ]);
+            if (!childRes.ok) throw new Error('Failed to fetch child data.');
+            const data = await childRes.json();
+
+            if (data.name && !data.firstName) {
+                const nameParts = data.name.split(' ');
+                data.firstName = nameParts[0];
+                data.lastName = nameParts.slice(1).join(' ');
+            }
+
+            setChild(data);
+            setVaccinationRecords(data.vaccinationRecords || {});
+            if (data.vaccineReminder) setReminder(data.vaccineReminder);
+
+            if (scheduleRes.ok) {
+                setSchedule(await scheduleRes.json());
+            }
+        } catch (error) {
+            console.error(error);
+            alert('خطا در بارگذاری اطلاعات کودک.');
+        }
+    }, [childId]);
+
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
+
     const handleExportPDF = async () => {
         const element = printRef.current;
         const canvas = await html2canvas(element, {
-            scale: 2, // Higher scale for better quality
+            scale: 2,
             useCORS: true,
         });
         const data = canvas.toDataURL('image/png');
@@ -64,20 +101,19 @@ const VaccinationPage = () => {
         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
         pdf.addImage(data, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`vaccination-card-${child.firstName}.pdf`);
+        pdf.save(`vaccination-card-${childName}.pdf`);
     };
 
     const handleShare = async () => {
         const shareData = {
-            title: `کارت واکسیناسیون ${child.firstName}`,
-            text: `اطلاعات واکسیناسیون ${child.firstName} را مشاهده کنید.`,
+            title: `کارت واکسیناسیون ${childName}`,
+            text: `اطلاعات واکسیناسیون ${childName} را مشاهده کنید.`,
             url: window.location.href
         };
         try {
             if (navigator.share) {
                 await navigator.share(shareData);
             } else {
-                // Fallback for browsers that don't support Web Share API
                 navigator.clipboard.writeText(window.location.href);
                 alert('لینک در کلیپ‌بورد کپی شد!');
             }
@@ -86,20 +122,23 @@ const VaccinationPage = () => {
         }
     };
 
-    const handleMarkAsDone = (vaccineName) => {
+    const handleMarkAsDone = (age, vaccineName) => {
         const today = moment().format('YYYY/MM/DD');
         setVaccinationRecords(prev => ({
             ...prev,
-            [vaccineName]: today
+            [age]: {
+                ...(prev[age] || {}),
+                [vaccineName]: today
+            }
         }));
     };
 
     const handleSaveChanges = async () => {
         try {
-            const response = await fetch(`http://localhost:5000/api/children/${childId}`, {
+            const response = await fetch(`http://localhost:5000/api/children/${childId}/vaccination-records`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...child, vaccinationRecords }),
+                body: JSON.stringify({ vaccinationRecords }),
             });
             if (!response.ok) throw new Error('Failed to save changes');
             alert('تغییرات وضعیت واکسن با موفقیت ذخیره شد.');
@@ -113,7 +152,7 @@ const VaccinationPage = () => {
             const response = await fetch(`http://localhost:5000/api/children/${childId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...child, vaccineReminder: reminder }),
+                body: JSON.stringify({ vaccineReminder: reminder }),
             });
             if (!response.ok) throw new Error('Failed to save reminder settings');
             alert('تنظیمات یادآور با موفقیت ذخیره شد.');
@@ -122,39 +161,17 @@ const VaccinationPage = () => {
         }
     };
 
-    useEffect(() => {
-        const fetchChildData = async () => {
-            try {
-                const response = await fetch(`http://localhost:5000/api/children/${childId}`);
-                if (!response.ok) {
-                    throw new Error('Failed to fetch child data.');
-                }
-                const data = await response.json();
-
-                if (data.name && !data.firstName) {
-                    const nameParts = data.name.split(' ');
-                    data.firstName = nameParts[0];
-                    data.lastName = nameParts.slice(1).join(' ');
-                }
-
-                setChild(data);
-                setVaccinationRecords(data.vaccinationRecords || {});
-                if (data.vaccineReminder) {
-                    setReminder(data.vaccineReminder);
-                }
-
-            } catch (error) {
-                console.error(error);
-                alert('خطا در بارگذاری اطلاعات کودک.');
-            }
-        };
-
-        fetchChildData();
-    }, [childId]);
-
     if (!child) {
         return <div>در حال بارگذاری اطلاعات...</div>;
     }
+
+    const flatVaccines = schedule.flatMap(group =>
+        group.vaccines.map(vaccine => ({
+            ...vaccine,
+            age: group.age,
+            label: group.label,
+        }))
+    );
 
     return (
         <div className="vaccination-page">
@@ -165,8 +182,8 @@ const VaccinationPage = () => {
                 </button>
                 <h1>کارت واکسیناسیون</h1>
                 <div className="nav-avatar">
-                    <img src={child.avatar && child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/50')} alt={child.firstName} />
-                    <span>{child.firstName}</span>
+                    <img src={child.avatar && child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/50')} alt={childName} />
+                    <span>{childName}</span>
                 </div>
             </nav>
 
@@ -176,31 +193,29 @@ const VaccinationPage = () => {
             </div>
 
             <div className="content-container" ref={printRef}>
-                {/* Child Info Section will go here */}
                 <section className="child-info-section">
                     <h2>اطلاعات کودک</h2>
                     <div className="info-grid">
-                        <div className="info-item"><strong>نام:</strong> {child.firstName}</div>
-                        <div className="info-item"><strong>نام خانوادگی:</strong> {child.lastName}</div>
+                        <div className="info-item"><strong>نام:</strong> {child.firstName || childName}</div>
+                        <div className="info-item"><strong>نام خانوادگی:</strong> {child.lastName || '-'}</div>
                         <div className="info-item"><strong>تاریخ تولد:</strong> {toShamsi(child.birthDate)}</div>
-                        <div className="info-item"><strong>کد ملی:</strong> {child.nationalId}</div>
-                        <div className="info-item"><strong>جنسیت:</strong> {child.gender}</div>
-                        <div className="info-item"><strong>نام پدر:</strong> {child.fatherName}</div>
+                        <div className="info-item"><strong>کد ملی:</strong> {child.nationalId || '-'}</div>
+                        <div className="info-item"><strong>جنسیت:</strong> {child.gender === 'boy' ? 'پسر' : child.gender === 'girl' ? 'دختر' : child.gender}</div>
+                        <div className="info-item"><strong>نام پدر:</strong> {child.fatherName || '-'}</div>
                     </div>
                     <h3>اطلاعات مربوط به تولد</h3>
                     <div className="info-grid">
-                        <div className="info-item"><strong>وزن (g):</strong> {child.birthWeight}</div>
-                        <div className="info-item"><strong>قد (cm):</strong> {child.birthHeight}</div>
-                        <div className="info-item"><strong>دور سر (cm):</strong> {child.birthHeadCircumference}</div>
-                        <div className="info-item"><strong>نوع زایمان:</strong> {child.birthType}</div>
-                        <div className="info-item"><strong>سن بارداری (هفته):</strong> {child.gestationalAge}</div>
-                        <div className="info-item"><strong>محل تولد:</strong> {child.birthPlace}</div>
-                        <div className="info-item"><strong>آپگار دقیقه ۱:</strong> {child.apgar1}</div>
-                        <div className="info-item"><strong>آپگار دقیقه ۵:</strong> {child.apgar5}</div>
+                        <div className="info-item"><strong>وزن (g):</strong> {child.birthWeight || child.weight || '-'}</div>
+                        <div className="info-item"><strong>قد (cm):</strong> {child.birthHeight || child.height || '-'}</div>
+                        <div className="info-item"><strong>دور سر (cm):</strong> {child.birthHeadCircumference || '-'}</div>
+                        <div className="info-item"><strong>نوع زایمان:</strong> {child.birthType || '-'}</div>
+                        <div className="info-item"><strong>سن بارداری (هفته):</strong> {child.gestationalAge || '-'}</div>
+                        <div className="info-item"><strong>محل تولد:</strong> {child.birthPlace || '-'}</div>
+                        <div className="info-item"><strong>آپگار دقیقه ۱:</strong> {child.apgar1 || '-'}</div>
+                        <div className="info-item"><strong>آپگار دقیقه ۵:</strong> {child.apgar5 || '-'}</div>
                     </div>
                 </section>
 
-                {/* Vaccination Table Section will go here */}
                 <section className="vaccine-table-section">
                     <h2>جدول واکسیناسیون</h2>
                     <div className="vaccine-table-container">
@@ -216,15 +231,18 @@ const VaccinationPage = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {vaccineSchedule.map((vaccine, index) => {
-                                    const dueDate = moment(child.birthDate, 'YYYY/MM/DD').add(vaccine.dueAgeMonths, 'months');
+                                {flatVaccines.map((vaccine, index) => {
+                                    const birth = moment(String(child.birthDate).replace(/\//g, '-'));
+                                    const dueDate = birth.clone().add(vaccine.age, 'months');
                                     const today = moment();
-                                    const isDone = !!vaccinationRecords[vaccine.name];
+                                    const recordValue = vaccinationRecords[vaccine.age] && vaccinationRecords[vaccine.age][vaccine.name];
+                                    const isDone = !!recordValue;
                                     let status = 'آینده';
                                     let statusIcon = faTimesCircle;
 
                                     if (isDone) {
-                                        status = `تزریق شده در ${toShamsi(vaccinationRecords[vaccine.name])}`;
+                                        const doneDate = typeof recordValue === 'string' ? toShamsi(recordValue) : '';
+                                        status = doneDate ? `تزریق شده در ${doneDate}` : 'تزریق شده';
                                         statusIcon = faCheckCircle;
                                     } else if (dueDate.isBefore(today)) {
                                         status = 'دیر شده';
@@ -238,7 +256,7 @@ const VaccinationPage = () => {
                                     }
 
                                     return (
-                                        <tr key={index} className={isDone ? 'done-row' : ''}>
+                                        <tr key={`${vaccine.age}-${vaccine.name}-${index}`} className={isDone ? 'done-row' : ''}>
                                             <td>
                                                 {vaccine.name}
                                                 <FontAwesomeIcon
@@ -250,8 +268,8 @@ const VaccinationPage = () => {
                                                     }}
                                                 />
                                             </td>
-                                            <td>{vaccine.dose}</td>
-                                            <td>{vaccine.dueAgeMonths === 0 ? 'بدو تولد' : `${vaccine.dueAgeMonths} ماهگی`}</td>
+                                            <td>{vaccine.details}</td>
+                                            <td>{vaccine.label}</td>
                                             <td>{dueDate.locale('fa').format('YYYY/MM/DD')}</td>
                                             <td className={`status-${statusIcon.iconName}`}>
                                                 <FontAwesomeIcon icon={statusIcon} />
@@ -259,7 +277,7 @@ const VaccinationPage = () => {
                                             </td>
                                             <td>
                                                 {!isDone && (
-                                                    <button onClick={() => handleMarkAsDone(vaccine.name)} className="btn-mark-done">
+                                                    <button onClick={() => handleMarkAsDone(vaccine.age, vaccine.name)} className="btn-mark-done">
                                                         ثبت تزریق
                                                     </button>
                                                 )}
@@ -275,7 +293,6 @@ const VaccinationPage = () => {
                     </div>
                 </section>
 
-                {/* Reminder Section */}
                 <section className="reminder-section">
                     <h2>تنظیمات یادآور</h2>
                     <div className="reminder-controls">

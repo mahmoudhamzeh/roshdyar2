@@ -114,10 +114,14 @@ const EditChildPage = () => {
             if (avatarFile) {
                 const avatarUploadData = new FormData();
                 avatarUploadData.append('avatar', avatarFile);
-                const avatarRes = await fetch('http://localhost:5000/api/upload', { method: 'POST', headers: { 'x-user-id': loggedInUser.id }, body: avatarUploadData });
-                if (!avatarRes.ok) throw new Error('Failed to upload new avatar image');
+                const avatarRes = await fetch(`http://localhost:5000/api/children/${id}/avatar`, {
+                    method: 'POST',
+                    headers: { 'x-user-id': loggedInUser.id },
+                    body: avatarUploadData
+                });
+                if (!avatarRes.ok) throw new Error('آپلود عکس پروفایل ناموفق بود');
                 const avatarResult = await avatarRes.json();
-                newAvatarPath = avatarResult.filePath.replace(/\\/g, "/");
+                newAvatarPath = (avatarResult.filePath || avatarResult.url || '').replace(/\\/g, "/");
             }
 
             // Step 2: Handle new document uploads
@@ -129,7 +133,8 @@ const EditChildPage = () => {
                     const docRes = await fetch(`http://localhost:5000/api/documents/${id}`, { method: 'POST', body: docUploadData });
                     if (docRes.ok) {
                         const docResult = await docRes.json();
-                        newDocumentPaths.push(docResult.filePath.replace(/\\/g, "/"));
+                        const path = docResult.filePath || docResult.url;
+                        if (path) newDocumentPaths.push(path.replace(/\\/g, "/"));
                     } else {
                         alert(`موفق به آپلود فایل جدید ${file.name} نشدیم.`);
                     }

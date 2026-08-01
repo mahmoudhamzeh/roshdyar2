@@ -5,6 +5,7 @@ import { faIdCard, faAllergies, faStethoscope, faChartLine, faCalendarCheck, faF
 import VaccinationStatus from './VaccinationStatus';
 import SmartRecommendations from './SmartRecommendations';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
+import { getChildDisplayName } from '../utils/childName';
 import './HealthAnalysisPage.css';
 import './SmartRecommendations.css';
 
@@ -26,18 +27,16 @@ const HealthAnalysisPage = () => {
             const childData = await childRes.json();
             setChild(childData);
 
-            const visitsRes = await fetch(`http://localhost:5000/api/visits/${childId}`);
-            const visitsData = await visitsRes.json();
-            setVisits(visitsData);
+            // Secondary data failures should not kick the user out of the page
+            const [visitsRes, docsRes, vacRes] = await Promise.all([
+                fetch(`http://localhost:5000/api/visits/${childId}`),
+                fetch(`http://localhost:5000/api/documents/${childId}`),
+                fetch(`http://localhost:5000/api/vaccination-status/${childId}`)
+            ]);
 
-            const docsRes = await fetch(`http://localhost:5000/api/documents/${childId}`);
-            const docsData = await docsRes.json();
-            setDocuments(docsData);
-
-            const vacRes = await fetch(`http://localhost:5000/api/vaccination-status/${childId}`);
-            const vacData = await vacRes.json();
-            setVaccinationStatus(vacData);
-
+            setVisits(visitsRes.ok ? await visitsRes.json() : []);
+            setDocuments(docsRes.ok ? await docsRes.json() : []);
+            setVaccinationStatus(vacRes.ok ? await vacRes.json() : []);
         } catch (error) {
             console.error("Failed to fetch data:", error);
             history.push('/my-children');
@@ -110,7 +109,7 @@ const HealthAnalysisPage = () => {
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                     <span>بازگشت</span>
                 </button>
-                <h1>تحلیل پرونده سلامت - {child.name}</h1>
+                <h1>تحلیل پرونده سلامت - {getChildDisplayName(child)}</h1>
                 <div className="nav-placeholder"></div>
             </nav>
             <main className="analysis-content">
@@ -121,7 +120,7 @@ const HealthAnalysisPage = () => {
                     </div>
                     <div className="analysis-card">
                         <h3><FontAwesomeIcon icon={faIdCard} /> اطلاعات پایه</h3>
-                        <p><strong>نام:</strong> {child.name}</p>
+                        <p><strong>نام:</strong> {getChildDisplayName(child)}</p>
                         <p><strong>سن:</strong> {age.years} سال و {age.months} ماه</p>
                         <p><strong>جنسیت:</strong> {child.gender === 'boy' ? 'پسر' : 'دختر'}</p>
                         <p><strong>گروه خونی:</strong> {child.bloodType}</p>

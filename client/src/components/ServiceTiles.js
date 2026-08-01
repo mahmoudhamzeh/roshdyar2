@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useHistory } from 'react-router-dom';
 import Modal from 'react-modal';
+import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
@@ -118,8 +119,8 @@ const ServiceTiles = () => {
                             className={`child-item-modal ${selectedChild === child.id ? 'selected' : ''}`}
                             onClick={() => setSelectedChild(child.id)}
                         >
-                            <img src={child.avatar && child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/50')} alt={`${child.firstName} ${child.lastName}`} />
-                            <div className="child-name">{`${child.firstName} ${child.lastName}`}</div>
+                            <img src={child.avatar && child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/50')} alt={getChildDisplayName(child)} />
+                            <div className="child-name">{getChildDisplayName(child)}</div>
                         </div>
                     ))}
                 </div>
