@@ -212,7 +212,6 @@
 
 .vax-group-count {
   font-size: 0.8rem;
-  color: var(--ink-muted);
   background: var(--brand-soft);
   color: var(--brand-deep);
   padding: 0.2rem 0.55rem;
