@@ -150,6 +150,10 @@
   }
 
   .content-row.scrollable .content-card {
-    flex: 0 0 260px;
+    flex: 0 0 240px;
+  }
+
+  .content-row.scrollable {
+    gap: 1rem;
   }
 }
