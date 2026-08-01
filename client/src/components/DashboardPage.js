@@ -8,7 +8,7 @@ import './DashboardPage.css';
 
 const mockVideos = Array.from({ length: 8 }, (_, i) => ({
     id: i, title: `ویدیو آموزشی ${i + 1}`,
-    image: `https://placehold.co/220x140/0F766E/FFFFFF?text=ویدیو+${i+1}`
+    image: `https://placehold.co/220x140/0F766E/FFFFFF?text=Video+${i+1}`
 }));
 
 const DashboardPage = () => {
