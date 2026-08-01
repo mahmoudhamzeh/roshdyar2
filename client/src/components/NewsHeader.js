@@ -11,34 +11,37 @@ const NewsHeader = () => {
 
     return (
         <>
-            <nav className="navbar">
-                {/* Left Section: Brand */}
+            <nav className="news-navbar">
                 <div className="navbar-left">
                     <div className="navbar-brand">
-                        <Link to="/news">مجله سلامت</Link>
+                        <Link to="/news">مجله سلامت رشدیار</Link>
                     </div>
                 </div>
 
-                {/* Center Section: Navigation Links */}
                 <div className={`navbar-center ${isMenuOpen ? 'active' : ''}`}>
                     <div className="navbar-links">
-                        <Link to={{ pathname: "/news", state: { category: 'همه' } }}>همه</Link>
-                        <Link to={{ pathname: "/news", state: { category: 'بیماری' } }}>بیماری</Link>
-                        <Link to={{ pathname: "/news", state: { category: 'آموزشی' } }}>آموزش</Link>
-                        <Link to={{ pathname: "/news", state: { category: 'تغذیه' } }}>تغذیه</Link>
-                        <Link to={{ pathname: "/news", state: { category: 'مادر و کودک' } }}>مادر و کودک</Link>
-                        <Link to={{ pathname: "/news", state: { category: 'تربیتی' } }}>تربیتی</Link>
+                        <Link to={{ pathname: "/news", state: { category: 'همه' } }} onClick={() => setIsMenuOpen(false)}>همه</Link>
+                        <Link to={{ pathname: "/news", state: { category: 'بیماری' } }} onClick={() => setIsMenuOpen(false)}>بیماری</Link>
+                        <Link to={{ pathname: "/news", state: { category: 'آموزشی' } }} onClick={() => setIsMenuOpen(false)}>آموزش</Link>
+                        <Link to={{ pathname: "/news", state: { category: 'تغذیه' } }} onClick={() => setIsMenuOpen(false)}>تغذیه</Link>
+                        <Link to={{ pathname: "/news", state: { category: 'مادر و کودک' } }} onClick={() => setIsMenuOpen(false)}>مادر و کودک</Link>
+                        <Link to={{ pathname: "/news", state: { category: 'تربیتی' } }} onClick={() => setIsMenuOpen(false)}>تربیتی</Link>
                     </div>
                 </div>
 
-                {/* Right Section: Toggler */}
                 <div className="navbar-right">
-                    <button className="navbar-toggler" type="button" onClick={toggleMenu}>
+                    <button
+                        className="navbar-toggler"
+                        type="button"
+                        onClick={toggleMenu}
+                        aria-label="منو"
+                        aria-expanded={isMenuOpen}
+                    >
                         &#9776;
                     </button>
                 </div>
             </nav>
-            {isMenuOpen && <div className="menu-backdrop" onClick={toggleMenu}></div>}
+            {isMenuOpen && <div className="menu-backdrop" onClick={toggleMenu} />}
         </>
     );
 };

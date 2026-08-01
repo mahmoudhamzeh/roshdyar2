@@ -1,12 +1,84 @@
 @import "react-datepicker/dist/react-datepicker.css";
 
+@font-face {
+  font-family: "Estedad";
+  src: url("https://cdn.jsdelivr.net/gh/aminabedi68/Estedad@master/fonts/webfonts/Estedad%5Bwght%5D.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Brand — soft teal growth theme */
+  --brand: #0f766e;
+  --brand-deep: #115e59;
+  --brand-mid: #14b8a6;
+  --brand-soft: #ccfbf1;
+  --brand-wash: #f0fdfa;
+
+  /* Accent — warm amber, used sparingly */
+  --accent: #d97706;
+  --accent-soft: #fef3c7;
+
+  /* Neutrals */
+  --ink: #134e4a;
+  --ink-muted: #5b716e;
+  --ink-faint: #8aa09c;
+  --surface: #ffffff;
+  --surface-2: #f7fbfa;
+  --border: #d7e5e2;
+  --border-strong: #b7cdc8;
+
+  /* Semantic */
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --success: #059669;
+  --success-soft: #d1fae5;
+  --warning: #d97706;
+  --warning-soft: #fef3c7;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(15, 118, 110, 0.06);
+  --shadow-md: 0 8px 24px rgba(15, 118, 110, 0.08);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  /* Type */
+  --font-display: "Estedad", "Vazirmatn", Tahoma, sans-serif;
+  --font-body: "Vazirmatn", Tahoma, sans-serif;
+
+  --text-on-brand: #ffffff;
+  --primary: var(--brand);
+  --danger-legacy: var(--danger);
+  --text-on-primary: var(--text-on-brand);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
-  font-family: 'Vazirmatn', Tahoma, sans-serif;
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--ink);
+  background-color: var(--brand-wash);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 100% -10%, rgba(20, 184, 166, 0.14), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(217, 119, 6, 0.08), transparent 50%),
+    linear-gradient(180deg, #f0fdfa 0%, #f7fbfa 45%, #eef7f5 100%);
+  background-attachment: fixed;
+  direction: rtl;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f4f7f9;
-  direction: rtl;
+  font-kerning: normal;
+  font-feature-settings: "kern", "liga", "clig", "calt";
+  min-height: 100vh;
 }
 
 * {
@@ -14,56 +86,138 @@ body {
   box-sizing: border-box;
 }
 
+h1, h2, h3, h4, .brand-type {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.35;
+}
+
+a {
+  color: var(--brand);
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--brand-deep);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+
+img {
+  max-width: 100%;
+}
+
+/* Shared motion */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes soft-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes mark-draw {
+  from { stroke-dashoffset: 48; }
+  to { stroke-dashoffset: 0; }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up-delay {
+  animation: fade-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+}
+
+.animate-fade-up-delay-2 {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both;
+}
+
+/* Shared form controls */
 .react-datepicker-wrapper input {
-    width: 100%;
-    padding: 0.8rem;
-    border: 1px solid #ced4da;
-    border-radius: 8px;
-    font-size: 1rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.react-datepicker-wrapper input:focus {
+  outline: none;
+  border-color: var(--brand-mid);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.18);
 }
 
 .react-datepicker {
-    font-family: 'Vazirmatn', sans-serif !important;
-    border-radius: 8px !important;
-    border: 1px solid #dee2e6 !important;
+  font-family: var(--font-body) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--border) !important;
 }
 
 .react-datepicker__header {
-    background-color: #007bff !important;
-    border-bottom: none !important;
-    border-top-left-radius: 8px !important;
-    border-top-right-radius: 8px !important;
+  background-color: var(--brand) !important;
+  border-bottom: none !important;
+  border-top-left-radius: var(--radius-sm) !important;
+  border-top-right-radius: var(--radius-sm) !important;
 }
 
 .react-datepicker__current-month,
 .react-datepicker__day-name {
-    color: white !important;
+  color: white !important;
 }
 
 .react-datepicker__day {
-    color: #333 !important;
+  color: var(--ink) !important;
 }
 
 .react-datepicker__day--selected {
-    background-color: #0056b3 !important;
-    color: white !important;
+  background-color: var(--brand-deep) !important;
+  color: white !important;
 }
 
 .react-datepicker__day:hover {
-    background-color: #e9ecef !important;
+  background-color: var(--brand-soft) !important;
 }
 
 .react-datepicker__year-dropdown {
-    background-color: #fff !important;
+  background-color: #fff !important;
 }
 
-/*
-  Global fix for the react-modern-calendar-datepicker.
-  The calendar was being clipped by parent elements with `overflow: hidden`.
-  Using `position: fixed` ensures the calendar always renders on top of the viewport.
-  A high z-index is required to make sure it appears above modal overlays.
-*/
 .responsive-calendar {
-    position: fixed !important;
-    z-index: 2000 !important;
+  position: fixed !important;
+  z-index: 2000 !important;
+}
+
+/* Focus ring utility */
+:focus-visible {
+  outline: 2px solid var(--brand-mid);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

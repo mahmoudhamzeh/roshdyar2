@@ -1,133 +1,148 @@
 .reminders-widget {
-    position: relative;
-    display: inline-block;
+  position: relative;
+  display: inline-block;
 }
 
 .reminders-bell {
-    background: none;
-    border: none;
-    font-size: 1.5em;
-    color: #fff;
-    cursor: pointer;
-    position: relative;
+  background: none;
+  border: none;
+  font-size: 1.35em;
+  color: #fff;
+  cursor: pointer;
+  position: relative;
+  padding: 0.2rem 0.35rem;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.reminders-bell:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .reminder-count {
-    position: absolute;
-    top: -5px;
-    right: -10px;
-    background-color: #dc3545;
-    color: white;
-    border-radius: 50%;
-    padding: 2px 6px;
-    font-size: 0.7em;
-    font-weight: bold;
+  position: absolute;
+  top: -4px;
+  right: -8px;
+  background-color: var(--danger);
+  color: white;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 0.68em;
+  font-weight: 700;
+  min-width: 18px;
+  text-align: center;
 }
 
 .reminders-dropdown {
-    /* Most positioning is now handled by JavaScript */
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.15);
-    width: 350px;
-    max-height: 450px;
-    overflow: hidden;
-    z-index: 2010; /* Ensure it's on top of other elements */
-    display: flex;
-    flex-direction: column;
-    color: #333;
+  background-color: var(--surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  width: 350px;
+  max-height: 450px;
+  overflow: hidden;
+  z-index: 2010;
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
 }
 
-@media (max-width: 1024px) { /* Increased breakpoint to cover tablets */
-    .reminders-dropdown {
-        position: fixed; /* Change to fixed for viewport positioning */
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%); /* Center the modal */
-        width: 90%;
-        max-width: 400px; /* Ensure it doesn't get too wide */
-        max-height: 80vh; /* Prevent modal from being taller than viewport */
-        overflow-y: auto; /* Allow scrolling within the modal if content overflows */
-    }
+@media (max-width: 1024px) {
+  .reminders-dropdown {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 400px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
 }
 
 .reminders-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--brand-wash);
 }
 
 .reminders-header h4 {
-    margin: 0;
-    font-size: 1rem;
+  margin: 0;
+  font-size: 1rem;
+  font-family: var(--font-display);
+  color: var(--ink);
 }
 
 .add-reminder-btn {
-    background: none;
-    border: none;
-    color: #007bff;
-    font-size: 1.2rem;
-    cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--brand);
+  font-size: 1.2rem;
+  cursor: pointer;
+  font-weight: 700;
 }
 
 .reminders-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    overflow-y: auto;
-    flex-grow: 1;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  flex-grow: 1;
 }
 
 .reminder-item {
-    padding: 12px 15px;
-    border-bottom: 1px solid #f0f0f0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
 }
+
 .reminder-item:last-child {
-    border-bottom: none;
+  border-bottom: none;
 }
 
 .reminder-content strong {
-    font-size: 0.9rem;
-    display: block;
-    margin-bottom: 4px;
-}
-.reminder-content p {
-    font-size: 0.85rem;
-    margin: 0;
-    color: #555;
+  font-size: 0.9rem;
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--ink);
 }
 
-/* Reminder Types Styling */
-.reminder-item.type-danger { border-right: 4px solid #dc3545; }
-.reminder-item.type-warning { border-right: 4px solid #ffc107; }
-.reminder-item.type-info { border-right: 4px solid #17a2b8; }
-.reminder-item.type-custom { border-right: 4px solid #6c757d; }
+.reminder-content p {
+  font-size: 0.85rem;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.reminder-item.type-danger { border-right: 4px solid var(--danger); }
+.reminder-item.type-warning { border-right: 4px solid var(--warning); }
+.reminder-item.type-info { border-right: 4px solid var(--brand-mid); }
+.reminder-item.type-custom { border-right: 4px solid var(--ink-faint); }
 
 .dismiss-btn {
-    background: none;
-    border: none;
-    color: #aaa;
-    cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--ink-faint);
+  cursor: pointer;
 }
 
 .dismiss-btn:hover {
-    color: #333;
+  color: var(--ink);
 }
 
 .no-reminders {
-    padding: 20px;
-    text-align: center;
-    color: #666;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--ink-muted);
 }
 
 .reminder-link {
-    text-decoration: none;
-    color: inherit;
-    display: block;
+  text-decoration: none;
+  color: inherit;
+  display: block;
 }
