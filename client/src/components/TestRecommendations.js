@@ -10,8 +10,9 @@ const TestRecommendations = () => {
         setIsLoading(true);
         try {
             const res = await fetch(`http://localhost:5000/api/recommended-tests/${childId}`);
+            if (!res.ok) throw new Error('Failed to fetch recommendations');
             const data = await res.json();
-            setRecommendations(data);
+            setRecommendations(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error("Failed to fetch recommendations", error);
         } finally {

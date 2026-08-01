@@ -36,7 +36,8 @@ const SmartRecommendations = ({ child, growthTrend, vaccinationStatus }) => {
     }
 
     // Allergies Rule
-    if (child.allergies && Object.values(child.allergies.types).some(v => v)) {
+    const allergyTypes = child.allergies && child.allergies.types ? Object.values(child.allergies.types) : [];
+    if (allergyTypes.some(v => v)) {
         recommendations.set('allergies', {
             text: 'با توجه به آلرژی‌های ثبت‌شده، در انتخاب مواد غذایی و محصولات بهداشتی دقت کنید. برای اطلاعات بیشتر می‌توانید به منابع معتبر مراجعه کنید.',
             severity: 'medium'

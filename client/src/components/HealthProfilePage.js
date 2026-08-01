@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import Modal from 'react-modal';
 import "react-datepicker/dist/react-datepicker.css";
+import { getChildDisplayName } from '../utils/childName';
 import './HealthProfilePage.css';
 
 Modal.setAppElement('#root');
@@ -94,9 +95,9 @@ const HealthProfilePage = () => {
                 <h1>پرونده سلامت</h1>
             </nav>
             <header className="profile-header">
-                <img src={avatarUrl} alt={child.name} className="profile-avatar" />
+                <img src={avatarUrl} alt={getChildDisplayName(child)} className="profile-avatar" />
                 <div className="profile-header-info">
-                    <h2>{child.name}</h2>
+                    <h2>{getChildDisplayName(child)}</h2>
                     <p>سن: {calculateAge(child.birthDate)}</p>
                 </div>
             </header>

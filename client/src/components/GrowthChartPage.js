@@ -7,6 +7,7 @@ import persian_fa from 'react-date-object/locales/persian_fa';
 import Modal from 'react-modal';
 import { whoStats } from '../who-stats';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
+import { getChildDisplayName } from '../utils/childName';
 import './GrowthChartPage.css';
 import './DatePickerOverride.css'; // Import the override styles
 
@@ -79,10 +80,14 @@ const GrowthChartPage = () => {
 
     const fetchChildData = useCallback(async () => {
         try {
-            const response = await fetch(`http://localhost:5000/api/children/${childId}`);
-            if (!response.ok) throw new Error('Child not found');
-            const data = await response.json();
-            setChild(data);
+            const [childRes, growthRes] = await Promise.all([
+                fetch(`http://localhost:5000/api/children/${childId}`),
+                fetch(`http://localhost:5000/api/growth/${childId}`)
+            ]);
+            if (!childRes.ok) throw new Error('Child not found');
+            const data = await childRes.json();
+            const growth = growthRes.ok ? await growthRes.json() : (data.growthData || []);
+            setChild({ ...data, growthData: growth });
         } catch (error) {
             history.push('/my-children');
         }
@@ -113,23 +118,14 @@ const GrowthChartPage = () => {
         };
 
         try {
-            // Use the correct, dedicated endpoint
             const response = await fetch(`http://localhost:5000/api/growth/${childId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(recordToAdd),
             });
-            if (!response.ok) throw new Error('Failed to add new growth record');
+            if (!response.ok) throw new Error('ثبت داده رشد ناموفق بود');
 
-            // The fetchChildData function is incorrect as it reads from child.growthData, not the growth API
-            // For now, I will manually update the state to reflect the change.
-            // A proper fix would be to have fetchChildData also fetch from /api/growth/:childId
-            const newGrowthRecord = await response.json();
-            setChild(prevChild => ({
-                ...prevChild,
-                growthData: [...(prevChild.growthData || []), newGrowthRecord]
-            }));
-
+            await fetchChildData();
             setModalIsOpen(false);
             setNewRecord({ date: null, height: '', weight: '', headCircumference: '' });
         } catch (error) {
@@ -138,6 +134,8 @@ const GrowthChartPage = () => {
     };
 
     if (!child) return <p>در حال بارگذاری...</p>;
+
+    const childName = getChildDisplayName(child);
 
     const getStatusClassName = (status) => {
         if (status === 'کمبود') return 'status-low';
@@ -173,7 +171,7 @@ const GrowthChartPage = () => {
                 <button onClick={() => history.goBack()} className="back-btn">
                     &larr; بازگشت به پرونده
                 </button>
-                <h1 className="page-title">نمودار رشد {child.name}</h1>
+                <h1 className="page-title">نمودار رشد {childName}</h1>
                 <div className="nav-placeholder"></div>
             </nav>
 
@@ -206,7 +204,7 @@ const GrowthChartPage = () => {
                 <GrowthChart 
                     data={formattedHeightData}
                     standardData={child.gender === 'boy' ? whoStats.heightForAgeBoys : whoStats.heightForAgeGirls}
-                    childName={child.name}
+                    childName={childName}
                     yAxisLabel="قد (cm)"
                     childAgeInMonths={childAgeInMonths}
                 />
@@ -217,7 +215,7 @@ const GrowthChartPage = () => {
                 <GrowthChart 
                     data={formattedWeightData}
                     standardData={child.gender === 'boy' ? whoStats.weightForAgeBoys : whoStats.weightForAgeGirls}
-                    childName={child.name}
+                    childName={childName}
                     yAxisLabel="وزن (kg)"
                     childAgeInMonths={childAgeInMonths}
                 />
@@ -228,7 +226,7 @@ const GrowthChartPage = () => {
                 <GrowthChart
                     data={formattedHeadCircumferenceData}
                     standardData={child.gender === 'boy' ? whoStats.headCircumferenceForAgeBoys : whoStats.headCircumferenceForAgeGirls}
-                    childName={child.name}
+                    childName={childName}
                     yAxisLabel="دور سر (cm)"
                     childAgeInMonths={childAgeInMonths}
                 />

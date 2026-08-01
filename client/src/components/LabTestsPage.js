@@ -85,9 +85,10 @@ const LabTestsPage = () => {
                 fetch(`http://localhost:5000/api/checkups/${childId}`),
                 fetch(`http://localhost:5000/api/children/${childId}`)
             ]);
-            const checkupsData = await checkupsRes.json();
+            if (!childRes.ok) throw new Error('Child not found');
+            const checkupsData = checkupsRes.ok ? await checkupsRes.json() : [];
             const childData = await childRes.json();
-            setCheckups(checkupsData);
+            setCheckups(Array.isArray(checkupsData) ? checkupsData : []);
             setChild(childData);
         } catch (error) {
             console.error("Failed to fetch data", error);
