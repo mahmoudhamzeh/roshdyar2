@@ -193,6 +193,10 @@
   box-shadow: var(--shadow-sm);
 }
 
+.educational-videos-section {
+  scroll-margin-top: 6rem;
+}
+
 .videos-list {
   display: flex;
   flex-direction: column;

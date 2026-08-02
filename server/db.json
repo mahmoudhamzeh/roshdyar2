@@ -320,6 +320,54 @@
       "url": "https://www.example.com/video2",
       "thumbnailUrl": "/uploads/sample-video-2.jpg",
       "createdAt": "2023-10-19T12:00:00Z"
+    },
+    {
+      "id": 3,
+      "title": "بازی‌های حسی برای کودک",
+      "summary": "چند بازی ساده برای تقویت حواس و مهارت‌های حرکتی کودک در خانه.",
+      "url": "https://www.example.com/video3",
+      "thumbnailUrl": "/uploads/sample-video-1.jpg",
+      "createdAt": "2023-10-18T11:00:00Z"
+    },
+    {
+      "id": 4,
+      "title": "نکات خواب آرام نوزاد",
+      "summary": "راهنمای عملی برای ایجاد روتین خواب سالم و آرام برای نوزاد.",
+      "url": "https://www.example.com/video4",
+      "thumbnailUrl": "/uploads/sample-video-2.jpg",
+      "createdAt": "2023-10-17T10:00:00Z"
+    },
+    {
+      "id": 5,
+      "title": "آموزش مسواک زدن به کودک",
+      "summary": "روش‌های ساده برای عادت دادن کودک به بهداشت دهان و دندان.",
+      "url": "https://www.example.com/video5",
+      "thumbnailUrl": "/uploads/sample-video-1.jpg",
+      "createdAt": "2023-10-16T09:00:00Z"
+    },
+    {
+      "id": 6,
+      "title": "تغذیه تکمیلی قدم‌به‌قدم",
+      "summary": "شروع صحیح غذای کمکی و انتخاب مواد مغذی مناسب برای نوزاد.",
+      "url": "https://www.example.com/video6",
+      "thumbnailUrl": "/uploads/sample-video-2.jpg",
+      "createdAt": "2023-10-15T08:00:00Z"
+    },
+    {
+      "id": 7,
+      "title": "مدیریت قشقرق کودک",
+      "summary": "راه‌کارهای آرام و مؤثر برای همراهی با هیجانات کودک.",
+      "url": "https://www.example.com/video7",
+      "thumbnailUrl": "/uploads/sample-video-1.jpg",
+      "createdAt": "2023-10-14T07:00:00Z"
+    },
+    {
+      "id": 8,
+      "title": "تقویت مهارت گفتاری",
+      "summary": "تمرین‌های روزمره برای رشد زبان و گفتار کودک.",
+      "url": "https://www.example.com/video8",
+      "thumbnailUrl": "/uploads/sample-video-2.jpg",
+      "createdAt": "2023-10-13T06:00:00Z"
     }
   ],
   "podcasts": [
