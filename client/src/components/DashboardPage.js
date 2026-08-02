@@ -44,11 +44,11 @@ const DashboardPage = () => {
                 const articlesResponse = await fetch('http://localhost:5000/api/news');
                 if (articlesResponse.ok) {
                     const data = await articlesResponse.json();
-                    const formattedArticles = data.slice(0, 5).map(article => ({
+                    const formattedArticles = data.slice(0, 8).map(article => ({
                         id: article.id,
                         title: article.title,
                         summary: article.summary,
-                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/220x140/0F766E/FFFFFF?text=مقاله`,
+                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/320x180/0F766E/FFFFFF?text=مقاله`,
                         link: `/news/${article.id}`
                     }));
                     setArticles(formattedArticles);
@@ -95,7 +95,13 @@ const DashboardPage = () => {
                     visibleCount={4}
                     viewAllLink="/news#educational-videos"
                 />
-                <ContentRow title="جدیدترین مقالات" items={articles} viewAllLink="/news" />
+                <ContentRow
+                    title="جدیدترین مقالات"
+                    items={articles}
+                    scrollable={true}
+                    visibleCount={4}
+                    viewAllLink="/news"
+                />
             </main>
             <Footer />
         </div>
