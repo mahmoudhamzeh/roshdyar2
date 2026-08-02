@@ -303,7 +303,7 @@ const HealthAnalysisPage = () => {
                     </ul>
                 </header>
 
-                <section className="ha-panel ha-recs animate-fade-up-delay-1" aria-labelledby="ha-recs-title">
+                <section className="ha-panel ha-recs animate-fade-up-delay" aria-labelledby="ha-recs-title">
                     <div className="ha-panel-heading">
                         <h3 id="ha-recs-title">
                             <FontAwesomeIcon icon={faBrain} />
