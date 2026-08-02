@@ -1,21 +1,33 @@
-const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
+const { SqliteDatabase } = require('./sqlite');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'roshdyar.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 let db;
+let initPromise;
+
+async function initDb() {
+    if (db) return db;
+    if (initPromise) return initPromise;
+
+    initPromise = (async () => {
+        const sqlite = new SqliteDatabase(DB_PATH);
+        await sqlite.open();
+        sqlite.exec('PRAGMA foreign_keys = ON;');
+        const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
+        sqlite.exec(schema);
+        db = sqlite;
+        return db;
+    })();
+
+    return initPromise;
+}
 
 function getDb() {
     if (!db) {
-        const dir = path.dirname(DB_PATH);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        db = new Database(DB_PATH);
-        db.pragma('foreign_keys = ON');
-        db.pragma('journal_mode = WAL');
-        const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
-        db.exec(schema);
+        throw new Error('Database not initialized. Call await initDb() before using the database.');
     }
     return db;
 }
@@ -732,6 +744,7 @@ function isDatabaseSeeded() {
 }
 
 module.exports = {
+    initDb,
     getDb,
     DB_PATH,
     findUserByLogin,

@@ -14,16 +14,6 @@ const port = process.env.PORT || 5000;
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-// Ensure SQLite schema exists; auto-migrate from db.json on first run
-db.getDb();
-if (!db.isDatabaseSeeded()) {
-    const jsonPath = path.join(__dirname, 'db.json');
-    if (fs.existsSync(jsonPath)) {
-        console.log('SQLite empty — importing data from db.json...');
-        require('./db/migrate-from-json');
-    }
-}
-
 app.use(cors());
 app.use(bodyParser.json());
 app.use('/uploads', express.static(uploadsDir, { etag: false, lastModified: false }));
@@ -674,4 +664,21 @@ app.delete('/api/reminders/manual/:childId/:reminderId', (req, res) => {
     }
 });
 
-app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
+async function start() {
+    await db.initDb();
+    if (!db.isDatabaseSeeded()) {
+        const jsonPath = path.join(__dirname, 'db.json');
+        if (fs.existsSync(jsonPath)) {
+            console.log('SQLite empty — importing data from db.json...');
+            const { migrate } = require('./db/migrate-from-json');
+            migrate();
+            db.getDb().persist();
+        }
+    }
+    app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
+}
+
+start().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+});

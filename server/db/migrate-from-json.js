@@ -8,6 +8,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
+    initDb,
     getDb,
     DB_PATH,
     isDatabaseSeeded,
@@ -378,9 +379,19 @@ function migrate() {
     console.log(counts);
 }
 
-try {
-    migrate();
-} catch (err) {
-    console.error('Migration failed:', err);
-    process.exit(1);
+async function runCli() {
+    try {
+        await initDb();
+        migrate();
+        getDb().persist();
+    } catch (err) {
+        console.error('Migration failed:', err);
+        process.exit(1);
+    }
 }
+
+if (require.main === module) {
+    runCli();
+}
+
+module.exports = { migrate };

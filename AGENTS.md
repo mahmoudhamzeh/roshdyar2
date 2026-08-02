@@ -37,7 +37,7 @@ npm start --prefix client
 
 ## دیتابیس
 
-سرور از **SQLite** استفاده می‌کند (`server/data/roshdyar.db`).
+سرور از **SQLite** (با کتابخانه `sql.js` — بدون نیاز به Python/Visual Studio) استفاده می‌کند (`server/data/roshdyar.db`).
 
 - اسکیما: `server/db/schema.sql`
 - لایه دسترسی به داده: `server/db/database.js`
