@@ -234,17 +234,17 @@ const GrowthChartPage = () => {
             <div className="chart-info-boxes">
                 <div className={`info-box ${getStatusClassName(heightAnalysis.status)}`}>
                     <h4>آخرین قد ثبت شده</h4>
-                    <p>{heightAnalysis.value != null ? `${heightAnalysis.value} cm` : 'ثبت نشده'}</p>
+                    <p>{heightAnalysis.value != null ? `\u200E${heightAnalysis.value} cm` : 'ثبت نشده'}</p>
                     <span className="status-label">وضعیت: {heightAnalysis.status}</span>
                 </div>
                 <div className={`info-box ${getStatusClassName(weightAnalysis.status)}`}>
                     <h4>آخرین وزن ثبت شده</h4>
-                    <p>{weightAnalysis.value != null ? `${weightAnalysis.value} kg` : 'ثبت نشده'}</p>
+                    <p>{weightAnalysis.value != null ? `\u200E${weightAnalysis.value} kg` : 'ثبت نشده'}</p>
                     <span className="status-label">وضعیت: {weightAnalysis.status}</span>
                 </div>
                 <div className={`info-box ${getStatusClassName(headAnalysis.status)}`}>
                     <h4>آخرین دور سر ثبت شده</h4>
-                    <p>{headAnalysis.value != null ? `${headAnalysis.value} cm` : 'ثبت نشده'}</p>
+                    <p>{headAnalysis.value != null ? `\u200E${headAnalysis.value} cm` : 'ثبت نشده'}</p>
                     <span className="status-label">وضعیت: {headAnalysis.status}</span>
                 </div>
             </div>
