@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -85,7 +85,7 @@ const buildChartData = (standardData, childPoints) => {
 };
 
 const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMonths }) => {
-    const chartData = useMemo(() => buildChartData(standardData, data), [standardData, data]);
+    const chartData = buildChartData(standardData, data);
     const maxAge = Math.max(60, Math.ceil((childAgeInMonths || 0) + 1));
     const ageMarker = Math.min(Math.max(childAgeInMonths || 0, 0), maxAge);
     const values = chartData
@@ -359,7 +359,15 @@ const GrowthChartPage = () => {
             </nav>
 
             <div className="page-actions">
-                <button type="button" onClick={openAddModal} className="add-data-btn">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openAddModal();
+                    }}
+                    className="add-data-btn"
+                >
                     + افزودن داده جدید
                 </button>
                 {birthDate && (
@@ -388,6 +396,57 @@ const GrowthChartPage = () => {
                     unit="cm"
                     statusClassName={getStatusClassName(headAnalysis.status)}
                 />
+            </div>
+
+            <div className="history-section">
+                <div className="history-header">
+                    <h3>تاریخچه اندازه‌گیری‌ها</h3>
+                    <span>{historyRows.length} رکورد</span>
+                </div>
+                {historyRows.length === 0 ? (
+                    <p className="history-empty">هنوز اندازه‌گیری ثبت نشده است. از دکمه «افزودن داده جدید» استفاده کنید.</p>
+                ) : (
+                    <div className="history-list">
+                        {historyRows.map((record) => {
+                            const age = ageInMonths(record.date, child.birthDate);
+                            const rowKey = record.id || record.date;
+                            const open = expandedId === rowKey;
+                            return (
+                                <article key={rowKey} className={`history-item ${open ? 'is-open' : ''}`}>
+                                    <button
+                                        type="button"
+                                        className="history-item-main"
+                                        onClick={() => setExpandedId(open ? null : rowKey)}
+                                    >
+                                        <div className="history-item-title">
+                                            <strong>{toShamsi(record.date)}</strong>
+                                            <span>{formatAgeLabel(age)}</span>
+                                        </div>
+                                        <div className="history-item-summary">
+                                            <span>قد: {record.height != null ? `${record.height} cm` : '—'}</span>
+                                            <span>وزن: {record.weight != null ? `${record.weight} kg` : '—'}</span>
+                                            <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} cm` : '—'}</span>
+                                        </div>
+                                    </button>
+                                    {open && (
+                                        <div className="history-item-detail">
+                                            <p>در تاریخ <strong>{toShamsi(record.date)}</strong> (سن {formatAgeLabel(age)}) این مقادیر ثبت شده است:</p>
+                                            <ul>
+                                                <li>قد: {record.height != null ? `${record.height} سانتی‌متر` : 'ثبت نشده'}</li>
+                                                <li>وزن: {record.weight != null ? `${record.weight} کیلوگرم` : 'ثبت نشده'}</li>
+                                                <li>دور سر: {record.headCircumference != null ? `${record.headCircumference} سانتی‌متر` : 'ثبت نشده'}</li>
+                                            </ul>
+                                            <div className="history-item-actions">
+                                                <button type="button" className="btn-edit" onClick={() => openEditModal(record)}>ویرایش</button>
+                                                <button type="button" className="btn-delete" onClick={() => handleDelete(record)}>حذف</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             <div className="chart-section">
@@ -422,56 +481,6 @@ const GrowthChartPage = () => {
                     yAxisLabel="دور سر (cm)"
                     childAgeInMonths={childAgeInMonths}
                 />
-            </div>
-
-            <div className="history-section">
-                <div className="history-header">
-                    <h3>تاریخچه اندازه‌گیری‌ها</h3>
-                    <span>{historyRows.length} رکورد</span>
-                </div>
-                {historyRows.length === 0 ? (
-                    <p className="history-empty">هنوز اندازه‌گیری ثبت نشده است.</p>
-                ) : (
-                    <div className="history-list">
-                        {historyRows.map((record) => {
-                            const age = ageInMonths(record.date, child.birthDate);
-                            const open = expandedId === record.id;
-                            return (
-                                <article key={record.id || record.date} className={`history-item ${open ? 'is-open' : ''}`}>
-                                    <button
-                                        type="button"
-                                        className="history-item-main"
-                                        onClick={() => setExpandedId(open ? null : record.id)}
-                                    >
-                                        <div className="history-item-title">
-                                            <strong>{toShamsi(record.date)}</strong>
-                                            <span>{formatAgeLabel(age)}</span>
-                                        </div>
-                                        <div className="history-item-summary">
-                                            <span>قد: {record.height != null ? `${record.height} cm` : '—'}</span>
-                                            <span>وزن: {record.weight != null ? `${record.weight} kg` : '—'}</span>
-                                            <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} cm` : '—'}</span>
-                                        </div>
-                                    </button>
-                                    {open && (
-                                        <div className="history-item-detail">
-                                            <p>در تاریخ <strong>{toShamsi(record.date)}</strong> (سن {formatAgeLabel(age)}) این مقادیر ثبت شده است:</p>
-                                            <ul>
-                                                <li>قد: {record.height != null ? `${record.height} سانتی‌متر` : 'ثبت نشده'}</li>
-                                                <li>وزن: {record.weight != null ? `${record.weight} کیلوگرم` : 'ثبت نشده'}</li>
-                                                <li>دور سر: {record.headCircumference != null ? `${record.headCircumference} سانتی‌متر` : 'ثبت نشده'}</li>
-                                            </ul>
-                                            <div className="history-item-actions">
-                                                <button type="button" className="btn-edit" onClick={() => openEditModal(record)}>ویرایش</button>
-                                                <button type="button" className="btn-delete" onClick={() => handleDelete(record)}>حذف</button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </article>
-                            );
-                        })}
-                    </div>
-                )}
             </div>
 
             <Modal
