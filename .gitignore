@@ -17,3 +17,9 @@ jules-scratch/
 # Uploads
 /uploads/
 /server/uploads/
+
+# SQLite database
+/server/data/
+*.db
+*.db-wal
+*.db-shm

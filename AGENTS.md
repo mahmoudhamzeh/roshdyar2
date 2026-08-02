@@ -34,3 +34,19 @@ npm start --prefix client
 ```
 
 سرور روی پورت `5000` و کلاینت روی پورت `3000` اجرا خواهد شد.
+
+## دیتابیس
+
+سرور از **SQLite** (با کتابخانه `sql.js` — بدون نیاز به Python/Visual Studio) استفاده می‌کند (`server/data/roshdyar.db`).
+
+- اسکیما: `server/db/schema.sql`
+- لایه دسترسی به داده: `server/db/database.js`
+- مهاجرت از فایل قدیمی `db.json`:
+
+```bash
+npm run db:migrate --prefix server
+# یا برای بازنویسی کامل:
+npm run db:migrate:force --prefix server
+```
+
+در اولین اجرا، اگر دیتابیس خالی باشد و `db.json` موجود باشد، مهاجرت به‌صورت خودکار انجام می‌شود.
