@@ -178,19 +178,19 @@
     color: white;
 }
 
-.status-normal {
+.status-badge.status-normal {
     background-color: #28a745;
 }
 
-.status-low {
+.status-badge.status-low {
     background-color: #17a2b8;
 }
 
-.status-high {
+.status-badge.status-high {
     background-color: #dc3545;
 }
 
-.status-unknown {
+.status-badge.status-unknown {
     background-color: #6c757d;
 }
 

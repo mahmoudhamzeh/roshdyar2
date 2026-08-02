@@ -43,33 +43,56 @@ const CustomLegend = (props) => {
 };
 
 
-const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMonths }) => (
-    <ResponsiveContainer width="100%" height={300}>
-        <LineChart margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-                type="number"
-                dataKey="month"
-                domain={[0, 60]}
-                ticks={[0, 6, 12, 18, 24, 36, 48, 60]}
-                label={{ value: "سن (ماه)", position: "insideBottom", offset: -15 }}
-            />
-            <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} />
-            <Tooltip
-                formatter={(value, name) => {
-                    if (name === childName) return [value, childName];
-                    return [value, name];
-                }}
-            />
-            <Legend content={<CustomLegend childName={childName} />} wrapperStyle={{ paddingTop: '20px' }} />
-            <Line type="monotone" dataKey="P3" data={standardData} stroke="#ff7300" name="صدک ۳" dot={false} />
-            <Line type="monotone" dataKey="P50" data={standardData} stroke="#387908" name="صدک ۵۰ (میانه)" dot={false} />
-            <Line type="monotone" dataKey="P97" data={standardData} stroke="#0095ff" name="صدک ۹۷" dot={false} />
-            <Line type="monotone" dataKey="value" data={data} stroke="#e60000" name={childName} strokeWidth={2} />
-            <ReferenceLine x={childAgeInMonths} stroke="red" label={{ value: "سن فعلی", position: "insideTopRight" }} />
-        </LineChart>
-    </ResponsiveContainer>
-);
+const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMonths }) => {
+    const ageMarker = Math.min(Math.max(childAgeInMonths || 0, 0), 60);
+
+    return (
+        <ResponsiveContainer width="100%" height={300}>
+            <LineChart margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#d7e5e2" />
+                <XAxis
+                    type="number"
+                    dataKey="month"
+                    domain={[0, 60]}
+                    ticks={[0, 6, 12, 18, 24, 36, 48, 60]}
+                    label={{ value: "سن (ماه)", position: "insideBottom", offset: -15 }}
+                />
+                <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} />
+                <Tooltip
+                    formatter={(value, name) => {
+                        if (value == null) return ['—', name];
+                        if (name === childName) return [value, childName];
+                        return [value, name];
+                    }}
+                    labelFormatter={(label) => `سن: ${Number(label).toFixed(1)} ماه`}
+                />
+                <Legend content={<CustomLegend childName={childName} />} wrapperStyle={{ paddingTop: '20px' }} />
+                <Line type="monotone" dataKey="P3" data={standardData} stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="P50" data={standardData} stroke="#0f766e" name="صدک ۵۰ (میانه)" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="P97" data={standardData} stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} />
+                <Line
+                    type="monotone"
+                    dataKey="value"
+                    data={data}
+                    stroke="#dc2626"
+                    name={childName}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                />
+                {childAgeInMonths > 0 && (
+                    <ReferenceLine
+                        x={ageMarker}
+                        stroke="#115e59"
+                        strokeDasharray="4 4"
+                        label={{ value: "سن فعلی", position: "insideTopRight", fill: "#115e59", fontSize: 12 }}
+                    />
+                )}
+            </LineChart>
+        </ResponsiveContainer>
+    );
+};
 
 const GrowthChartPage = () => {
     const history = useHistory();
@@ -138,32 +161,45 @@ const GrowthChartPage = () => {
     const childName = getChildDisplayName(child);
 
     const getStatusClassName = (status) => {
-        if (status === 'کمبود') return 'status-low';
-        if (status === 'اضافه') return 'status-high';
-        if (status === 'نرمال') return 'status-normal';
-        return 'status-unknown';
+        if (status === 'کمبود') return 'growth-status-low';
+        if (status === 'اضافه') return 'growth-status-high';
+        if (status === 'نرمال') return 'growth-status-normal';
+        return 'growth-status-unknown';
+    };
+
+    const parseFlexibleDate = (value) => {
+        if (!value) return null;
+        const date = new Date(String(value).trim().replace(/\//g, '-'));
+        return Number.isNaN(date.getTime()) ? null : date;
     };
 
     const heightAnalysis = analyzeGrowthMetric('height', child);
     const weightAnalysis = analyzeGrowthMetric('weight', child);
     const headAnalysis = analyzeGrowthMetric('headCircumference', child);
 
-    const childAgeInMonths = child.birthDate ? (new Date() - new Date(child.birthDate)) / (1000 * 60 * 60 * 24 * 30.4375) : 0;
+    const birthDate = parseFlexibleDate(child.birthDate);
+    const childAgeInMonths = birthDate
+        ? (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
+        : 0;
 
-    const formattedHeightData = child.birthDate ? (child.growthData || []).map(d => ({
-        month: (new Date(d.date) - new Date(child.birthDate)) / (1000 * 60 * 60 * 24 * 30.4375),
-        value: d.height,
-    })).filter(d => d.value !== undefined).sort((a, b) => a.month - b.month) : [];
-    
-    const formattedWeightData = child.birthDate ? (child.growthData || []).map(d => ({
-        month: (new Date(d.date) - new Date(child.birthDate)) / (1000 * 60 * 60 * 24 * 30.4375),
-        value: d.weight,
-    })).filter(d => d.value !== undefined).sort((a, b) => a.month - b.month) : [];
+    const formatMetricData = (metricKey) => {
+        if (!birthDate) return [];
+        return (child.growthData || [])
+            .map((d) => {
+                const recordDate = parseFlexibleDate(d.date);
+                if (!recordDate || d[metricKey] == null || d[metricKey] === '') return null;
+                return {
+                    month: (recordDate - birthDate) / (1000 * 60 * 60 * 24 * 30.4375),
+                    value: Number(d[metricKey]),
+                };
+            })
+            .filter((d) => d && !Number.isNaN(d.month) && !Number.isNaN(d.value))
+            .sort((a, b) => a.month - b.month);
+    };
 
-    const formattedHeadCircumferenceData = child.birthDate ? (child.growthData || []).map(d => ({
-        month: (new Date(d.date) - new Date(child.birthDate)) / (1000 * 60 * 60 * 24 * 30.4375),
-        value: d.headCircumference,
-    })).filter(d => d.value !== undefined).sort((a, b) => a.month - b.month) : [];
+    const formattedHeightData = formatMetricData('height');
+    const formattedWeightData = formatMetricData('weight');
+    const formattedHeadCircumferenceData = formatMetricData('headCircumference');
 
     return (
         <div className="growth-chart-page">
@@ -184,18 +220,18 @@ const GrowthChartPage = () => {
             <div className="chart-info-boxes">
                 <div className={`info-box ${getStatusClassName(heightAnalysis.status)}`}>
                     <h4>آخرین قد ثبت شده</h4>
-                    <p>{heightAnalysis.value || 'N/A'} cm</p>
-                    <span>وضعیت: {heightAnalysis.status}</span>
+                    <p>{heightAnalysis.value != null ? `${heightAnalysis.value} cm` : 'ثبت نشده'}</p>
+                    <span className="status-label">وضعیت: {heightAnalysis.status}</span>
                 </div>
                 <div className={`info-box ${getStatusClassName(weightAnalysis.status)}`}>
                     <h4>آخرین وزن ثبت شده</h4>
-                    <p>{weightAnalysis.value || 'N/A'} kg</p>
-                    <span>وضعیت: {weightAnalysis.status}</span>
+                    <p>{weightAnalysis.value != null ? `${weightAnalysis.value} kg` : 'ثبت نشده'}</p>
+                    <span className="status-label">وضعیت: {weightAnalysis.status}</span>
                 </div>
                 <div className={`info-box ${getStatusClassName(headAnalysis.status)}`}>
                     <h4>آخرین دور سر ثبت شده</h4>
-                    <p>{headAnalysis.value || 'N/A'} cm</p>
-                    <span>وضعیت: {headAnalysis.status}</span>
+                    <p>{headAnalysis.value != null ? `${headAnalysis.value} cm` : 'ثبت نشده'}</p>
+                    <span className="status-label">وضعیت: {headAnalysis.status}</span>
                 </div>
             </div>
             
