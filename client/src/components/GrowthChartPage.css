@@ -94,12 +94,23 @@
 }
 
 .info-box p {
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.45rem 0;
   font-size: 1.65rem;
   font-weight: 800;
   color: #102a27;
   font-family: var(--font-display);
   line-height: 1.25;
+}
+
+.info-box .info-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0 0.7rem 0;
+  color: #3f4f4d;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .info-box .status-label {
