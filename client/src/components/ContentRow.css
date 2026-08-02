@@ -255,18 +255,27 @@
     flex: 1 1 auto;
     width: 100%;
     max-width: none;
-    min-height: 300px;
+    min-height: 340px;
   }
 
   .content-row.scrollable .content-card img {
-    height: 170px;
+    height: 190px;
+  }
+
+  .content-row.scrollable .content-card-text {
+    padding: 1rem 1.1rem 1.2rem;
   }
 
   .content-row.scrollable .content-card-text h4 {
-    font-size: 1.05rem;
+    font-size: 1.08rem;
+  }
+
+  .content-row.scrollable .content-card-text p {
+    font-size: 0.9rem;
+    -webkit-line-clamp: 2;
   }
 
   .content-row-viewport {
-    padding: 0 1.75rem;
+    padding: 0 2rem;
   }
 }

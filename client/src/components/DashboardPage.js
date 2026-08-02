@@ -62,13 +62,13 @@ const DashboardPage = () => {
                 if (videosResponse.ok) {
                     const data = await videosResponse.json();
                     if (Array.isArray(data) && data.length > 0) {
-                        const formattedVideos = data.map(video => ({
+                        const formattedVideos = data.map((video, index) => ({
                             id: video.id,
                             title: video.title,
                             summary: video.summary,
                             image: video.thumbnailUrl
                                 ? `http://localhost:5000${video.thumbnailUrl}`
-                                : `https://placehold.co/320x180/0F766E/FFFFFF?text=ویدیو`,
+                                : `https://placehold.co/480x270/0F766E/FFFFFF?text=Video+${index + 1}`,
                             externalUrl: video.url,
                             isVideo: true,
                         }));

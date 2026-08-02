@@ -14,24 +14,20 @@ const ContentRow = ({ title, items, viewAllLink, scrollable = false, visibleCoun
         if (!el) return;
 
         const maxScroll = el.scrollWidth - el.clientWidth;
-        if (maxScroll <= 2) {
+        if (maxScroll <= 4) {
             setCanScrollPrev(false);
             setCanScrollNext(false);
             return;
         }
 
-        const scrollPos = Math.abs(el.scrollLeft);
-        const atStart = scrollPos <= 2;
-        const atEnd = scrollPos >= maxScroll - 2;
-
-        // In RTL, scrollLeft may be negative; treat "prev" as toward start of content.
-        const scrollingNegative = el.scrollLeft < 0;
-        if (scrollingNegative) {
-            setCanScrollPrev(el.scrollLeft < -2);
-            setCanScrollNext(el.scrollLeft > -(maxScroll - 2));
+        const { scrollLeft } = el;
+        // Browsers differ on RTL scrollLeft (0→positive or 0→negative).
+        if (scrollLeft < 0) {
+            setCanScrollPrev(scrollLeft < -4);
+            setCanScrollNext(scrollLeft > -(maxScroll - 4));
         } else {
-            setCanScrollPrev(!atStart);
-            setCanScrollNext(!atEnd);
+            setCanScrollPrev(scrollLeft > 4);
+            setCanScrollNext(scrollLeft < maxScroll - 4);
         }
     };
 
