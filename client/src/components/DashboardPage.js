@@ -48,7 +48,7 @@ const DashboardPage = () => {
                         id: article.id,
                         title: article.title,
                         summary: article.summary,
-                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/320x180/0F766E/FFFFFF?text=مقاله`,
+                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/320x180/0F766E/FFFFFF?text=Article`,
                         link: `/news/${article.id}`
                     }));
                     setArticles(formattedArticles);

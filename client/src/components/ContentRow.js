@@ -57,7 +57,17 @@ const ContentRow = ({ title, items, viewAllLink, scrollable = false, visibleCoun
         const card = (
             <div className="content-card">
                 <div className="content-card-media">
-                    <img src={item.image} alt={item.title} />
+                    <img
+                        src={item.image}
+                        alt={item.title}
+                        onError={(e) => {
+                            if (e.currentTarget.dataset.fallback === '1') return;
+                            e.currentTarget.dataset.fallback = '1';
+                            e.currentTarget.src = item.isVideo
+                                ? 'https://placehold.co/480x270/0F766E/FFFFFF?text=Video'
+                                : 'https://placehold.co/320x180/0F766E/FFFFFF?text=Article';
+                        }}
+                    />
                     {item.isVideo && <span className="content-card-play" aria-hidden="true">▶</span>}
                 </div>
                 <div className="content-card-text">
