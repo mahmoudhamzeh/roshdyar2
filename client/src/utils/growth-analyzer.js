@@ -55,9 +55,10 @@ export const analyzeGrowthMetric = (metric, child) => {
     const sortedData = [...child.growthData].sort(
         (a, b) => (parseLocalDate(a.date)?.getTime() || 0) - (parseLocalDate(b.date)?.getTime() || 0)
     );
-    const recordsWithMetric = sortedData.filter(
-        (r) => r[metric] !== undefined && r[metric] !== null && r[metric] !== ''
-    );
+    const recordsWithMetric = sortedData.filter((r) => {
+        const value = r[metric];
+        return value !== undefined && value !== null && value !== '' && !Number.isNaN(Number(value));
+    });
 
     if (recordsWithMetric.length === 0) {
         return { value: null, date: null, ageInMonths: null, status: 'نامشخص', trend: 'stable' };

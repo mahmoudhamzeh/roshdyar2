@@ -1,13 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import {
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+    ResponsiveContainer, ReferenceLine
+} from 'recharts';
 import DatePicker from 'react-multi-date-picker';
+import DateObject from 'react-date-object';
 import persian from 'react-date-object/calendars/persian';
+import gregorian from 'react-date-object/calendars/gregorian';
 import persian_fa from 'react-date-object/locales/persian_fa';
 import Modal from 'react-modal';
 import { whoStats } from '../who-stats';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
-import { ageInMonths, formatLocalDate, parseLocalDate, roundAgeMonths } from '../utils/growth-dates';
+import {
+    ageInMonths, formatLocalDate, normalizeDateString,
+    parseLocalDate, roundAgeMonths, formatAgeLabel
+} from '../utils/growth-dates';
 import { toShamsi } from '../utils/dateConverter';
 import { getChildDisplayName } from '../utils/childName';
 import './GrowthChartPage.css';
@@ -15,36 +23,71 @@ import './DatePickerOverride.css';
 
 Modal.setAppElement('#root');
 
+const emptyForm = { date: null, height: '', weight: '', headCircumference: '' };
+
 const legendTooltips = {
     'صدک ۳': '۳٪ از کودکان هم‌سن و هم‌جنس، مقداری کمتر از این خط دارند.',
     'صدک ۵۰ (میانه)': 'نقطه میانی رشد؛ ۵۰٪ از کودکان مقداری کمتر و ۵۰٪ مقداری بیشتر از این خط دارند.',
     'صدک ۹۷': '۹۷٪ از کودکان هم‌سن و هم‌جنس، مقداری کمتر از این خط دارند.'
 };
 
-const CustomLegend = (props) => {
-    const { payload } = props;
-    return (
-        <ul className="custom-legend">
-            {payload.map((entry, index) => {
-                const childNameEntry = entry.value === props.childName;
-                if (childNameEntry) {
-                    return (
-                        <li key={`item-${index}`} style={{ color: entry.color }}>
-                           {entry.value} (داده‌های شما)
-                        </li>
-                    );
-                }
-                return (
-                    <li key={`item-${index}`} style={{ color: entry.color }} title={legendTooltips[entry.value] || ''}>
-                        {entry.value}
-                    </li>
-                );
-            })}
-        </ul>
-    );
+const toGregorianDateString = (value) => {
+    if (!value) return '';
+    const selected = Array.isArray(value) ? value[0] : value;
+
+    try {
+        if (selected instanceof Date) {
+            return formatLocalDate(selected);
+        }
+
+        // react-multi-date-picker DateObject (possibly Persian calendar)
+        if (typeof selected === 'object') {
+            let jsDate = null;
+            if (typeof selected.toDate === 'function') {
+                jsDate = selected.toDate();
+            } else {
+                const asObject = selected instanceof DateObject
+                    ? selected
+                    : new DateObject(selected);
+                jsDate = asObject.convert(gregorian).toDate();
+            }
+            const formatted = formatLocalDate(jsDate);
+            if (formatted) return formatted;
+        }
+
+        if (typeof selected === 'string') {
+            // If string is already gregorian-like
+            const normalized = normalizeDateString(selected);
+            if (normalized && Number(normalized.slice(0, 4)) > 1700) {
+                return normalized;
+            }
+            // Persian date string → gregorian
+            const persianDate = new DateObject({
+                date: selected.replace(/-/g, '/'),
+                format: 'YYYY/MM/DD',
+                calendar: persian,
+            });
+            return formatLocalDate(persianDate.convert(gregorian).toDate());
+        }
+    } catch (e) {
+        console.error('date conversion failed', e);
+    }
+    return '';
 };
 
-/** Merge WHO percentile curves with child measurements on one age axis. */
+const CustomLegend = ({ payload, childName }) => (
+    <ul className="custom-legend">
+        {(payload || []).map((entry, index) => {
+            const isChild = entry.value === childName;
+            return (
+                <li key={`legend-${index}`} style={{ color: entry.color }} title={legendTooltips[entry.value] || ''}>
+                    {isChild ? `${entry.value} (داده‌های شما)` : entry.value}
+                </li>
+            );
+        })}
+    </ul>
+);
+
 const buildChartData = (standardData, childPoints) => {
     const rows = (standardData || []).map((row) => ({
         month: row.month,
@@ -57,21 +100,15 @@ const buildChartData = (standardData, childPoints) => {
 
     (childPoints || []).forEach((point) => {
         if (point.month == null || point.value == null || Number.isNaN(point.month)) return;
-        const month = roundAgeMonths(point.month, 2);
-        const existing = rows.find((row) => Math.abs(row.month - month) < 0.05);
-        if (existing) {
-            existing.value = point.value;
-            existing.recordDate = point.date || existing.recordDate;
-        } else {
-            rows.push({
-                month,
-                P3: null,
-                P50: null,
-                P97: null,
-                value: point.value,
-                recordDate: point.date || null,
-            });
-        }
+        const month = roundAgeMonths(Math.max(0, point.month), 2);
+        rows.push({
+            month,
+            P3: null,
+            P50: null,
+            P97: null,
+            value: point.value,
+            recordDate: point.date || null,
+        });
     });
 
     return rows.sort((a, b) => a.month - b.month);
@@ -79,50 +116,51 @@ const buildChartData = (standardData, childPoints) => {
 
 const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMonths }) => {
     const chartData = buildChartData(standardData, data);
-    const ageMarker = Math.min(Math.max(childAgeInMonths || 0, 0), 60);
+    const maxAge = Math.max(60, Math.ceil((childAgeInMonths || 0) + 1));
+    const ageMarker = Math.min(Math.max(childAgeInMonths || 0, 0), maxAge);
     const values = chartData
         .flatMap((row) => [row.P3, row.P50, row.P97, row.value])
         .filter((v) => v != null && !Number.isNaN(v));
     const minValue = values.length ? Math.min(...values) : 0;
     const maxValue = values.length ? Math.max(...values) : 1;
     const padding = Math.max((maxValue - minValue) * 0.08, 1);
-    const yDomain = [
-        Math.max(0, Math.floor(minValue - padding)),
-        Math.ceil(maxValue + padding),
-    ];
+    const yDomain = [Math.max(0, Math.floor(minValue - padding)), Math.ceil(maxValue + padding)];
+    const ticks = [0, 6, 12, 18, 24, 36, 48, 60].filter((t) => t <= maxAge);
+    if (maxAge > 60 && !ticks.includes(maxAge)) ticks.push(maxAge);
 
     return (
-        <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 8, bottom: 20 }}>
+        <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d7e5e2" />
                 <XAxis
                     type="number"
                     dataKey="month"
-                    domain={[0, 60]}
-                    ticks={[0, 6, 12, 18, 24, 36, 48, 60]}
+                    domain={[0, maxAge]}
+                    ticks={ticks}
                     allowDecimals
-                    label={{ value: "سن (ماه)", position: "insideBottom", offset: -15 }}
+                    label={{ value: 'سن (ماه)', position: 'insideBottom', offset: -12 }}
                 />
                 <YAxis
                     domain={yDomain}
-                    label={{ value: yAxisLabel, angle: -90, position: 'insideLeft', offset: 10 }}
+                    width={42}
+                    label={{ value: yAxisLabel, angle: -90, position: 'insideLeft', offset: 0 }}
                 />
                 <Tooltip
                     formatter={(value, name) => {
                         if (value == null) return null;
-                        if (name === childName) return [value, `${childName} (داده‌های شما)`];
+                        if (name === childName) return [value, `${childName} (داده شما)`];
                         return [value, name];
                     }}
                     labelFormatter={(label, payload) => {
                         const point = payload && payload[0] && payload[0].payload;
                         const ageLabel = `سن: ${Number(label).toFixed(1)} ماه`;
-                        if (point && point.recordDate) {
+                        if (point?.recordDate) {
                             return `${ageLabel} | تاریخ: ${toShamsi(point.recordDate)}`;
                         }
                         return ageLabel;
                     }}
                 />
-                <Legend content={<CustomLegend childName={childName} />} wrapperStyle={{ paddingTop: '20px' }} />
+                <Legend content={<CustomLegend childName={childName} />} wrapperStyle={{ paddingTop: '16px' }} />
                 <Line type="monotone" dataKey="P3" stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
                 <Line type="monotone" dataKey="P50" stroke="#0f766e" name="صدک ۵۰ (میانه)" dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
                 <Line type="monotone" dataKey="P97" stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
@@ -141,7 +179,7 @@ const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMont
                         x={ageMarker}
                         stroke="#115e59"
                         strokeDasharray="4 4"
-                        label={{ value: "سن فعلی", position: "insideTopRight", fill: "#115e59", fontSize: 12 }}
+                        label={{ value: 'سن فعلی', position: 'insideTopRight', fill: '#115e59', fontSize: 12 }}
                     />
                 )}
             </LineChart>
@@ -149,45 +187,47 @@ const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMont
     );
 };
 
-const MetricInfoCard = ({ title, analysis, unit, statusClassName }) => {
-    const shamsiDate = analysis.date ? toShamsi(analysis.date) : '';
-    const ageText = analysis.ageInMonths != null
-        ? `${roundAgeMonths(analysis.ageInMonths, 1)} ماهگی`
-        : '';
-
-    return (
-        <div className={`info-box ${statusClassName}`}>
-            <h4>{title}</h4>
-            <p>{analysis.value != null ? `\u200E${analysis.value} ${unit}` : 'ثبت نشده'}</p>
-            {shamsiDate && (
-                <div className="info-meta">
-                    <span>تاریخ: {shamsiDate}</span>
-                    {ageText && <span>سن: {ageText}</span>}
-                </div>
-            )}
-            <span className="status-label">وضعیت: {analysis.status}</span>
-        </div>
-    );
-};
+const MetricInfoCard = ({ title, analysis, unit, statusClassName }) => (
+    <div className={`info-box ${statusClassName}`}>
+        <h4>{title}</h4>
+        <p>{analysis.value != null ? `\u200E${analysis.value} ${unit}` : 'ثبت نشده'}</p>
+        {analysis.date ? (
+            <div className="info-meta">
+                <span>آخرین تاریخ: {toShamsi(analysis.date)}</span>
+                {analysis.ageInMonths != null && <span>سن: {formatAgeLabel(analysis.ageInMonths)}</span>}
+            </div>
+        ) : (
+            <div className="info-meta"><span>هنوز داده‌ای ثبت نشده</span></div>
+        )}
+        <span className="status-label">وضعیت: {analysis.status}</span>
+    </div>
+);
 
 const GrowthChartPage = () => {
     const history = useHistory();
     const { childId } = useParams();
     const [child, setChild] = useState(null);
+    const [loadError, setLoadError] = useState('');
     const [modalIsOpen, setModalIsOpen] = useState(false);
-    const [newRecord, setNewRecord] = useState({ date: null, height: '', weight: '', headCircumference: '' });
+    const [editingRecord, setEditingRecord] = useState(null);
+    const [form, setForm] = useState(emptyForm);
+    const [saving, setSaving] = useState(false);
+    const [formError, setFormError] = useState('');
+    const [expandedId, setExpandedId] = useState(null);
 
     const fetchChildData = useCallback(async () => {
         try {
+            setLoadError('');
             const [childRes, growthRes] = await Promise.all([
                 fetch(`http://localhost:5000/api/children/${childId}`),
                 fetch(`http://localhost:5000/api/growth/${childId}`)
             ]);
-            if (!childRes.ok) throw new Error('Child not found');
+            if (!childRes.ok) throw new Error('کودک یافت نشد');
             const data = await childRes.json();
             const growth = growthRes.ok ? await growthRes.json() : (data.growthData || []);
             setChild({ ...data, growthData: growth });
         } catch (error) {
+            setLoadError(error.message || 'خطا در بارگذاری');
             history.push('/my-children');
         }
     }, [childId, history]);
@@ -196,50 +236,127 @@ const GrowthChartPage = () => {
         fetchChildData();
     }, [fetchChildData]);
 
-    const handleAddData = async () => {
-        if (!newRecord.height && !newRecord.weight && !newRecord.headCircumference) {
-            alert('حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.');
+    const openAddModal = () => {
+        setEditingRecord(null);
+        setForm(emptyForm);
+        setFormError('');
+        setModalIsOpen(true);
+    };
+
+    const openEditModal = (record) => {
+        setEditingRecord(record);
+        setForm({
+            date: record.date
+                ? new DateObject({ date: normalizeDateString(record.date) || record.date, calendar: gregorian }).convert(persian)
+                : null,
+            height: record.height != null ? String(record.height) : '',
+            weight: record.weight != null ? String(record.weight) : '',
+            headCircumference: record.headCircumference != null ? String(record.headCircumference) : '',
+        });
+        setFormError('');
+        setModalIsOpen(true);
+    };
+
+    const closeModal = () => {
+        if (saving) return;
+        setModalIsOpen(false);
+        setEditingRecord(null);
+        setForm(emptyForm);
+        setFormError('');
+    };
+
+    const handleSave = async () => {
+        setFormError('');
+        if (!form.date) {
+            setFormError('لطفا تاریخ را انتخاب کنید.');
+            return;
+        }
+        if (!form.height && !form.weight && !form.headCircumference) {
+            setFormError('حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.');
             return;
         }
 
-        if (!newRecord.date) {
-            alert('لطفا تاریخ را انتخاب کنید.');
-            return;
-        }
-
-        const gregorianDate = newRecord.date.toDate ? newRecord.date.toDate() : new Date(newRecord.date);
-        const formattedDate = formatLocalDate(gregorianDate);
+        const formattedDate = toGregorianDateString(form.date);
         if (!formattedDate) {
-            alert('تاریخ نامعتبر است.');
+            setFormError('تاریخ نامعتبر است. دوباره انتخاب کنید.');
             return;
         }
 
-        const recordToAdd = {
+        const birth = parseLocalDate(child?.birthDate);
+        const recordDate = parseLocalDate(formattedDate);
+        if (birth && recordDate && recordDate < birth) {
+            setFormError('تاریخ ثبت نمی‌تواند قبل از تاریخ تولد باشد.');
+            return;
+        }
+
+        const payload = {
             date: formattedDate,
-            height: newRecord.height ? parseFloat(newRecord.height) : undefined,
-            weight: newRecord.weight ? parseFloat(newRecord.weight) : undefined,
-            headCircumference: newRecord.headCircumference ? parseFloat(newRecord.headCircumference) : undefined,
+            height: form.height !== '' ? form.height : null,
+            weight: form.weight !== '' ? form.weight : null,
+            headCircumference: form.headCircumference !== '' ? form.headCircumference : null,
         };
 
+        setSaving(true);
         try {
-            const response = await fetch(`http://localhost:5000/api/growth/${childId}`, {
-                method: 'POST',
+            const hasRecordId = Boolean(editingRecord && editingRecord.id);
+            const url = hasRecordId
+                ? `http://localhost:5000/api/growth/${childId}/record/${editingRecord.id}`
+                : `http://localhost:5000/api/growth/${childId}`;
+            const response = await fetch(url, {
+                method: hasRecordId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(recordToAdd),
+                body: JSON.stringify(payload),
             });
-            if (!response.ok) throw new Error('ثبت داده رشد ناموفق بود');
-
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result.message || 'ثبت داده رشد ناموفق بود');
+            }
             await fetchChildData();
             setModalIsOpen(false);
-            setNewRecord({ date: null, height: '', weight: '', headCircumference: '' });
+            setEditingRecord(null);
+            setForm(emptyForm);
+            setFormError('');
+        } catch (error) {
+            setFormError(error.message || 'خطا در ذخیره');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (record) => {
+        if (!window.confirm(`رکورد تاریخ ${toShamsi(record.date)} حذف شود؟`)) return;
+        try {
+            let response;
+            if (record.id) {
+                response = await fetch(
+                    `http://localhost:5000/api/growth/${childId}/record/${record.id}`,
+                    { method: 'DELETE' }
+                );
+            } else {
+                const encodedDate = encodeURIComponent(normalizeDateString(record.date) || record.date);
+                response = await fetch(
+                    `http://localhost:5000/api/growth/${childId}/${encodedDate}`,
+                    { method: 'DELETE' }
+                );
+            }
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result.message || 'حذف ناموفق بود');
+            await fetchChildData();
         } catch (error) {
             alert(error.message);
         }
     };
 
-    if (!child) return <p>در حال بارگذاری...</p>;
+    if (!child) {
+        return (
+            <div className="growth-chart-page">
+                <p className="growth-loading">{loadError || 'در حال بارگذاری...'}</p>
+            </div>
+        );
+    }
 
     const childName = getChildDisplayName(child);
+    const isBoy = child.gender === 'boy';
 
     const getStatusClassName = (status) => {
         if (status === 'کمبود') return 'growth-status-low';
@@ -271,63 +388,127 @@ const GrowthChartPage = () => {
             .sort((a, b) => a.month - b.month);
     };
 
-    const formattedHeightData = formatMetricData('height');
-    const formattedWeightData = formatMetricData('weight');
-    const formattedHeadCircumferenceData = formatMetricData('headCircumference');
+    const historyRows = [...(child.growthData || [])]
+        .sort((a, b) => (parseLocalDate(b.date)?.getTime() || 0) - (parseLocalDate(a.date)?.getTime() || 0));
 
     return (
         <div className="growth-chart-page">
             <nav className="page-nav-final">
-                <button onClick={() => history.goBack()} className="back-btn">
-                    &larr; بازگشت به پرونده
+                <button type="button" onClick={() => history.goBack()} className="back-btn">
+                    &rarr; بازگشت
                 </button>
                 <h1 className="page-title">نمودار رشد {childName}</h1>
                 <div className="nav-placeholder"></div>
             </nav>
 
             <div className="page-actions">
-                <button onClick={() => setModalIsOpen(true)} className="add-data-btn">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        openAddModal();
+                    }}
+                    className="add-data-btn"
+                >
                     + افزودن داده جدید
                 </button>
+                {birthDate && (
+                    <p className="age-now-label">
+                        سن فعلی کودک: <strong>{formatAgeLabel(childAgeInMonths)}</strong>
+                    </p>
+                )}
             </div>
 
             <div className="chart-info-boxes">
                 <MetricInfoCard
-                    title="آخرین قد ثبت شده"
+                    title="آخرین قد ثبت‌شده"
                     analysis={heightAnalysis}
                     unit="cm"
                     statusClassName={getStatusClassName(heightAnalysis.status)}
                 />
                 <MetricInfoCard
-                    title="آخرین وزن ثبت شده"
+                    title="آخرین وزن ثبت‌شده"
                     analysis={weightAnalysis}
                     unit="kg"
                     statusClassName={getStatusClassName(weightAnalysis.status)}
                 />
                 <MetricInfoCard
-                    title="آخرین دور سر ثبت شده"
+                    title="آخرین دور سر ثبت‌شده"
                     analysis={headAnalysis}
                     unit="cm"
                     statusClassName={getStatusClassName(headAnalysis.status)}
                 />
             </div>
-            
+
+            <div className="history-section">
+                <div className="history-header">
+                    <h3>تاریخچه اندازه‌گیری‌ها</h3>
+                    <span>{historyRows.length} رکورد</span>
+                </div>
+                {historyRows.length === 0 ? (
+                    <p className="history-empty">هنوز اندازه‌گیری ثبت نشده است. از دکمه «افزودن داده جدید» استفاده کنید.</p>
+                ) : (
+                    <div className="history-list">
+                        {historyRows.map((record) => {
+                            const age = ageInMonths(record.date, child.birthDate);
+                            const rowKey = record.id || record.date;
+                            const open = expandedId === rowKey;
+                            return (
+                                <article key={rowKey} className={`history-item ${open ? 'is-open' : ''}`}>
+                                    <button
+                                        type="button"
+                                        className="history-item-main"
+                                        onClick={() => setExpandedId(open ? null : rowKey)}
+                                    >
+                                        <div className="history-item-title">
+                                            <strong>{toShamsi(record.date)}</strong>
+                                            <span>{formatAgeLabel(age)}</span>
+                                        </div>
+                                        <div className="history-item-summary">
+                                            <span>قد: {record.height != null ? `${record.height} cm` : '—'}</span>
+                                            <span>وزن: {record.weight != null ? `${record.weight} kg` : '—'}</span>
+                                            <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} cm` : '—'}</span>
+                                        </div>
+                                    </button>
+                                    {open && (
+                                        <div className="history-item-detail">
+                                            <p>در تاریخ <strong>{toShamsi(record.date)}</strong> (سن {formatAgeLabel(age)}) این مقادیر ثبت شده است:</p>
+                                            <ul>
+                                                <li>قد: {record.height != null ? `${record.height} سانتی‌متر` : 'ثبت نشده'}</li>
+                                                <li>وزن: {record.weight != null ? `${record.weight} کیلوگرم` : 'ثبت نشده'}</li>
+                                                <li>دور سر: {record.headCircumference != null ? `${record.headCircumference} سانتی‌متر` : 'ثبت نشده'}</li>
+                                            </ul>
+                                            <div className="history-item-actions">
+                                                <button type="button" className="btn-edit" onClick={() => openEditModal(record)}>ویرایش</button>
+                                                <button type="button" className="btn-delete" onClick={() => handleDelete(record)}>حذف</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </article>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
             <div className="chart-section">
                 <h3>نمودار قد به سن</h3>
-                <GrowthChart 
-                    data={formattedHeightData}
-                    standardData={child.gender === 'boy' ? whoStats.heightForAgeBoys : whoStats.heightForAgeGirls}
+                <p className="chart-hint">نقاط قرمز بر اساس سن کودک در تاریخ ثبت روی محور ماه قرار می‌گیرند.</p>
+                <GrowthChart
+                    data={formatMetricData('height')}
+                    standardData={isBoy ? whoStats.heightForAgeBoys : whoStats.heightForAgeGirls}
                     childName={childName}
                     yAxisLabel="قد (cm)"
                     childAgeInMonths={childAgeInMonths}
                 />
             </div>
-            
+
             <div className="chart-section">
                 <h3>نمودار وزن به سن</h3>
-                <GrowthChart 
-                    data={formattedWeightData}
-                    standardData={child.gender === 'boy' ? whoStats.weightForAgeBoys : whoStats.weightForAgeGirls}
+                <GrowthChart
+                    data={formatMetricData('weight')}
+                    standardData={isBoy ? whoStats.weightForAgeBoys : whoStats.weightForAgeGirls}
                     childName={childName}
                     yAxisLabel="وزن (kg)"
                     childAgeInMonths={childAgeInMonths}
@@ -337,8 +518,8 @@ const GrowthChartPage = () => {
             <div className="chart-section">
                 <h3>نمودار دور سر به سن</h3>
                 <GrowthChart
-                    data={formattedHeadCircumferenceData}
-                    standardData={child.gender === 'boy' ? whoStats.headCircumferenceForAgeBoys : whoStats.headCircumferenceForAgeGirls}
+                    data={formatMetricData('headCircumference')}
+                    standardData={isBoy ? whoStats.headCircumferenceForAgeBoys : whoStats.headCircumferenceForAgeGirls}
                     childName={childName}
                     yAxisLabel="دور سر (cm)"
                     childAgeInMonths={childAgeInMonths}
@@ -347,45 +528,57 @@ const GrowthChartPage = () => {
 
             <Modal
                 isOpen={modalIsOpen}
-                onRequestClose={() => setModalIsOpen(false)}
-                contentLabel="Add Data Modal"
+                onRequestClose={closeModal}
+                contentLabel="Growth Data Modal"
                 className="add-data-modal"
-                overlayClassName="modal-overlay"
+                overlayClassName="growth-modal-overlay"
+                shouldCloseOnOverlayClick={!saving}
             >
-                <h2>افزودن داده جدید</h2>
+                <h2>{editingRecord ? 'ویرایش داده رشد' : 'افزودن داده جدید'}</h2>
                 <div className="add-data-form">
+                    <label className="field-label">تاریخ اندازه‌گیری</label>
                     <DatePicker
-                        value={newRecord.date}
-                        onChange={(date) => setNewRecord(prev => ({ ...prev, date }))}
+                        value={form.date}
+                        onChange={(date) => setForm((prev) => ({ ...prev, date }))}
                         calendar={persian}
                         locale={persian_fa}
                         format="YYYY/MM/DD"
                         placeholder="تاریخ را انتخاب کنید"
                         inputClass="form-control"
-                        style={{ textAlign: 'center' }}
+                        containerClassName="growth-datepicker"
+                        calendarPosition="bottom-center"
                     />
+                    <label className="field-label">قد (cm)</label>
                     <input
                         type="number"
-                        value={newRecord.height}
-                        onChange={(e) => setNewRecord(prev => ({ ...prev, height: e.target.value }))}
-                        placeholder="قد (cm)"
+                        step="0.1"
+                        value={form.height}
+                        onChange={(e) => setForm((prev) => ({ ...prev, height: e.target.value }))}
+                        placeholder="مثلاً 72.5"
                     />
+                    <label className="field-label">وزن (kg)</label>
                     <input
                         type="number"
-                        value={newRecord.weight}
-                        onChange={(e) => setNewRecord(prev => ({ ...prev, weight: e.target.value }))}
-                        placeholder="وزن (kg)"
+                        step="0.1"
+                        value={form.weight}
+                        onChange={(e) => setForm((prev) => ({ ...prev, weight: e.target.value }))}
+                        placeholder="مثلاً 9.2"
                     />
+                    <label className="field-label">دور سر (cm)</label>
                     <input
                         type="number"
-                        value={newRecord.headCircumference}
-                        onChange={(e) => setNewRecord(prev => ({ ...prev, headCircumference: e.target.value }))}
-                        placeholder="دور سر (cm)"
+                        step="0.1"
+                        value={form.headCircumference}
+                        onChange={(e) => setForm((prev) => ({ ...prev, headCircumference: e.target.value }))}
+                        placeholder="مثلاً 44"
                     />
                 </div>
+                {formError && <p className="form-error">{formError}</p>}
                 <div className="modal-actions">
-                    <button onClick={handleAddData}>ذخیره</button>
-                    <button onClick={() => setModalIsOpen(false)}>انصراف</button>
+                    <button type="button" onClick={handleSave} disabled={saving}>
+                        {saving ? 'در حال ذخیره...' : 'ذخیره'}
+                    </button>
+                    <button type="button" onClick={closeModal} disabled={saving}>انصراف</button>
                 </div>
             </Modal>
         </div>

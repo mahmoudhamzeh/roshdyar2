@@ -342,49 +342,173 @@ app.post('/api/children/:childId/avatar', upload.single('avatar'), (req, res) =>
     res.status(200).json({ message: 'عکس با موفقیت آپلود شد', filePath: avatarPath });
 });
 
-// --- Growth Data Routes ---
+// --- Growth Data Helpers & Routes ---
+const normalizeGrowthDate = (value) => {
+    if (!value) return '';
+    const match = String(value).trim().match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})/);
+    if (!match) return '';
+    const y = match[1];
+    const m = String(match[2]).padStart(2, '0');
+    const d = String(match[3]).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
+const parseOptionalNumber = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const num = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'));
+    return Number.isFinite(num) ? num : null;
+};
+
+const compareGrowthDates = (a, b) => {
+    const da = normalizeGrowthDate(a) || String(a || '');
+    const db = normalizeGrowthDate(b) || String(b || '');
+    return da.localeCompare(db);
+};
+
+const ensureGrowthRecordIds = (records) => {
+    let changed = false;
+    const next = (records || []).map((record, index) => {
+        if (record && record.id) return record;
+        changed = true;
+        return {
+            ...record,
+            id: `g-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+            date: normalizeGrowthDate(record?.date) || record?.date
+        };
+    });
+    return { records: next, changed };
+};
+
+const getGrowthList = (childId) => {
+    const key = String(childId);
+    const ensured = ensureGrowthRecordIds(growthData[key] || growthData[childId] || []);
+    if (ensured.changed) {
+        growthData[key] = ensured.records;
+        saveData();
+    }
+    return growthData[key] || [];
+};
+
 app.get('/api/growth/:childId', (req, res) => {
     const { childId } = req.params;
-    res.json(growthData[childId] || growthData[String(childId)] || []);
+    if (!children.find(c => c.id === parseInt(childId, 10))) {
+        return res.status(404).json({ message: 'کودک یافت نشد' });
+    }
+    const list = getGrowthList(childId).slice().sort((a, b) => compareGrowthDates(a.date, b.date));
+    res.json(list);
 });
 
 app.post('/api/growth/:childId', (req, res) => {
     const { childId } = req.params;
-    const { date, height, weight, headCircumference } = req.body;
-    if (!date || (!height && !weight && !headCircumference)) {
-        return res.status(400).json({ message: 'تاریخ و حداقل یک اندازه‌گیری الزامی است.' });
+    const date = normalizeGrowthDate(req.body?.date);
+    const height = parseOptionalNumber(req.body?.height);
+    const weight = parseOptionalNumber(req.body?.weight);
+    const headCircumference = parseOptionalNumber(req.body?.headCircumference);
+
+    if (!date) {
+        return res.status(400).json({ message: 'تاریخ معتبر الزامی است.' });
     }
-    if (!children.find(c => c.id === parseInt(childId))) {
+    if (height == null && weight == null && headCircumference == null) {
+        return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
+    }
+    if (!children.find(c => c.id === parseInt(childId, 10))) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
 
     const key = String(childId);
-    if (!growthData[key]) growthData[key] = [];
+    const list = getGrowthList(childId);
+    const existingIndex = list.findIndex((r) => normalizeGrowthDate(r.date) === date);
 
-    const newRecord = {
+    const record = {
+        id: existingIndex >= 0 ? list[existingIndex].id : `g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         date,
-        height: height !== undefined && height !== '' ? parseFloat(height) : undefined,
-        weight: weight !== undefined && weight !== '' ? parseFloat(weight) : undefined,
-        headCircumference: headCircumference !== undefined && headCircumference !== '' ? parseFloat(headCircumference) : undefined
+        height,
+        weight,
+        headCircumference
     };
-    growthData[key].push(newRecord);
-    growthData[key].sort((a, b) => new Date(String(a.date).replace(/\//g, '-')) - new Date(String(b.date).replace(/\//g, '-')));
+
+    if (existingIndex >= 0) {
+        list[existingIndex] = record;
+    } else {
+        list.push(record);
+    }
+
+    list.sort((a, b) => compareGrowthDates(a.date, b.date));
+    growthData[key] = list;
     saveData();
-    res.status(201).json(newRecord);
+    res.status(existingIndex >= 0 ? 200 : 201).json(record);
+});
+
+app.put('/api/growth/:childId/record/:recordId', (req, res) => {
+    const { childId, recordId } = req.params;
+    if (!children.find(c => c.id === parseInt(childId, 10))) {
+        return res.status(404).json({ message: 'کودک یافت نشد' });
+    }
+
+    const key = String(childId);
+    const list = getGrowthList(childId);
+    const index = list.findIndex((r) => String(r.id) === String(recordId));
+    if (index < 0) {
+        return res.status(404).json({ message: 'رکورد یافت نشد' });
+    }
+
+    const date = normalizeGrowthDate(req.body?.date) || normalizeGrowthDate(list[index].date);
+    const height = req.body?.height !== undefined ? parseOptionalNumber(req.body.height) : list[index].height;
+    const weight = req.body?.weight !== undefined ? parseOptionalNumber(req.body.weight) : list[index].weight;
+    const headCircumference = req.body?.headCircumference !== undefined
+        ? parseOptionalNumber(req.body.headCircumference)
+        : list[index].headCircumference;
+
+    if (!date) {
+        return res.status(400).json({ message: 'تاریخ معتبر الزامی است.' });
+    }
+    if (height == null && weight == null && headCircumference == null) {
+        return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
+    }
+
+    const duplicate = list.findIndex((r, i) => i !== index && normalizeGrowthDate(r.date) === date);
+    if (duplicate >= 0) {
+        return res.status(400).json({ message: 'برای این تاریخ قبلاً رکورد دیگری ثبت شده است.' });
+    }
+
+    list[index] = {
+        id: list[index].id,
+        date,
+        height,
+        weight,
+        headCircumference
+    };
+    list.sort((a, b) => compareGrowthDates(a.date, b.date));
+    growthData[key] = list;
+    saveData();
+    res.json(list[index]);
+});
+
+app.delete('/api/growth/:childId/record/:recordId', (req, res) => {
+    const { childId, recordId } = req.params;
+    const key = String(childId);
+    const list = getGrowthList(childId);
+    const next = list.filter((record) => String(record.id) !== String(recordId));
+    if (next.length === list.length) {
+        return res.status(404).json({ message: 'رکورد یافت نشد' });
+    }
+    growthData[key] = next;
+    saveData();
+    res.json({ message: 'رکورد حذف شد' });
 });
 
 app.delete('/api/growth/:childId/:date', (req, res) => {
     const { childId, date } = req.params;
     const key = String(childId);
-    if (!growthData[key]) return res.status(404).json({ message: 'داده‌ای یافت نشد' });
-    const initialLength = growthData[key].length;
-    growthData[key] = growthData[key].filter(record => record.date !== date);
-    if (growthData[key].length < initialLength) {
-        saveData();
-        res.status(200).json({ message: 'رکورد حذف شد' });
-    } else {
-        res.status(404).json({ message: 'رکورد یافت نشد' });
+    const normalized = normalizeGrowthDate(decodeURIComponent(date));
+    const list = getGrowthList(childId);
+    const next = list.filter((record) => normalizeGrowthDate(record.date) !== normalized && record.date !== date);
+    if (next.length === list.length) {
+        return res.status(404).json({ message: 'رکورد یافت نشد' });
     }
+    growthData[key] = next;
+    saveData();
+    res.status(200).json({ message: 'رکورد حذف شد' });
 });
 
 // --- Vaccination Status Routes ---
