@@ -45,10 +45,21 @@ const CustomLegend = (props) => {
 
 const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMonths }) => {
     const ageMarker = Math.min(Math.max(childAgeInMonths || 0, 0), 60);
+    const values = [
+        ...(standardData || []).flatMap((row) => [row.P3, row.P50, row.P97]),
+        ...(data || []).map((row) => row.value),
+    ].filter((v) => v != null && !Number.isNaN(v));
+    const minValue = values.length ? Math.min(...values) : 0;
+    const maxValue = values.length ? Math.max(...values) : 1;
+    const padding = Math.max((maxValue - minValue) * 0.08, 1);
+    const yDomain = [
+        Math.max(0, Math.floor(minValue - padding)),
+        Math.ceil(maxValue + padding),
+    ];
 
     return (
-        <ResponsiveContainer width="100%" height={300}>
-            <LineChart margin={{ top: 20, right: 30, left: 0, bottom: 20 }}>
+        <ResponsiveContainer width="100%" height={320}>
+            <LineChart margin={{ top: 20, right: 30, left: 8, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d7e5e2" />
                 <XAxis
                     type="number"
@@ -57,19 +68,22 @@ const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMont
                     ticks={[0, 6, 12, 18, 24, 36, 48, 60]}
                     label={{ value: "سن (ماه)", position: "insideBottom", offset: -15 }}
                 />
-                <YAxis label={{ value: yAxisLabel, angle: -90, position: 'insideLeft' }} />
+                <YAxis
+                    domain={yDomain}
+                    label={{ value: yAxisLabel, angle: -90, position: 'insideLeft', offset: 10 }}
+                />
                 <Tooltip
                     formatter={(value, name) => {
                         if (value == null) return ['—', name];
-                        if (name === childName) return [value, childName];
+                        if (name === childName) return [value, `${childName} (داده‌های شما)`];
                         return [value, name];
                     }}
                     labelFormatter={(label) => `سن: ${Number(label).toFixed(1)} ماه`}
                 />
                 <Legend content={<CustomLegend childName={childName} />} wrapperStyle={{ paddingTop: '20px' }} />
-                <Line type="monotone" dataKey="P3" data={standardData} stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="P50" data={standardData} stroke="#0f766e" name="صدک ۵۰ (میانه)" dot={false} strokeWidth={1.5} />
-                <Line type="monotone" dataKey="P97" data={standardData} stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} />
+                <Line type="monotone" dataKey="P3" data={standardData} stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} isAnimationActive={false} />
+                <Line type="monotone" dataKey="P50" data={standardData} stroke="#0f766e" name="صدک ۵۰ (میانه)" dot={false} strokeWidth={2} isAnimationActive={false} />
+                <Line type="monotone" dataKey="P97" data={standardData} stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} isAnimationActive={false} />
                 <Line
                     type="monotone"
                     dataKey="value"
