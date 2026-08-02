@@ -14,17 +14,20 @@
     padding: 0.9rem 1rem;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
+    text-align: start;
 }
 
 .recommendations-container li svg {
     font-size: 1.15rem;
-    margin-top: 0.15rem;
+    margin-top: 0.2rem;
+    flex-shrink: 0;
 }
 
 .recommendations-container li p {
     margin: 0;
     line-height: 1.65;
     font-size: 0.95rem;
+    text-align: start;
 }
 
 .rec-high {
