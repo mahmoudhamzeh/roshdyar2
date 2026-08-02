@@ -141,6 +141,19 @@
       },
       "vaccinationRecords": {},
       "userId": 1
+    },
+    {
+      "firstName": "آریا",
+      "lastName": "تست",
+      "name": "آریا تست",
+      "gender": "boy",
+      "birthDate": "2023-08-01",
+      "userId": 1,
+      "birthHeight": 50,
+      "birthWeight": 3.2,
+      "birthHeadCircumference": 35,
+      "id": 7,
+      "vaccinationRecords": {}
     }
   ],
   "growthData": {
@@ -191,6 +204,32 @@
         "height": 44,
         "weight": 3
       }
+    ],
+    "7": [
+      {
+        "date": "2023-08-01",
+        "height": 50,
+        "weight": 3.2,
+        "headCircumference": 35
+      },
+      {
+        "date": "2024-02-01",
+        "height": 67.5,
+        "weight": 7.9,
+        "headCircumference": 43.3
+      },
+      {
+        "date": "2024-08-01",
+        "height": 75.5,
+        "weight": 9.6,
+        "headCircumference": 46
+      },
+      {
+        "date": "2025-08-01",
+        "height": 87.5,
+        "weight": 12.2,
+        "headCircumference": 48.3
+      }
     ]
   },
   "medicalVisits": {
@@ -198,7 +237,8 @@
     "2": [],
     "3": [],
     "5": [],
-    "6": []
+    "6": [],
+    "7": []
   },
   "medicalDocuments": {
     "1": [],
@@ -206,9 +246,12 @@
     "3": [],
     "4": [],
     "5": [],
-    "6": []
+    "6": [],
+    "7": []
   },
-  "checkups": {},
+  "checkups": {
+    "7": []
+  },
   "reminders": {
     "1": [
       {
@@ -251,9 +294,11 @@
         "type": "info",
         "source": "manual"
       }
-    ]
+    ],
+    "7": []
   },
-  "childIdCounter": 7,
+  "childIdCounter": 8,
+  "userIdCounter": 2,
   "banners": [],
   "articles": [],
   "news": [

@@ -1,6 +1,6 @@
 .growth-chart-page {
   padding: 1rem;
-  background-color: #f9f9f9;
+  background-color: transparent;
 }
 
 .page-nav-final {
@@ -8,8 +8,9 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  background-color: #e3f2fd; /* Light blue background */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: linear-gradient(120deg, var(--brand-soft), var(--surface));
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
   margin: -1rem -1rem 1.5rem -1rem; /* Extend to page edges */
 }
 
@@ -20,7 +21,7 @@
   border: none;
   font-size: 1rem;
   cursor: pointer;
-  color: #1565c0;
+  color: var(--brand);
   font-weight: bold;
 }
 
@@ -29,7 +30,8 @@
     text-align: center;
     margin: 0;
     font-size: 1.5rem;
-    color: #0d47a1;
+    color: var(--brand-deep);
+    font-family: var(--font-display);
 }
 
 .nav-placeholder {
@@ -42,13 +44,19 @@
 }
 
 .add-data-btn {
-  background-color: #4CAF50;
-  color: white;
+  background-color: var(--brand);
+  color: var(--text-on-brand);
   padding: 0.8rem 1.5rem;
   border: none;
   border-radius: 8px;
   cursor: pointer;
   font-size: 1rem;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+
+.add-data-btn:hover {
+  background-color: var(--brand-deep);
 }
 
 
@@ -68,48 +76,83 @@
 }
 
 .info-box {
-  flex: 0 1 300px; /* Make boxes narrower */
-  background-color: #fff;
-  padding: 1rem;
-  border-radius: 8px;
+  flex: 0 1 300px;
+  background-color: var(--surface);
+  padding: 1.15rem 1rem 1.25rem;
+  border-radius: var(--radius-md);
   text-align: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  border: 2px solid transparent;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  border-inline-start-width: 5px;
 }
 
 .info-box h4 {
-  margin: 0 0 0.5rem 0;
-  color: #555;
+  margin: 0 0 0.55rem 0;
+  color: #3f4f4d;
+  font-size: 0.95rem;
+  font-weight: 700;
 }
 
 .info-box p {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.5rem;
-  font-weight: bold;
-  color: #4a90e2;
+  margin: 0 0 0.75rem 0;
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #102a27;
+  font-family: var(--font-display);
+  line-height: 1.25;
 }
 
-.info-box span {
+.info-box .status-label {
+  display: inline-block;
   font-size: 0.9rem;
-  font-weight: bold;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  line-height: 1.4;
+  color: #fff;
 }
 
-.info-box.status-normal { border-color: #387908; }
-.info-box.status-low { border-color: #ff7300; }
-.info-box.status-high { border-color: #e60000; }
-.info-box.status-unknown { border-color: #ccc; }
+.info-box.growth-status-normal {
+  border-inline-start-color: #047857;
+  background: #ffffff;
+}
+.info-box.growth-status-low {
+  border-inline-start-color: #b45309;
+  background: #ffffff;
+}
+.info-box.growth-status-high {
+  border-inline-start-color: #b91c1c;
+  background: #ffffff;
+}
+.info-box.growth-status-unknown {
+  border-inline-start-color: #6b7280;
+  background: #ffffff;
+}
 
-.info-box.status-normal span { color: #387908; }
-.info-box.status-low span { color: #ff7300; }
-.info-box.status-high span { color: #e60000; }
-.info-box.status-unknown span { color: #777; }
+.info-box.growth-status-normal .status-label {
+  color: #fff;
+  background-color: #047857;
+}
+.info-box.growth-status-low .status-label {
+  color: #fff;
+  background-color: #b45309;
+}
+.info-box.growth-status-high .status-label {
+  color: #fff;
+  background-color: #b91c1c;
+}
+.info-box.growth-status-unknown .status-label {
+  color: #fff;
+  background-color: #6b7280;
+}
 
 
 .chart-section {
-    background-color: #fff;
+    background-color: var(--surface);
     padding: 1.5rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
     margin-bottom: 1.5rem;
 }
 
@@ -117,6 +160,8 @@
     text-align: center;
     margin-top: 0;
     margin-bottom: 1.5rem;
+    color: var(--brand-deep);
+    font-family: var(--font-display);
 }
 
 .data-entry-section {
@@ -186,8 +231,8 @@
 }
 
 .modal-actions button:first-child {
-  background-color: #4a90e2;
-  color: white;
+  background-color: var(--brand);
+  color: var(--text-on-brand);
 }
 
 .modal-actions button:last-child {
