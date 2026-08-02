@@ -295,7 +295,9 @@ const HealthProfilePage = () => {
                                 {child.gender && (
                                     <span>{child.gender === 'boy' ? 'پسر' : child.gender === 'girl' ? 'دختر' : child.gender}</span>
                                 )}
-                                {child.bloodType && <span>گروه خونی {child.bloodType}</span>}
+                                {child.bloodType && (
+                                    <span>گروه خونی <bdi>{child.bloodType}</bdi></span>
+                                )}
                             </p>
                             {(allergyTags.length > 0 || illnessTags.length > 0) && (
                                 <div className="hp-hero-alerts" aria-label="هشدارهای سلامت">
