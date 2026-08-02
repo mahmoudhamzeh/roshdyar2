@@ -33,16 +33,46 @@ const legendTooltips = {
 
 const toGregorianDateString = (value) => {
     if (!value) return '';
+    const selected = Array.isArray(value) ? value[0] : value;
+
     try {
-        if (value instanceof DateObject || (typeof value === 'object' && value.year != null)) {
-            const converted = new DateObject(value).convert(gregorian);
-            return converted.format('YYYY-MM-DD');
+        if (selected instanceof Date) {
+            return formatLocalDate(selected);
+        }
+
+        // react-multi-date-picker DateObject (possibly Persian calendar)
+        if (typeof selected === 'object') {
+            let jsDate = null;
+            if (typeof selected.toDate === 'function') {
+                jsDate = selected.toDate();
+            } else {
+                const asObject = selected instanceof DateObject
+                    ? selected
+                    : new DateObject(selected);
+                jsDate = asObject.convert(gregorian).toDate();
+            }
+            const formatted = formatLocalDate(jsDate);
+            if (formatted) return formatted;
+        }
+
+        if (typeof selected === 'string') {
+            // If string is already gregorian-like
+            const normalized = normalizeDateString(selected);
+            if (normalized && Number(normalized.slice(0, 4)) > 1700) {
+                return normalized;
+            }
+            // Persian date string → gregorian
+            const persianDate = new DateObject({
+                date: selected.replace(/-/g, '/'),
+                format: 'YYYY/MM/DD',
+                calendar: persian,
+            });
+            return formatLocalDate(persianDate.convert(gregorian).toDate());
         }
     } catch (e) {
-        // fall through
+        console.error('date conversion failed', e);
     }
-    if (value instanceof Date) return formatLocalDate(value);
-    return normalizeDateString(value);
+    return '';
 };
 
 const CustomLegend = ({ payload, childName }) => (
@@ -268,11 +298,12 @@ const GrowthChartPage = () => {
 
         setSaving(true);
         try {
-            const url = editingRecord
+            const hasRecordId = Boolean(editingRecord && editingRecord.id);
+            const url = hasRecordId
                 ? `http://localhost:5000/api/growth/${childId}/record/${editingRecord.id}`
                 : `http://localhost:5000/api/growth/${childId}`;
             const response = await fetch(url, {
-                method: editingRecord ? 'PUT' : 'POST',
+                method: hasRecordId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
@@ -281,7 +312,10 @@ const GrowthChartPage = () => {
                 throw new Error(result.message || 'ثبت داده رشد ناموفق بود');
             }
             await fetchChildData();
-            closeModal();
+            setModalIsOpen(false);
+            setEditingRecord(null);
+            setForm(emptyForm);
+            setFormError('');
         } catch (error) {
             setFormError(error.message || 'خطا در ذخیره');
         } finally {
@@ -292,10 +326,19 @@ const GrowthChartPage = () => {
     const handleDelete = async (record) => {
         if (!window.confirm(`رکورد تاریخ ${toShamsi(record.date)} حذف شود؟`)) return;
         try {
-            const response = await fetch(
-                `http://localhost:5000/api/growth/${childId}/record/${record.id}`,
-                { method: 'DELETE' }
-            );
+            let response;
+            if (record.id) {
+                response = await fetch(
+                    `http://localhost:5000/api/growth/${childId}/record/${record.id}`,
+                    { method: 'DELETE' }
+                );
+            } else {
+                const encodedDate = encodeURIComponent(normalizeDateString(record.date) || record.date);
+                response = await fetch(
+                    `http://localhost:5000/api/growth/${childId}/${encodedDate}`,
+                    { method: 'DELETE' }
+                );
+            }
             const result = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(result.message || 'حذف ناموفق بود');
             await fetchChildData();
