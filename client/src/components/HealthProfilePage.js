@@ -106,13 +106,13 @@ const getLatestGrowth = (growthData = []) => {
     })[0];
 };
 
-const InfoField = ({ label, value, icon }) => (
+const InfoField = ({ label, value, icon, ltr = false }) => (
     <div className={`hp-field${!value ? ' is-empty' : ''}`}>
         <div className="hp-field-label">
             {icon && <FontAwesomeIcon icon={icon} className="hp-field-icon" />}
             <span>{label}</span>
         </div>
-        <div className="hp-field-value">{value || 'ثبت نشده'}</div>
+        <div className="hp-field-value" dir={ltr ? 'ltr' : undefined}>{value || 'ثبت نشده'}</div>
     </div>
 );
 
@@ -297,6 +297,20 @@ const HealthProfilePage = () => {
                                 )}
                                 {child.bloodType && <span>گروه خونی {child.bloodType}</span>}
                             </p>
+                            {(allergyTags.length > 0 || illnessTags.length > 0) && (
+                                <div className="hp-hero-alerts" aria-label="هشدارهای سلامت">
+                                    {allergyTags.length > 0 && (
+                                        <span className="hp-alert-chip allergy">
+                                            {allergyTags.length} آلرژی ثبت‌شده
+                                        </span>
+                                    )}
+                                    {illnessTags.length > 0 && (
+                                        <span className="hp-alert-chip illness">
+                                            {illnessTags.length} بیماری خاص
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="hp-hero-actions">
@@ -335,7 +349,7 @@ const HealthProfilePage = () => {
                         </h4>
                         <div className="hp-info-grid">
                             <InfoField label="نام و نام خانوادگی" value={displayName} icon={faUser} />
-                            <InfoField label="کد ملی" value={formatValue(child.nationalId)} icon={faIdCard} />
+                            <InfoField label="کد ملی" value={formatValue(child.nationalId)} icon={faIdCard} ltr />
                             <InfoField label="نام پدر" value={formatValue(child.fatherName)} icon={faUser} />
                             <InfoField
                                 label="جنسیت"
@@ -381,7 +395,7 @@ const HealthProfilePage = () => {
                             <InfoField label="قد فعلی" value={currentHeight} icon={faRulerVertical} />
                             <InfoField label="وزن فعلی" value={currentWeight} icon={faWeightScale} />
                             <InfoField label="دور سر فعلی" value={currentHead} icon={faRulerVertical} />
-                            <InfoField label="گروه خونی" value={formatValue(child.bloodType)} icon={faDroplet} />
+                            <InfoField label="گروه خونی" value={formatValue(child.bloodType)} icon={faDroplet} ltr />
                             <InfoField
                                 label="آخرین اندازه‌گیری رشد"
                                 value={latestGrowth ? formatBirthDate(latestGrowth.date) : null}
@@ -393,10 +407,24 @@ const HealthProfilePage = () => {
                                 icon={faSyringe}
                             />
                         </div>
+                        {totalVaccines > 0 && (
+                            <div className="hp-vax-progress">
+                                <div className="hp-vax-progress-meta">
+                                    <strong>پوشش واکسیناسیون</strong>
+                                    <span>{Math.round((vaccinatedCount / totalVaccines) * 100)}٪</span>
+                                </div>
+                                <div className="hp-vax-progress-track" aria-hidden="true">
+                                    <div
+                                        className="hp-vax-progress-fill"
+                                        style={{ width: `${Math.min(100, (vaccinatedCount / totalVaccines) * 100)}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="hp-split-blocks">
-                        <div className="hp-info-block">
+                        <div className={`hp-info-block${allergyTags.length ? ' is-alert allergy' : ''}`}>
                             <h4>
                                 <FontAwesomeIcon icon={faAllergies} />
                                 آلرژی‌ها
@@ -415,7 +443,7 @@ const HealthProfilePage = () => {
                             )}
                         </div>
 
-                        <div className="hp-info-block">
+                        <div className={`hp-info-block${illnessTags.length ? ' is-alert illness' : ''}`}>
                             <h4>
                                 <FontAwesomeIcon icon={faStethoscope} />
                                 بیماری‌های خاص

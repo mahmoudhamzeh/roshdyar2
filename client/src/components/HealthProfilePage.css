@@ -155,6 +155,32 @@
     font-weight: 600;
 }
 
+.hp-hero-alerts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.hp-alert-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.18rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.hp-alert-chip.allergy {
+    background: var(--danger-soft);
+    color: #991b1b;
+}
+
+.hp-alert-chip.illness {
+    background: #e0f2fe;
+    color: #075985;
+}
+
 .hp-hero-actions {
     display: flex;
     flex-wrap: wrap;
@@ -241,6 +267,58 @@
     font-family: var(--font-display);
     font-size: 1rem;
     color: var(--ink);
+}
+
+.hp-info-block.is-alert.allergy {
+    background: linear-gradient(180deg, #fff7f7 0%, var(--surface-2) 100%);
+    border-color: #fecaca;
+}
+
+.hp-info-block.is-alert.illness {
+    background: linear-gradient(180deg, #f0f9ff 0%, var(--surface-2) 100%);
+    border-color: #bae6fd;
+}
+
+.hp-vax-progress {
+    margin-top: 0.95rem;
+    padding: 0.85rem 0.95rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+}
+
+.hp-vax-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.55rem;
+}
+
+.hp-vax-progress-meta strong {
+    font-family: var(--font-display);
+    font-size: 0.92rem;
+    color: var(--ink);
+}
+
+.hp-vax-progress-meta span {
+    color: var(--brand-deep);
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.hp-vax-progress-track {
+    height: 9px;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.12);
+    overflow: hidden;
+}
+
+.hp-vax-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--brand), var(--brand-mid));
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .hp-info-grid {
