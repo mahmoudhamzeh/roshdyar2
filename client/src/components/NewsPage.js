@@ -21,7 +21,6 @@ const NewsPage = () => {
         }
     }, [location]);
 
-
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
@@ -46,6 +45,19 @@ const NewsPage = () => {
         };
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (loading || location.hash !== '#educational-videos') return undefined;
+
+        const timer = window.setTimeout(() => {
+            const section = document.getElementById('educational-videos');
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 120);
+
+        return () => window.clearTimeout(timer);
+    }, [loading, location.hash, videos]);
 
     const filteredArticles = articles.filter(article =>
         selectedCategory === 'همه' || article.category === selectedCategory
@@ -115,7 +127,7 @@ const NewsPage = () => {
 
                             <aside className="sidebar-column">
                                 {videos.length > 0 && (
-                                    <section className="sidebar-section">
+                                    <section id="educational-videos" className="sidebar-section educational-videos-section">
                                         <h2>ویدیوهای آموزشی</h2>
                                         <div className="videos-list">
                                             {videos.map(video => (

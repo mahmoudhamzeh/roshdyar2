@@ -6,14 +6,19 @@ import ServiceTiles from './ServiceTiles';
 import ContentRow from './ContentRow';
 import './DashboardPage.css';
 
-const mockVideos = Array.from({ length: 8 }, (_, i) => ({
-    id: i, title: `ویدیو آموزشی ${i + 1}`,
-    image: `https://placehold.co/220x140/0F766E/FFFFFF?text=Video+${i+1}`
+const fallbackVideos = Array.from({ length: 8 }, (_, i) => ({
+    id: `fallback-${i}`,
+    title: `ویدیو آموزشی ${i + 1}`,
+    summary: 'ویدیوهای آموزشی و تربیتی برای والدین',
+    image: `https://placehold.co/320x180/0F766E/FFFFFF?text=Video+${i + 1}`,
+    link: '/news#educational-videos',
+    isVideo: true,
 }));
 
 const DashboardPage = () => {
     const [banners, setBanners] = useState([]);
     const [articles, setArticles] = useState([]);
+    const [videos, setVideos] = useState(fallbackVideos);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -51,6 +56,28 @@ const DashboardPage = () => {
             } catch (error) {
                 console.error("Failed to fetch articles:", error);
             }
+
+            try {
+                const videosResponse = await fetch('http://localhost:5000/api/videos');
+                if (videosResponse.ok) {
+                    const data = await videosResponse.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        const formattedVideos = data.map((video, index) => ({
+                            id: video.id,
+                            title: video.title,
+                            summary: video.summary,
+                            image: video.thumbnailUrl
+                                ? `http://localhost:5000${video.thumbnailUrl}`
+                                : `https://placehold.co/480x270/0F766E/FFFFFF?text=Video+${index + 1}`,
+                            externalUrl: video.url,
+                            isVideo: true,
+                        }));
+                        setVideos(formattedVideos);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to fetch videos:", error);
+            }
         };
         fetchData();
     }, []);
@@ -61,7 +88,13 @@ const DashboardPage = () => {
             <main className="dashboard-main">
                 <AppCarousel slides={banners} />
                 <ServiceTiles />
-                <ContentRow title="ویدیوهای آموزشی و تربیتی" items={mockVideos} scrollable={true} />
+                <ContentRow
+                    title="ویدیوهای آموزشی و تربیتی"
+                    items={videos}
+                    scrollable={true}
+                    visibleCount={4}
+                    viewAllLink="/news#educational-videos"
+                />
                 <ContentRow title="جدیدترین مقالات" items={articles} viewAllLink="/news" />
             </main>
             <Footer />
