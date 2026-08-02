@@ -7,9 +7,11 @@ import persian_fa from 'react-date-object/locales/persian_fa';
 import Modal from 'react-modal';
 import { whoStats } from '../who-stats';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
+import { ageInMonths, formatLocalDate, parseLocalDate, roundAgeMonths } from '../utils/growth-dates';
+import { toShamsi } from '../utils/dateConverter';
 import { getChildDisplayName } from '../utils/childName';
 import './GrowthChartPage.css';
-import './DatePickerOverride.css'; // Import the override styles
+import './DatePickerOverride.css';
 
 Modal.setAppElement('#root');
 
@@ -42,13 +44,45 @@ const CustomLegend = (props) => {
     );
 };
 
+/** Merge WHO percentile curves with child measurements on one age axis. */
+const buildChartData = (standardData, childPoints) => {
+    const rows = (standardData || []).map((row) => ({
+        month: row.month,
+        P3: row.P3,
+        P50: row.P50,
+        P97: row.P97,
+        value: null,
+        recordDate: null,
+    }));
+
+    (childPoints || []).forEach((point) => {
+        if (point.month == null || point.value == null || Number.isNaN(point.month)) return;
+        const month = roundAgeMonths(point.month, 2);
+        const existing = rows.find((row) => Math.abs(row.month - month) < 0.05);
+        if (existing) {
+            existing.value = point.value;
+            existing.recordDate = point.date || existing.recordDate;
+        } else {
+            rows.push({
+                month,
+                P3: null,
+                P50: null,
+                P97: null,
+                value: point.value,
+                recordDate: point.date || null,
+            });
+        }
+    });
+
+    return rows.sort((a, b) => a.month - b.month);
+};
 
 const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMonths }) => {
+    const chartData = buildChartData(standardData, data);
     const ageMarker = Math.min(Math.max(childAgeInMonths || 0, 0), 60);
-    const values = [
-        ...(standardData || []).flatMap((row) => [row.P3, row.P50, row.P97]),
-        ...(data || []).map((row) => row.value),
-    ].filter((v) => v != null && !Number.isNaN(v));
+    const values = chartData
+        .flatMap((row) => [row.P3, row.P50, row.P97, row.value])
+        .filter((v) => v != null && !Number.isNaN(v));
     const minValue = values.length ? Math.min(...values) : 0;
     const maxValue = values.length ? Math.max(...values) : 1;
     const padding = Math.max((maxValue - minValue) * 0.08, 1);
@@ -59,13 +93,14 @@ const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMont
 
     return (
         <ResponsiveContainer width="100%" height={320}>
-            <LineChart margin={{ top: 20, right: 30, left: 8, bottom: 20 }}>
+            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 8, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#d7e5e2" />
                 <XAxis
                     type="number"
                     dataKey="month"
                     domain={[0, 60]}
                     ticks={[0, 6, 12, 18, 24, 36, 48, 60]}
+                    allowDecimals
                     label={{ value: "سن (ماه)", position: "insideBottom", offset: -15 }}
                 />
                 <YAxis
@@ -74,26 +109,32 @@ const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMont
                 />
                 <Tooltip
                     formatter={(value, name) => {
-                        if (value == null) return ['—', name];
+                        if (value == null) return null;
                         if (name === childName) return [value, `${childName} (داده‌های شما)`];
                         return [value, name];
                     }}
-                    labelFormatter={(label) => `سن: ${Number(label).toFixed(1)} ماه`}
+                    labelFormatter={(label, payload) => {
+                        const point = payload && payload[0] && payload[0].payload;
+                        const ageLabel = `سن: ${Number(label).toFixed(1)} ماه`;
+                        if (point && point.recordDate) {
+                            return `${ageLabel} | تاریخ: ${toShamsi(point.recordDate)}`;
+                        }
+                        return ageLabel;
+                    }}
                 />
                 <Legend content={<CustomLegend childName={childName} />} wrapperStyle={{ paddingTop: '20px' }} />
-                <Line type="monotone" dataKey="P3" data={standardData} stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} isAnimationActive={false} />
-                <Line type="monotone" dataKey="P50" data={standardData} stroke="#0f766e" name="صدک ۵۰ (میانه)" dot={false} strokeWidth={2} isAnimationActive={false} />
-                <Line type="monotone" dataKey="P97" data={standardData} stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} isAnimationActive={false} />
+                <Line type="monotone" dataKey="P3" stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
+                <Line type="monotone" dataKey="P50" stroke="#0f766e" name="صدک ۵۰ (میانه)" dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
+                <Line type="monotone" dataKey="P97" stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
                 <Line
                     type="monotone"
                     dataKey="value"
-                    data={data}
                     stroke="#dc2626"
                     name={childName}
                     strokeWidth={2.5}
+                    connectNulls
                     dot={{ r: 4, strokeWidth: 2, fill: '#fff' }}
                     activeDot={{ r: 6 }}
-                    connectNulls
                 />
                 {childAgeInMonths > 0 && (
                     <ReferenceLine
@@ -105,6 +146,27 @@ const GrowthChart = ({ data, standardData, childName, yAxisLabel, childAgeInMont
                 )}
             </LineChart>
         </ResponsiveContainer>
+    );
+};
+
+const MetricInfoCard = ({ title, analysis, unit, statusClassName }) => {
+    const shamsiDate = analysis.date ? toShamsi(analysis.date) : '';
+    const ageText = analysis.ageInMonths != null
+        ? `${roundAgeMonths(analysis.ageInMonths, 1)} ماهگی`
+        : '';
+
+    return (
+        <div className={`info-box ${statusClassName}`}>
+            <h4>{title}</h4>
+            <p>{analysis.value != null ? `\u200E${analysis.value} ${unit}` : 'ثبت نشده'}</p>
+            {shamsiDate && (
+                <div className="info-meta">
+                    <span>تاریخ: {shamsiDate}</span>
+                    {ageText && <span>سن: {ageText}</span>}
+                </div>
+            )}
+            <span className="status-label">وضعیت: {analysis.status}</span>
+        </div>
     );
 };
 
@@ -144,8 +206,13 @@ const GrowthChartPage = () => {
             alert('لطفا تاریخ را انتخاب کنید.');
             return;
         }
-        const gregorianDate = newRecord.date.toDate();
-        const formattedDate = gregorianDate.toISOString().split('T')[0];
+
+        const gregorianDate = newRecord.date.toDate ? newRecord.date.toDate() : new Date(newRecord.date);
+        const formattedDate = formatLocalDate(gregorianDate);
+        if (!formattedDate) {
+            alert('تاریخ نامعتبر است.');
+            return;
+        }
 
         const recordToAdd = {
             date: formattedDate,
@@ -181,33 +248,26 @@ const GrowthChartPage = () => {
         return 'growth-status-unknown';
     };
 
-    const parseFlexibleDate = (value) => {
-        if (!value) return null;
-        const date = new Date(String(value).trim().replace(/\//g, '-'));
-        return Number.isNaN(date.getTime()) ? null : date;
-    };
-
     const heightAnalysis = analyzeGrowthMetric('height', child);
     const weightAnalysis = analyzeGrowthMetric('weight', child);
     const headAnalysis = analyzeGrowthMetric('headCircumference', child);
 
-    const birthDate = parseFlexibleDate(child.birthDate);
-    const childAgeInMonths = birthDate
-        ? (Date.now() - birthDate.getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
-        : 0;
+    const birthDate = parseLocalDate(child.birthDate);
+    const childAgeInMonths = birthDate ? ageInMonths(new Date(), child.birthDate) : 0;
 
     const formatMetricData = (metricKey) => {
         if (!birthDate) return [];
         return (child.growthData || [])
             .map((d) => {
-                const recordDate = parseFlexibleDate(d.date);
-                if (!recordDate || d[metricKey] == null || d[metricKey] === '') return null;
+                const months = ageInMonths(d.date, child.birthDate);
+                if (months == null || d[metricKey] == null || d[metricKey] === '') return null;
                 return {
-                    month: (recordDate - birthDate) / (1000 * 60 * 60 * 24 * 30.4375),
+                    month: months,
                     value: Number(d[metricKey]),
+                    date: d.date,
                 };
             })
-            .filter((d) => d && !Number.isNaN(d.month) && !Number.isNaN(d.value))
+            .filter((d) => d && !Number.isNaN(d.month) && !Number.isNaN(d.value) && d.month >= 0)
             .sort((a, b) => a.month - b.month);
     };
 
@@ -232,21 +292,24 @@ const GrowthChartPage = () => {
             </div>
 
             <div className="chart-info-boxes">
-                <div className={`info-box ${getStatusClassName(heightAnalysis.status)}`}>
-                    <h4>آخرین قد ثبت شده</h4>
-                    <p>{heightAnalysis.value != null ? `\u200E${heightAnalysis.value} cm` : 'ثبت نشده'}</p>
-                    <span className="status-label">وضعیت: {heightAnalysis.status}</span>
-                </div>
-                <div className={`info-box ${getStatusClassName(weightAnalysis.status)}`}>
-                    <h4>آخرین وزن ثبت شده</h4>
-                    <p>{weightAnalysis.value != null ? `\u200E${weightAnalysis.value} kg` : 'ثبت نشده'}</p>
-                    <span className="status-label">وضعیت: {weightAnalysis.status}</span>
-                </div>
-                <div className={`info-box ${getStatusClassName(headAnalysis.status)}`}>
-                    <h4>آخرین دور سر ثبت شده</h4>
-                    <p>{headAnalysis.value != null ? `\u200E${headAnalysis.value} cm` : 'ثبت نشده'}</p>
-                    <span className="status-label">وضعیت: {headAnalysis.status}</span>
-                </div>
+                <MetricInfoCard
+                    title="آخرین قد ثبت شده"
+                    analysis={heightAnalysis}
+                    unit="cm"
+                    statusClassName={getStatusClassName(heightAnalysis.status)}
+                />
+                <MetricInfoCard
+                    title="آخرین وزن ثبت شده"
+                    analysis={weightAnalysis}
+                    unit="kg"
+                    statusClassName={getStatusClassName(weightAnalysis.status)}
+                />
+                <MetricInfoCard
+                    title="آخرین دور سر ثبت شده"
+                    analysis={headAnalysis}
+                    unit="cm"
+                    statusClassName={getStatusClassName(headAnalysis.status)}
+                />
             </div>
             
             <div className="chart-section">

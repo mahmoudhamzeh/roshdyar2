@@ -7,7 +7,13 @@ import moment from 'jalali-moment';
  */
 export const toShamsi = (gregorianDate) => {
   if (!gregorianDate) return '';
-  return moment(gregorianDate, 'YYYY/MM/DD').locale('fa').format('YYYY/MM/DD');
+  const normalized = String(gregorianDate).trim().replace(/\//g, '-');
+  const parsed = moment(normalized, ['YYYY-MM-DD', 'YYYY/MM/DD'], true);
+  if (!parsed.isValid()) {
+    const fallback = moment(gregorianDate);
+    return fallback.isValid() ? fallback.locale('fa').format('YYYY/MM/DD') : '';
+  }
+  return parsed.locale('fa').format('YYYY/MM/DD');
 };
 
 /**

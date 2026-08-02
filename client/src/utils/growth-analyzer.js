@@ -1,29 +1,15 @@
 import { whoStats } from '../who-stats';
+import { ageInMonths, parseLocalDate } from './growth-dates';
 
-const parseDate = (value) => {
-    if (!value) return null;
-    if (value instanceof Date) return value;
-    const normalized = String(value).trim().replace(/\//g, '-');
-    const date = new Date(normalized);
-    return Number.isNaN(date.getTime()) ? null : date;
-};
-
-const calculateAgeInMonths = (date, birthDate) => {
-    const recordDate = parseDate(date);
-    const birth = parseDate(birthDate);
-    if (!recordDate || !birth) return null;
-    return (recordDate - birth) / (1000 * 60 * 60 * 24 * 30.4375);
-};
-
-const getPercentileForValue = (value, ageInMonths, gender, metric) => {
-    if (value == null || ageInMonths == null || Number.isNaN(ageInMonths)) return null;
+const getPercentileForValue = (value, ageMonths, gender, metric) => {
+    if (value == null || ageMonths == null || Number.isNaN(ageMonths)) return null;
 
     const table = whoStats[`${metric}ForAge${gender === 'boy' ? 'Boys' : 'Girls'}`];
     if (!table || table.length === 0) return null;
 
     const minMonth = table[0].month;
     const maxMonth = table[table.length - 1].month;
-    const clampedAge = Math.min(Math.max(ageInMonths, minMonth), maxMonth);
+    const clampedAge = Math.min(Math.max(ageMonths, minMonth), maxMonth);
 
     let lowerBound = table[0];
     let upperBound = table[table.length - 1];
@@ -63,28 +49,28 @@ export const getAbsoluteStatus = (percentile) => {
 
 export const analyzeGrowthMetric = (metric, child) => {
     if (!child || !child.growthData || child.growthData.length === 0) {
-        return { value: null, status: 'نامشخص', trend: 'stable' };
+        return { value: null, date: null, ageInMonths: null, status: 'نامشخص', trend: 'stable' };
     }
 
     const sortedData = [...child.growthData].sort(
-        (a, b) => (parseDate(a.date)?.getTime() || 0) - (parseDate(b.date)?.getTime() || 0)
+        (a, b) => (parseLocalDate(a.date)?.getTime() || 0) - (parseLocalDate(b.date)?.getTime() || 0)
     );
     const recordsWithMetric = sortedData.filter(
         (r) => r[metric] !== undefined && r[metric] !== null && r[metric] !== ''
     );
 
     if (recordsWithMetric.length === 0) {
-        return { value: null, status: 'نامشخص', trend: 'stable' };
+        return { value: null, date: null, ageInMonths: null, status: 'نامشخص', trend: 'stable' };
     }
 
     const latestRecord = recordsWithMetric[recordsWithMetric.length - 1];
-    const latestAge = calculateAgeInMonths(latestRecord.date, child.birthDate);
+    const latestAge = ageInMonths(latestRecord.date, child.birthDate);
     const latestP = getPercentileForValue(latestRecord[metric], latestAge, child.gender, metric);
 
     let trend = 'stable';
     if (recordsWithMetric.length >= 2) {
         const previousRecord = recordsWithMetric[recordsWithMetric.length - 2];
-        const previousAge = calculateAgeInMonths(previousRecord.date, child.birthDate);
+        const previousAge = ageInMonths(previousRecord.date, child.birthDate);
         const previousP = getPercentileForValue(previousRecord[metric], previousAge, child.gender, metric);
         if (latestP !== null && previousP !== null) {
             const diff = latestP - previousP;
@@ -96,6 +82,8 @@ export const analyzeGrowthMetric = (metric, child) => {
 
     return {
         value: latestRecord[metric],
+        date: latestRecord.date || null,
+        ageInMonths: latestAge,
         percentile: latestP,
         status: getAbsoluteStatus(latestP),
         trend,
