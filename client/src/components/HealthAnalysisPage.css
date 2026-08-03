@@ -1,36 +1,30 @@
 .health-analysis-page {
-    padding: 1rem;
-    background-color: #f4f7f9; /* Consistent Theme Background */
-}
-
-.analysis-content {
-    /* This class is not used, but keeping it in case it's added back */
+    padding: var(--page-pad);
+    background: transparent;
+    overflow-x: hidden;
 }
 
 .analysis-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+    gap: 1rem;
 }
 
 .analysis-card {
-    background: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-    transition: transform 0.2s;
-}
-
-.analysis-card:hover {
-    transform: translateY(-5px);
+    background: var(--surface);
+    padding: 1.1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
 }
 
 .analysis-card h3 {
     margin-top: 0;
-    color: #333;
+    color: var(--ink);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0.5rem;
+    font-size: 1.05rem;
 }
 
 .full-width-card {

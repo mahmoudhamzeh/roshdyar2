@@ -177,67 +177,82 @@ const Reminders = () => {
 
     return (
         <div className="reminders-widget" ref={widgetRef}>
-            <button className="reminders-bell" onClick={() => setIsOpen(!isOpen)} ref={bellRef}>
+            <button
+                type="button"
+                className="reminders-bell"
+                onClick={() => setIsOpen(!isOpen)}
+                ref={bellRef}
+                aria-label="یادآورها"
+                aria-expanded={isOpen}
+            >
                 <FontAwesomeIcon icon={faBell} />
                 {reminders.length > 0 && <span className="reminder-count">{reminders.length}</span>}
             </button>
             {isOpen && (
-                <div className="reminders-dropdown" ref={dropdownMenuRef}>
-                    <div className="reminders-header">
-                        <h4>یادآورها</h4>
-                        <button className="add-reminder-btn" title="افزودن یادآور جدید" onClick={() => setIsModalOpen(true)}>
-                            <FontAwesomeIcon icon={faPlusCircle} />
-                        </button>
-                    </div>
-                    {reminders.length === 0 ? (
-                        <p className="no-reminders">هیچ یادآور جدیدی وجود ندارد.</p>
-                    ) : (
-                        <ul className="reminders-list">
-                            {reminders.map(r => {
-                                const reminderContent = (
-                                    <li key={r.id} className={`reminder-item type-${r.type}`}>
-                                        <div className="reminder-content">
-                                            <strong>{r.title}</strong>
-                                            {r.description || r.message ? (
-                                                <p>{r.description || r.message}</p>
-                                            ) : null}
-                                            {r.source === 'manual' && r.date && (
-                                                <p>تاریخ: {formatToShamsi(r.date)}</p>
+                <>
+                    <div className="reminders-backdrop" onClick={() => setIsOpen(false)} />
+                    <div className="reminders-dropdown" ref={dropdownMenuRef}>
+                        <div className="reminders-header">
+                            <h4>یادآورها</h4>
+                            <div className="reminders-header-actions">
+                                <button type="button" className="add-reminder-btn" title="افزودن یادآور جدید" onClick={() => setIsModalOpen(true)}>
+                                    <FontAwesomeIcon icon={faPlusCircle} />
+                                </button>
+                                <button type="button" className="reminders-close-btn" aria-label="بستن" onClick={() => setIsOpen(false)}>
+                                    <FontAwesomeIcon icon={faTimes} />
+                                </button>
+                            </div>
+                        </div>
+                        {reminders.length === 0 ? (
+                            <p className="no-reminders">هیچ یادآور جدیدی وجود ندارد.</p>
+                        ) : (
+                            <ul className="reminders-list">
+                                {reminders.map(r => {
+                                    const reminderContent = (
+                                        <li key={r.id} className={`reminder-item type-${r.type}`}>
+                                            <div className="reminder-content">
+                                                <strong>{r.title}</strong>
+                                                {r.description || r.message ? (
+                                                    <p>{r.description || r.message}</p>
+                                                ) : null}
+                                                {r.source === 'manual' && r.date && (
+                                                    <p>تاریخ: {formatToShamsi(r.date)}</p>
+                                                )}
+                                                {r.alarmAt && (
+                                                    <p>
+                                                        آلارم: {formatToShamsi(r.alarmAt)}{' '}
+                                                        {new Date(r.alarmAt).toLocaleTimeString('fa-IR', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {r.source === 'manual' && (
+                                                <button type="button" className="dismiss-btn" onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    handleDismiss(r);
+                                                }}>
+                                                    <FontAwesomeIcon icon={faTimes} />
+                                                </button>
                                             )}
-                                            {r.alarmAt && (
-                                                <p>
-                                                    آلارم: {formatToShamsi(r.alarmAt)}{' '}
-                                                    {new Date(r.alarmAt).toLocaleTimeString('fa-IR', {
-                                                        hour: '2-digit',
-                                                        minute: '2-digit'
-                                                    })}
-                                                </p>
-                                            )}
-                                        </div>
-                                        {r.source === 'manual' && (
-                                            <button className="dismiss-btn" onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                handleDismiss(r);
-                                            }}>
-                                                <FontAwesomeIcon icon={faTimes} />
-                                            </button>
-                                        )}
-                                    </li>
-                                );
-
-                                if (r.link) {
-                                    return (
-                                        <Link to={r.link} key={r.id} className="reminder-link">
-                                            {reminderContent}
-                                        </Link>
+                                        </li>
                                     );
-                                }
-                                return reminderContent;
-                            })}
-                        </ul>
-                    )}
-                </div>
+
+                                    if (r.link) {
+                                        return (
+                                            <Link to={r.link} key={r.id} className="reminder-link" onClick={() => setIsOpen(false)}>
+                                                {reminderContent}
+                                            </Link>
+                                        );
+                                    }
+                                    return reminderContent;
+                                })}
+                            </ul>
+                        )}
+                    </div>
+                </>
             )}
             {activeChildId && (
                 <AddReminderModal

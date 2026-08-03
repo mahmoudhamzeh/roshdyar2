@@ -21,6 +21,7 @@ import ShopPage from './components/ShopPage';
 import ProductDetailPage from './components/ProductDetailPage';
 import CartPage from './components/CartPage';
 import OrdersPage from './components/OrdersPage';
+import MobileBottomNav from './components/MobileBottomNav';
 import './App.css';
 
 const App = () => {
@@ -62,6 +63,7 @@ const App = () => {
                     <Redirect to={isLoggedIn() ? "/dashboard" : "/login"} />
                 </Route>
             </Switch>
+            <MobileBottomNav />
         </Router>
     );
 };

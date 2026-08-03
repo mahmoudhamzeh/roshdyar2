@@ -6,11 +6,7 @@ import {
     faChild,
     faChartLine,
     faSyringe,
-    faUserMd,
-    faBrain,
-    faFlask,
     faStore,
-    faGamepad,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
@@ -19,11 +15,7 @@ const services = [
     { name: 'کودکان من', icon: faChild, link: '/my-children', id: 'my-children', tone: 'teal' },
     { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
     { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
-    { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal' },
-    { name: 'مشاوره روانشناسی', icon: faBrain, link: '#', id: 'psychology', tone: 'amber' },
-    { name: 'آزمایش در محل', icon: faFlask, link: '#', id: 'lab-test', tone: 'mint' },
     { name: 'فروشگاه', icon: faStore, link: '/shop', id: 'store', tone: 'teal' },
-    { name: 'سرگرمی', icon: faGamepad, link: '#', id: 'entertainment', tone: 'amber' },
 ];
 
 Modal.setAppElement('#root');

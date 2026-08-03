@@ -223,10 +223,6 @@
   background: var(--success-soft);
 }
 
-.login-mobile-brand {
-  display: none;
-}
-
 @media (max-width: 900px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -255,10 +251,6 @@
     padding: 1.75rem 1.25rem 2.5rem;
     align-items: flex-start;
   }
-
-  .login-mobile-brand {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
@@ -266,7 +258,7 @@
     min-height: 32vh;
   }
 
-  .login-brand-mark svg {
+  .login-brand-mark .login-brand-logo {
     width: 40px;
     height: 40px;
   }

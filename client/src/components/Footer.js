@@ -19,15 +19,16 @@ const Footer = () => {
                 <div className="footer-section">
                     <h4>دسترسی سریع</h4>
                     <ul>
-                        <li><a href="/faq">سوالات متداول</a></li>
-                        <li><a href="/terms">قوانین و مقررات</a></li>
-                        <li><a href="/privacy">حریم خصوصی</a></li>
+                        <li><a href="/dashboard">داشبورد</a></li>
+                        <li><a href="/my-children">فرزندان من</a></li>
+                        <li><a href="/shop">فروشگاه</a></li>
+                        <li><a href="/news">مجله سلامت</a></li>
                     </ul>
                 </div>
                 <div className="footer-section">
                     <h4>تماس با ما</h4>
-                    <p>تهران، خیابان نوآوری، پلاک ۱۲۳</p>
-                    <p>۰۲۱-۱۲۳۴۵۶۷۸</p>
+                    <p>پشتیبانی از طریق پروفایل کاربری</p>
+                    <p>tatkids.com</p>
                 </div>
             </div>
             <div className="footer-bottom">

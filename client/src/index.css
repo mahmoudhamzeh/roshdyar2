@@ -52,6 +52,12 @@
   --primary: var(--brand);
   --danger-legacy: var(--danger);
   --text-on-primary: var(--text-on-brand);
+
+  /* Layout */
+  --bp-phone: 480px;
+  --bp-mobile: 768px;
+  --tap-min: 44px;
+  --page-pad: clamp(0.75rem, 3vw, 1.5rem);
 }
 
 html {
@@ -72,13 +78,13 @@ body {
     radial-gradient(ellipse 80% 50% at 100% -10%, rgba(20, 184, 166, 0.14), transparent 55%),
     radial-gradient(ellipse 60% 40% at 0% 100%, rgba(217, 119, 6, 0.08), transparent 50%),
     linear-gradient(180deg, #f0fdfa 0%, #f7fbfa 45%, #eef7f5 100%);
-  background-attachment: fixed;
   direction: rtl;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-kerning: normal;
   font-feature-settings: "kern", "liga", "clig", "calt";
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 * {
@@ -108,10 +114,74 @@ input,
 select,
 textarea {
   font-family: var(--font-body);
+  font-size: 1rem;
 }
 
 img {
   max-width: 100%;
+  height: auto;
+}
+
+/* Shared sticky page header (back + title) */
+.page-nav-final {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 900;
+  padding: 0.65rem var(--page-pad);
+  min-height: var(--tap-min);
+  background: rgba(240, 253, 250, 0.92);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+}
+
+.page-nav-final h1 {
+  margin: 0;
+  font-size: clamp(1rem, 3.5vw, 1.25rem);
+  text-align: center;
+  flex: 1;
+}
+
+.page-nav-final .back-btn,
+.page-nav-final .nav-placeholder {
+  min-width: 3rem;
+  min-height: var(--tap-min);
+}
+
+.page-nav-final .back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--brand-deep);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.5rem 0.35rem;
+  border-radius: 8px;
+}
+
+.page-nav-final .back-btn:hover {
+  background: var(--brand-soft);
+}
+
+.page-nav-final .logout-btn {
+  border: none;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 0.55rem 0.85rem;
+  min-height: var(--tap-min);
+  cursor: pointer;
+}
+
+body.nav-drawer-open {
+  overflow: hidden;
 }
 
 /* Shared motion */
