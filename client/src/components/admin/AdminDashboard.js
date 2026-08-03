@@ -54,6 +54,14 @@ const AdminDashboard = () => {
                     <h3>تیکت‌های باز</h3>
                     <p>{stats.openTickets} / {stats.totalTickets}</p>
                 </div>
+                <div className="stat-card">
+                    <h3>محصولات فروشگاه</h3>
+                    <p>{stats.totalProducts ?? 0}</p>
+                </div>
+                <div className="stat-card">
+                    <h3>سفارش‌های در انتظار</h3>
+                    <p>{stats.pendingOrders ?? 0} / {stats.totalOrders ?? 0}</p>
+                </div>
             </div>
         </div>
     );

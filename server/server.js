@@ -25,7 +25,7 @@ const upload = multer({ storage });
 
 const dbPath = path.join(__dirname, 'db.json');
 
-let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts;
+let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts, products, orders, productIdCounter, orderIdCounter;
 
 const loadData = () => {
     if (fs.existsSync(dbPath)) {
@@ -53,6 +53,10 @@ const loadData = () => {
         tickets = data.tickets || [];
         videos = data.videos || [];
         podcasts = data.podcasts || [];
+        products = data.products || [];
+        orders = data.orders || [];
+        productIdCounter = data.productIdCounter || (products.length ? Math.max(...products.map(p => p.id || 0)) + 1 : 1);
+        orderIdCounter = data.orderIdCounter || (orders.length ? Math.max(...orders.map(o => o.id || 0)) + 1 : 1);
     } else {
         users = {};
         children = [];
@@ -72,6 +76,10 @@ const loadData = () => {
         tickets = [];
         videos = [];
         podcasts = [];
+        products = [];
+        orders = [];
+        productIdCounter = 1;
+        orderIdCounter = 1;
     }
 };
 
@@ -96,7 +104,11 @@ const saveData = () => {
         news,
         tickets,
         videos,
-        podcasts
+        podcasts,
+        products,
+        orders,
+        productIdCounter,
+        orderIdCounter
     }, null, 2);
     fs.writeFileSync(dbPath, data);
 };
@@ -789,7 +801,10 @@ app.get('/api/admin/stats', isAdmin, (req, res) => {
         totalBanners: banners.length,
         totalArticles: news.length,
         totalTickets: tickets.length,
-        openTickets: tickets.filter(t => t.status === 'open').length
+        openTickets: tickets.filter(t => t.status === 'open').length,
+        totalProducts: products.length,
+        totalOrders: orders.length,
+        pendingOrders: orders.filter(o => o.status === 'pending').length
     });
 });
 
@@ -862,6 +877,248 @@ app.delete('/api/admin/videos/:id', isAdmin, (req, res) => {
 });
 
 app.get('/api/podcasts', (req, res) => res.json(podcasts));
+
+// --- Shop / Products / Orders ---
+const SHOP_CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
+const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
+
+const parsePrice = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+app.get('/api/shop/categories', (req, res) => {
+    res.json(SHOP_CATEGORIES);
+});
+
+app.get('/api/shop/products', (req, res) => {
+    const { category, q } = req.query;
+    let list = products.filter(p => p.active !== false);
+    if (category && category !== 'همه') {
+        list = list.filter(p => p.category === category);
+    }
+    if (q && String(q).trim()) {
+        const term = String(q).trim().toLowerCase();
+        list = list.filter(p =>
+            (p.name && p.name.toLowerCase().includes(term)) ||
+            (p.description && p.description.toLowerCase().includes(term))
+        );
+    }
+    res.json(list);
+});
+
+app.get('/api/shop/products/:id', (req, res) => {
+    const product = products.find(p => p.id === parseInt(req.params.id, 10));
+    if (!product || product.active === false) {
+        return res.status(404).json({ message: 'محصول یافت نشد' });
+    }
+    res.json(product);
+});
+
+app.get('/api/admin/products', isAdmin, (req, res) => {
+    res.json(products);
+});
+
+app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
+    const { name, description, category, price, stock } = req.body;
+    if (!name || !String(name).trim()) {
+        return res.status(400).json({ message: 'نام محصول الزامی است' });
+    }
+    const parsedPrice = parsePrice(price);
+    if (parsedPrice === null) {
+        return res.status(400).json({ message: 'قیمت معتبر نیست' });
+    }
+    const parsedStock = stock === undefined || stock === '' ? 0 : parseInt(stock, 10);
+    if (!Number.isFinite(parsedStock) || parsedStock < 0) {
+        return res.status(400).json({ message: 'موجودی معتبر نیست' });
+    }
+
+    const newProduct = {
+        id: productIdCounter++,
+        name: String(name).trim(),
+        description: description ? String(description).trim() : '',
+        category: SHOP_CATEGORIES.includes(category) ? category : 'تغذیه',
+        price: parsedPrice,
+        stock: parsedStock,
+        imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        active: true,
+        createdAt: new Date().toISOString()
+    };
+    products.unshift(newProduct);
+    saveData();
+    res.status(201).json(newProduct);
+});
+
+app.put('/api/admin/products/:id', isAdmin, upload.single('image'), (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const index = products.findIndex(p => p.id === id);
+    if (index === -1) return res.status(404).json({ message: 'محصول یافت نشد' });
+
+    const { name, description, category, price, stock, active } = req.body;
+    const updated = { ...products[index], updatedAt: new Date().toISOString() };
+
+    if (name !== undefined) {
+        if (!String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
+        updated.name = String(name).trim();
+    }
+    if (description !== undefined) updated.description = String(description).trim();
+    if (category !== undefined) {
+        updated.category = SHOP_CATEGORIES.includes(category) ? category : updated.category;
+    }
+    if (price !== undefined && price !== '') {
+        const parsedPrice = parsePrice(price);
+        if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
+        updated.price = parsedPrice;
+    }
+    if (stock !== undefined && stock !== '') {
+        const parsedStock = parseInt(stock, 10);
+        if (!Number.isFinite(parsedStock) || parsedStock < 0) {
+            return res.status(400).json({ message: 'موجودی معتبر نیست' });
+        }
+        updated.stock = parsedStock;
+    }
+    if (active !== undefined) {
+        updated.active = active === true || active === 'true';
+    }
+    if (req.file) updated.imageUrl = `/uploads/${req.file.filename}`;
+
+    products[index] = updated;
+    saveData();
+    res.json(updated);
+});
+
+app.delete('/api/admin/products/:id', isAdmin, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const initialLength = products.length;
+    products = products.filter(p => p.id !== id);
+    if (products.length < initialLength) {
+        saveData();
+        return res.status(200).json({ message: 'محصول حذف شد' });
+    }
+    res.status(404).json({ message: 'محصول یافت نشد' });
+});
+
+app.get('/api/shop/orders', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId || !users[userId]) {
+        return res.status(401).json({ message: 'لطفا وارد شوید' });
+    }
+    const userOrders = orders
+        .filter(o => o.userId === userId)
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(userOrders);
+});
+
+app.get('/api/shop/orders/:id', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId || !users[userId]) {
+        return res.status(401).json({ message: 'لطفا وارد شوید' });
+    }
+    const order = orders.find(o => o.id === parseInt(req.params.id, 10));
+    if (!order) return res.status(404).json({ message: 'سفارش یافت نشد' });
+    if (order.userId !== userId && !(users[userId] && users[userId].isAdmin)) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
+    res.json(order);
+});
+
+app.post('/api/shop/orders', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId || !users[userId]) {
+        return res.status(401).json({ message: 'لطفا وارد شوید' });
+    }
+
+    const { items, shippingAddress, phone, notes } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: 'سبد خرید خالی است' });
+    }
+    if (!shippingAddress || !String(shippingAddress).trim()) {
+        return res.status(400).json({ message: 'آدرس ارسال الزامی است' });
+    }
+    if (!phone || !String(phone).trim()) {
+        return res.status(400).json({ message: 'شماره تماس الزامی است' });
+    }
+
+    const orderItems = [];
+    let total = 0;
+
+    for (const item of items) {
+        const productId = parseInt(item.productId, 10);
+        const quantity = parseInt(item.quantity, 10);
+        if (!productId || !Number.isFinite(quantity) || quantity < 1) {
+            return res.status(400).json({ message: 'آیتم سفارش نامعتبر است' });
+        }
+        const product = products.find(p => p.id === productId && p.active !== false);
+        if (!product) {
+            return res.status(400).json({ message: `محصول با شناسه ${productId} یافت نشد` });
+        }
+        if (product.stock < quantity) {
+            return res.status(400).json({ message: `موجودی «${product.name}» کافی نیست` });
+        }
+        const lineTotal = product.price * quantity;
+        total += lineTotal;
+        orderItems.push({
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            quantity,
+            lineTotal
+        });
+    }
+
+    for (const item of orderItems) {
+        const product = products.find(p => p.id === item.productId);
+        product.stock -= item.quantity;
+    }
+
+    const newOrder = {
+        id: orderIdCounter++,
+        userId,
+        items: orderItems,
+        total,
+        shippingAddress: String(shippingAddress).trim(),
+        phone: String(phone).trim(),
+        notes: notes ? String(notes).trim() : '',
+        status: 'pending',
+        createdAt: new Date().toISOString()
+    };
+    orders.unshift(newOrder);
+    saveData();
+    res.status(201).json(newOrder);
+});
+
+app.get('/api/admin/orders', isAdmin, (req, res) => {
+    const sorted = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(sorted);
+});
+
+app.put('/api/admin/orders/:id', isAdmin, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const index = orders.findIndex(o => o.id === id);
+    if (index === -1) return res.status(404).json({ message: 'سفارش یافت نشد' });
+
+    const { status } = req.body;
+    if (!ORDER_STATUSES.includes(status)) {
+        return res.status(400).json({ message: 'وضعیت سفارش نامعتبر است' });
+    }
+
+    const previousStatus = orders[index].status;
+    // Restock if cancelling a non-cancelled order
+    if (status === 'cancelled' && previousStatus !== 'cancelled') {
+        for (const item of orders[index].items || []) {
+            const product = products.find(p => p.id === item.productId);
+            if (product) product.stock += item.quantity;
+        }
+    }
+
+    orders[index] = {
+        ...orders[index],
+        status,
+        updatedAt: new Date().toISOString()
+    };
+    saveData();
+    res.json(orders[index]);
+});
 
 // --- Reminder / Vaccination ---
 const childHasOverdueVaccination = (child) => {

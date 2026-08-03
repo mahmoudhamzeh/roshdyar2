@@ -22,7 +22,7 @@ const services = [
     { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal' },
     { name: 'مشاوره روانشناسی', icon: faBrain, link: '#', id: 'psychology', tone: 'amber' },
     { name: 'آزمایش در محل', icon: faFlask, link: '#', id: 'lab-test', tone: 'mint' },
-    { name: 'فروشگاه', icon: faStore, link: '#', id: 'store', tone: 'teal' },
+    { name: 'فروشگاه', icon: faStore, link: '/shop', id: 'store', tone: 'teal' },
     { name: 'سرگرمی', icon: faGamepad, link: '#', id: 'entertainment', tone: 'amber' },
 ];
 

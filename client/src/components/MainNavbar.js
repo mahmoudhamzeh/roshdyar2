@@ -49,6 +49,7 @@ const MainNavbar = () => {
                     <div className="navbar-links">
                         <Link to="/dashboard" onClick={() => setIsMenuOpen(false)}>داشبورد</Link>
                         <Link to="/news" onClick={() => setIsMenuOpen(false)}>مجله سلامت</Link>
+                        <Link to="/shop" onClick={() => setIsMenuOpen(false)}>فروشگاه</Link>
                         <Link to="/my-children" onClick={() => setIsMenuOpen(false)}>فرزندان من</Link>
                         {isAdmin && (
                             <Link to="/admin" className="admin-link" onClick={() => setIsMenuOpen(false)}>
