@@ -70,13 +70,19 @@
   border-radius: 8px;
 }
 
+.reminder-child {
+  color: var(--brand) !important;
+  font-weight: 600;
+  font-size: 0.8rem !important;
+}
+
 @media (max-width: 1024px) {
   .reminders-backdrop {
     display: block;
     position: fixed;
     inset: 0;
     background: rgba(15, 61, 58, 0.45);
-    z-index: 2005;
+    z-index: 3000;
   }
 
   .reminders-dropdown {
@@ -90,7 +96,7 @@
     max-width: none;
     max-height: min(70vh, 480px);
     overflow-y: auto;
-    z-index: 2010;
+    z-index: 3001;
   }
 
   .reminders-close-btn {
