@@ -3,6 +3,10 @@
 server.log
 client.log
 
+# Environment
+.env
+server/.env
+
 # Dependencies
 /node_modules/
 /client/node_modules/

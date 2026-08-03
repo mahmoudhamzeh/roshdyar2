@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -6,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
+const { connect, loadState, saveState } = require('./db');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -23,70 +25,35 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-const dbPath = path.join(__dirname, 'db.json');
-
 let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts, products, orders, productIdCounter, orderIdCounter;
 
-const loadData = () => {
-    if (fs.existsSync(dbPath)) {
-        const rawData = fs.readFileSync(dbPath);
-        const data = JSON.parse(rawData);
-        users = data.users || {};
-        children = (data.children || []).map(child => ({
-            ...child,
-            vaccinationRecords: child.vaccinationRecords || {}
-        }));
-        growthData = data.growthData || {};
-        medicalVisits = data.medicalVisits || {};
-        medicalDocuments = data.medicalDocuments || {};
-        checkups = data.checkups || {};
-        reminders = data.reminders || {};
-        userReminders = data.userReminders || {};
-        messages = data.messages || [];
-        childIdCounter = data.childIdCounter || 1;
-        const userKeys = Object.keys(users).map(Number).filter(k => !isNaN(k));
-        userIdCounter = data.userIdCounter || (userKeys.length ? Math.max(...userKeys) + 1 : 1);
-        messageIdCounter = data.messageIdCounter || (messages.length ? Math.max(...messages.map(m => m.id || 0)) + 1 : 1);
-        banners = data.banners || [];
-        articles = data.articles || [];
-        news = data.news || [];
-        tickets = data.tickets || [];
-        videos = data.videos || [];
-        podcasts = data.podcasts || [];
-        products = data.products || [];
-        orders = data.orders || [];
-        productIdCounter = data.productIdCounter || (products.length ? Math.max(...products.map(p => p.id || 0)) + 1 : 1);
-        orderIdCounter = data.orderIdCounter || (orders.length ? Math.max(...orders.map(o => o.id || 0)) + 1 : 1);
-    } else {
-        users = {};
-        children = [];
-        growthData = {};
-        medicalVisits = {};
-        medicalDocuments = {};
-        checkups = {};
-        reminders = {};
-        userReminders = {};
-        messages = [];
-        childIdCounter = 1;
-        userIdCounter = 1;
-        messageIdCounter = 1;
-        banners = [];
-        articles = [];
-        news = [];
-        tickets = [];
-        videos = [];
-        podcasts = [];
-        products = [];
-        orders = [];
-        productIdCounter = 1;
-        orderIdCounter = 1;
-    }
-};
+function applyState(data) {
+    users = data.users;
+    children = data.children;
+    growthData = data.growthData;
+    medicalVisits = data.medicalVisits;
+    medicalDocuments = data.medicalDocuments;
+    checkups = data.checkups;
+    reminders = data.reminders;
+    userReminders = data.userReminders;
+    messages = data.messages;
+    childIdCounter = data.childIdCounter;
+    userIdCounter = data.userIdCounter;
+    messageIdCounter = data.messageIdCounter;
+    banners = data.banners;
+    articles = data.articles;
+    news = data.news;
+    tickets = data.tickets;
+    videos = data.videos;
+    podcasts = data.podcasts;
+    products = data.products;
+    orders = data.orders;
+    productIdCounter = data.productIdCounter;
+    orderIdCounter = data.orderIdCounter;
+}
 
-loadData();
-
-const saveData = () => {
-    const data = JSON.stringify({
+function getStateSnapshot() {
+    return {
         users,
         children,
         growthData,
@@ -109,8 +76,11 @@ const saveData = () => {
         orders,
         productIdCounter,
         orderIdCounter
-    }, null, 2);
-    fs.writeFileSync(dbPath, data);
+    };
+}
+
+const saveData = () => {
+    saveState(getStateSnapshot());
 };
 
 function calculateAge(birthDate) {
@@ -1467,4 +1437,16 @@ app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
     res.status(404).json({ message: 'پیام یافت نشد' });
 });
 
-app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
+async function startServer() {
+    try {
+        await connect();
+        const state = await loadState();
+        applyState(state);
+        app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
+    } catch (err) {
+        console.error('Failed to start server with MongoDB:', err);
+        process.exit(1);
+    }
+}
+
+startServer();
