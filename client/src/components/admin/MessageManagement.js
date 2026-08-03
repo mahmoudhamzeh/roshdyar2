@@ -16,12 +16,20 @@ const MessageManagement = () => {
         title: '',
         body: '',
         link: '',
-        image: null
+        image: null,
+        mobilesFile: null,
+        mobilesText: ''
     });
 
     const getAdminHeaders = () => {
         const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
         return { 'x-user-id': adminUser.id };
+    };
+
+    const userLabel = (user) => {
+        const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
+        const base = name || user.username || user.email || `کاربر ${user.id}`;
+        return user.mobile ? `${base} — ${user.mobile}` : `${base} (#${user.id})`;
     };
 
     const fetchData = async () => {
@@ -38,9 +46,11 @@ const MessageManagement = () => {
             const messagesData = await messagesRes.json();
             setUsers(usersData);
             setMessages(messagesData);
-            if (!form.userId && usersData.length > 0) {
-                setForm(prev => ({ ...prev, userId: String(usersData[0].id) }));
-            }
+            setForm(prev => {
+                if (prev.userId) return prev;
+                const preferred = usersData.find(u => !u.isAdmin) || usersData[0];
+                return preferred ? { ...prev, userId: String(preferred.id) } : prev;
+            });
         } catch (err) {
             setError(err.message);
         } finally {
@@ -58,8 +68,12 @@ const MessageManagement = () => {
         setForm(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleFileChange = (e) => {
+    const handleImageChange = (e) => {
         setForm(prev => ({ ...prev, image: e.target.files[0] || null }));
+    };
+
+    const handleMobilesFileChange = (e) => {
+        setForm(prev => ({ ...prev, mobilesFile: e.target.files[0] || null }));
     };
 
     const toggleBulkUser = (userId) => {
@@ -77,8 +91,15 @@ const MessageManagement = () => {
     const selectAllUsers = () => {
         setForm(prev => ({
             ...prev,
-            selectedUserIds: users.map(u => u.id)
+            selectedUserIds: users.filter(u => !u.isAdmin).map(u => u.id)
         }));
+    };
+
+    const resetFormFiles = () => {
+        const imageInput = document.getElementById('admin-message-image');
+        const mobilesInput = document.getElementById('admin-mobiles-file');
+        if (imageInput) imageInput.value = '';
+        if (mobilesInput) mobilesInput.value = '';
     };
 
     const handleSubmit = async (e) => {
@@ -91,8 +112,18 @@ const MessageManagement = () => {
             return;
         }
 
-        if (form.mode === 'single' && !form.userId) {
-            setError('لطفاً کاربر گیرنده را انتخاب کنید.');
+        if (form.mode === 'single' && !form.userId && !form.mobilesText.trim()) {
+            setError('لطفاً کاربر گیرنده یا شماره موبایل را مشخص کنید.');
+            return;
+        }
+
+        if (
+            form.mode === 'bulk' &&
+            form.selectedUserIds.length === 0 &&
+            !form.mobilesFile &&
+            !form.mobilesText.trim()
+        ) {
+            setError('برای ارسال بالک، کاربران را انتخاب کنید یا فایل/لیست موبایل بارگذاری کنید.');
             return;
         }
 
@@ -103,9 +134,18 @@ const MessageManagement = () => {
         formData.append('mode', form.mode);
 
         if (form.mode === 'single') {
-            formData.append('userId', form.userId);
-        } else if (form.selectedUserIds.length > 0) {
-            formData.append('userIds', JSON.stringify(form.selectedUserIds));
+            if (form.userId) formData.append('userId', form.userId);
+            if (form.mobilesText.trim()) formData.append('mobiles', form.mobilesText.trim());
+        } else {
+            if (form.selectedUserIds.length > 0) {
+                formData.append('userIds', JSON.stringify(form.selectedUserIds));
+            }
+            if (form.mobilesText.trim()) {
+                formData.append('mobiles', form.mobilesText.trim());
+            }
+            if (form.mobilesFile) {
+                formData.append('mobilesFile', form.mobilesFile);
+            }
         }
 
         if (form.image) {
@@ -121,21 +161,29 @@ const MessageManagement = () => {
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'ارسال پیام ناموفق بود');
 
-            setSuccess(
-                form.mode === 'bulk'
-                    ? `پیام به‌صورت بالک برای ${data.recipientIds?.length || 0} کاربر ارسال شد.`
-                    : 'پیام تکی با موفقیت ارسال شد.'
-            );
+            const recipientNames = (data.recipients || [])
+                .map(r => r.mobile ? `${r.name} (${r.mobile})` : r.name)
+                .join('، ');
+            let successText = form.mode === 'bulk'
+                ? `پیام بالک برای ${data.recipientIds?.length || 0} کاربر ارسال شد.`
+                : 'پیام تکی با موفقیت ارسال شد.';
+            if (recipientNames) successText += ` گیرندگان: ${recipientNames}`;
+            if (data.unmatchedMobiles?.length) {
+                successText += ` | موبایل‌های بدون کاربر: ${data.unmatchedMobiles.join(', ')}`;
+            }
+
+            setSuccess(successText);
             setForm(prev => ({
                 ...prev,
                 title: '',
                 body: '',
                 link: '',
                 image: null,
+                mobilesFile: null,
+                mobilesText: '',
                 selectedUserIds: []
             }));
-            const fileInput = document.getElementById('admin-message-image');
-            if (fileInput) fileInput.value = '';
+            resetFormFiles();
             await fetchData();
         } catch (err) {
             setError(err.message);
@@ -156,15 +204,15 @@ const MessageManagement = () => {
         }
     };
 
-    const userLabel = (user) => {
-        const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
-        return name || user.username || user.email || `کاربر ${user.id}`;
-    };
+    const regularUsers = users.filter(u => !u.isAdmin);
+    const selectableUsers = regularUsers.length > 0 ? regularUsers : users;
 
     return (
         <div className="message-management">
             <h2>ارسال و مدیریت پیام‌ها</h2>
-            <p className="section-hint">ارسال پیام تکی یا بالک به کاربران همراه با عکس و لینک</p>
+            <p className="section-hint">
+                ارسال پیام تکی یا بالک به کاربران همراه با عکس و لینک. برای بالک می‌توانید فایل شماره موبایل بارگذاری کنید.
+            </p>
 
             <form className="message-form" onSubmit={handleSubmit}>
                 <div className="mode-switch">
@@ -191,40 +239,84 @@ const MessageManagement = () => {
                 </div>
 
                 {form.mode === 'single' ? (
-                    <div className="form-group">
-                        <label htmlFor="message-user">گیرنده</label>
-                        <select
-                            id="message-user"
-                            name="userId"
-                            value={form.userId}
-                            onChange={handleChange}
-                        >
-                            {users.map(user => (
-                                <option key={user.id} value={user.id}>
-                                    {userLabel(user)} (#{user.id})
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                    <>
+                        <div className="form-group">
+                            <label htmlFor="message-user">گیرنده</label>
+                            <select
+                                id="message-user"
+                                name="userId"
+                                value={form.userId}
+                                onChange={handleChange}
+                            >
+                                <option value="">انتخاب کاربر...</option>
+                                {selectableUsers.map(user => (
+                                    <option key={user.id} value={user.id}>
+                                        {userLabel(user)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label htmlFor="single-mobile">یا شماره موبایل گیرنده</label>
+                            <input
+                                id="single-mobile"
+                                type="text"
+                                name="mobilesText"
+                                value={form.mobilesText}
+                                onChange={handleChange}
+                                placeholder="مثلاً 09121234567"
+                            />
+                        </div>
+                    </>
                 ) : (
-                    <div className="bulk-users">
-                        <div className="bulk-users-header">
-                            <span>انتخاب کاربران (خالی = همه کاربران غیرمدیر)</span>
-                            <button type="button" onClick={selectAllUsers}>انتخاب همه</button>
+                    <>
+                        <div className="bulk-users">
+                            <div className="bulk-users-header">
+                                <span>انتخاب کاربران از لیست</span>
+                                <button type="button" onClick={selectAllUsers}>انتخاب همه کاربران</button>
+                            </div>
+                            <div className="bulk-users-list">
+                                {selectableUsers.map(user => (
+                                    <label key={user.id} className="bulk-user-item">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.selectedUserIds.includes(user.id)}
+                                            onChange={() => toggleBulkUser(user.id)}
+                                        />
+                                        {userLabel(user)}
+                                    </label>
+                                ))}
+                                {selectableUsers.length === 0 && (
+                                    <p className="hint-text">کاربری برای انتخاب وجود ندارد.</p>
+                                )}
+                            </div>
                         </div>
-                        <div className="bulk-users-list">
-                            {users.map(user => (
-                                <label key={user.id} className="bulk-user-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={form.selectedUserIds.includes(user.id)}
-                                        onChange={() => toggleBulkUser(user.id)}
-                                    />
-                                    {userLabel(user)}
-                                </label>
-                            ))}
+
+                        <div className="form-group">
+                            <label htmlFor="admin-mobiles-file">بارگذاری فایل شماره موبایل</label>
+                            <input
+                                id="admin-mobiles-file"
+                                type="file"
+                                accept=".txt,.csv,.text,text/plain,text/csv"
+                                onChange={handleMobilesFileChange}
+                            />
+                            <p className="hint-text">
+                                فرمت: فایل متنی یا CSV — هر خط یک شماره (یا با ویرگول جدا شده). مثال: 09121234567
+                            </p>
                         </div>
-                    </div>
+
+                        <div className="form-group">
+                            <label htmlFor="bulk-mobiles-text">یا چسباندن لیست موبایل</label>
+                            <textarea
+                                id="bulk-mobiles-text"
+                                name="mobilesText"
+                                rows="3"
+                                value={form.mobilesText}
+                                onChange={handleChange}
+                                placeholder={'09121234567\n09123334444'}
+                            />
+                        </div>
+                    </>
                 )}
 
                 <div className="form-group">
@@ -269,7 +361,7 @@ const MessageManagement = () => {
                         id="admin-message-image"
                         type="file"
                         accept="image/*"
-                        onChange={handleFileChange}
+                        onChange={handleImageChange}
                     />
                 </div>
 
@@ -297,6 +389,16 @@ const MessageManagement = () => {
                                     {msg.isBulk ? 'بالک' : 'تکی'} — گیرندگان: {msg.recipientIds?.length || 0}
                                     {msg.readBy?.length ? ` — خوانده‌شده: ${msg.readBy.length}` : ''}
                                 </p>
+                                {msg.recipients?.length > 0 && (
+                                    <p className="meta recipients-line">
+                                        {msg.recipients.map(r => r.mobile ? `${r.name} (${r.mobile})` : r.name).join('، ')}
+                                    </p>
+                                )}
+                                {msg.unmatchedMobiles?.length > 0 && (
+                                    <p className="meta unmatched">
+                                        موبایل بدون کاربر: {msg.unmatchedMobiles.join(', ')}
+                                    </p>
+                                )}
                                 {msg.imageUrl && (
                                     <img src={`${API}${msg.imageUrl}`} alt={msg.title} />
                                 )}

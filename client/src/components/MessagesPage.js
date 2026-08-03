@@ -42,9 +42,9 @@ const MessagesPage = () => {
 
     const fetchMessages = useCallback(async () => {
         const user = getUser();
-        if (!user) return;
+        if (!user?.id) return;
         const res = await fetch(`${API}/api/messages`, {
-            headers: { 'x-user-id': user.id }
+            headers: { 'x-user-id': String(user.id) }
         });
         if (!res.ok) throw new Error('خطا در دریافت پیام‌ها');
         const data = await res.json();
@@ -53,9 +53,9 @@ const MessagesPage = () => {
 
     const fetchReminders = useCallback(async () => {
         const user = getUser();
-        if (!user) return;
+        if (!user?.id) return;
         const res = await fetch(`${API}/api/user-reminders`, {
-            headers: { 'x-user-id': user.id }
+            headers: { 'x-user-id': String(user.id) }
         });
         if (!res.ok) throw new Error('خطا در دریافت یادآوری‌ها');
         const data = await res.json();
