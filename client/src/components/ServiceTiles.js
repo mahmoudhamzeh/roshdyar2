@@ -92,7 +92,7 @@ const ServiceTiles = () => {
         <>
             <section className="tiles-section">
                 <div className="tiles-header animate-fade-up">
-                    <h2>خدمات رشدیار</h2>
+                    <h2>خدمات تات کیدز</h2>
                     <p>از پیگیری رشد تا مراقبت روزانه — همه در یک نگاه</p>
                 </div>
                 <div className="tiles-container">

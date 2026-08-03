@@ -1,4 +1,5 @@
 import React from 'react';
+import BrandLogo from './BrandLogo';
 import './Footer.css';
 
 const Footer = () => {
@@ -6,7 +7,13 @@ const Footer = () => {
         <footer className="footer">
             <div className="footer-content">
                 <div className="footer-section">
-                    <p className="footer-brand">رشدیار</p>
+                    <div className="footer-brand-row">
+                        <BrandLogo size={40} alt="" />
+                        <div>
+                            <p className="footer-brand">تات کیدز</p>
+                            <p className="footer-brand-en">TatKids</p>
+                        </div>
+                    </div>
                     <p className="footer-tagline">همراه هوشمند رشد و سلامت کودک شما</p>
                 </div>
                 <div className="footer-section">
@@ -24,7 +31,7 @@ const Footer = () => {
                 </div>
             </div>
             <div className="footer-bottom">
-                <p>تمامی حقوق برای رشدیار محفوظ است. © ۱۴۰۴</p>
+                <p>تمامی حقوق برای تات کیدز (TatKids) محفوظ است. © ۱۴۰۴</p>
             </div>
         </footer>
     );

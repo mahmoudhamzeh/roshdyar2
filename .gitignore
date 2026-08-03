@@ -3,6 +3,13 @@
 server.log
 client.log
 
+# Environment
+.env
+server/.env
+
+# SQLite database
+server/data/
+
 # Dependencies
 /node_modules/
 /client/node_modules/

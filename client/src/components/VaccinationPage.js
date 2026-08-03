@@ -623,7 +623,7 @@ const VaccinationPage = () => {
                 <div className="vax-pdf-report" ref={printRef}>
                     <header className="vax-pdf-header">
                         <div>
-                            <p className="vax-pdf-brand">رشدیار</p>
+                            <p className="vax-pdf-brand">تات کیدز</p>
                             <h1>گزارش کارت واکسیناسیون</h1>
                         </div>
                         <div className="vax-pdf-meta">
@@ -697,7 +697,7 @@ const VaccinationPage = () => {
                     </section>
 
                     <footer className="vax-pdf-footer">
-                        این گزارش به‌صورت خودکار از سامانه رشدیار تهیه شده است و جنبه اطلاع‌رسانی دارد.
+                        این گزارش به‌صورت خودکار از سامانه تات کیدز تهیه شده است و جنبه اطلاع‌رسانی دارد.
                     </footer>
                 </div>
             </div>
