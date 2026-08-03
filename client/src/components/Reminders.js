@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBell, faTimes, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
@@ -11,42 +12,65 @@ const Reminders = () => {
     const [isOpen, setIsOpen] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeChildId, setActiveChildId] = useState(null);
-    const widgetRef = useRef(null);
+    const [panelStyle, setPanelStyle] = useState(null);
+    const [isMobile, setIsMobile] = useState(
+        typeof window !== 'undefined' ? window.innerWidth <= 768 : true
+    );
     const bellRef = useRef(null);
-    const dropdownMenuRef = useRef(null);
+    const panelRef = useRef(null);
     const location = useLocation();
 
-    // This effect handles the dynamic positioning of the dropdown on desktop
-    useEffect(() => {
-        if (isOpen && bellRef.current && dropdownMenuRef.current) {
-            // We only apply JS positioning for screens wider than 1024px
-            if (window.innerWidth > 1024) {
-                const bellRect = bellRef.current.getBoundingClientRect();
-                const menuNode = dropdownMenuRef.current;
-
-                // Position dropdown vertically below the bell icon
-                menuNode.style.top = `${bellRect.bottom + 10}px`;
-
-                // Position dropdown horizontally. Align its right edge with the bell's right edge.
-                const menuWidth = 350; // As defined in CSS
-                menuNode.style.left = `${bellRect.right - menuWidth}px`;
-
-                // Ensure it doesn't go off the left side of the screen
-                if ((bellRect.right - menuWidth) < 10) {
-                    menuNode.style.left = '10px';
-                }
-
-                // We need to use fixed position to escape the navbar's overflow context
-                menuNode.style.position = 'fixed';
-            } else {
-                // On mobile, reset styles to let CSS handle the centered modal
-                const menuNode = dropdownMenuRef.current;
-                menuNode.style.position = '';
-                menuNode.style.top = '';
-                menuNode.style.left = '';
-            }
+    const getSeenReminders = () => {
+        try {
+            return JSON.parse(localStorage.getItem('seenReminders') || '[]');
+        } catch {
+            return [];
         }
+    };
+
+    const updateLayout = useCallback(() => {
+        const mobile = window.innerWidth <= 768;
+        setIsMobile(mobile);
+        if (!isOpen || !bellRef.current) return;
+
+        if (mobile) {
+            setPanelStyle({
+                position: 'fixed',
+                left: '0.75rem',
+                right: '0.75rem',
+                bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
+                top: 'auto',
+                width: 'auto',
+                maxWidth: 'none'
+            });
+            return;
+        }
+
+        const bellRect = bellRef.current.getBoundingClientRect();
+        const panelWidth = Math.min(350, window.innerWidth - 16);
+        let left = bellRect.left + bellRect.width / 2 - panelWidth / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - panelWidth - 8));
+
+        setPanelStyle({
+            position: 'fixed',
+            top: `${bellRect.bottom + 10}px`,
+            left: `${left}px`,
+            right: 'auto',
+            bottom: 'auto',
+            width: `${panelWidth}px`,
+            maxWidth: `${panelWidth}px`
+        });
     }, [isOpen]);
+
+    useEffect(() => {
+        updateLayout();
+        window.addEventListener('resize', updateLayout);
+        window.addEventListener('scroll', updateLayout, true);
+        return () => {
+            window.removeEventListener('resize', updateLayout);
+            window.removeEventListener('scroll', updateLayout, true);
+        };
+    }, [updateLayout]);
 
     const fetchReminders = useCallback(async () => {
         try {
@@ -110,12 +134,12 @@ const Reminders = () => {
                 console.error('Failed to fetch user reminders', error);
             }
 
-            const freshReminders = collected.filter((r) => {
-                if (r.source === 'auto' && r.type === 'danger') return true;
-                return !seen.includes(r.id);
-            });
-
-            setReminders(freshReminders);
+            setReminders(
+                collected.filter((r) => {
+                    if (r.source === 'auto' && r.type === 'danger') return true;
+                    return !seen.includes(r.id);
+                })
+            );
         } catch (error) {
             console.error('Failed to fetch reminders', error);
             setReminders([]);
@@ -128,29 +152,22 @@ const Reminders = () => {
 
     useEffect(() => {
         if (!isOpen) return undefined;
-        const handleClickOutside = (event) => {
-            if (widgetRef.current && !widgetRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
+        const handlePointer = (event) => {
+            const t = event.target;
+            if (bellRef.current && bellRef.current.contains(t)) return;
+            if (panelRef.current && panelRef.current.contains(t)) return;
+            setIsOpen(false);
         };
         const timer = window.setTimeout(() => {
-            document.addEventListener('mousedown', handleClickOutside);
-            document.addEventListener('touchstart', handleClickOutside);
+            document.addEventListener('mousedown', handlePointer);
+            document.addEventListener('touchstart', handlePointer);
         }, 0);
         return () => {
             window.clearTimeout(timer);
-            document.removeEventListener('mousedown', handleClickOutside);
-            document.removeEventListener('touchstart', handleClickOutside);
+            document.removeEventListener('mousedown', handlePointer);
+            document.removeEventListener('touchstart', handlePointer);
         };
     }, [isOpen]);
-
-    const getSeenReminders = () => {
-        try {
-            return JSON.parse(localStorage.getItem('seenReminders') || '[]');
-        } catch {
-            return [];
-        }
-    };
 
     const addSeenReminder = (reminderId) => {
         const seen = getSeenReminders();
@@ -192,10 +209,6 @@ const Reminders = () => {
         setReminders((prev) => prev.filter((r) => r.id !== reminder.id));
     };
 
-    const handleReminderAdded = () => {
-        fetchReminders();
-    };
-
     const openAddModal = () => {
         if (!activeChildId) {
             alert('ابتدا یک کودک اضافه کنید تا بتوانید یادآور بسازید.');
@@ -204,12 +217,88 @@ const Reminders = () => {
         setIsModalOpen(true);
     };
 
+    const panel = isOpen
+        ? createPortal(
+            <>
+                <div className="reminders-backdrop" onClick={() => setIsOpen(false)} />
+                <div
+                    className={`reminders-dropdown${isMobile ? ' is-mobile' : ''}`}
+                    ref={panelRef}
+                    style={panelStyle || undefined}
+                >
+                    <div className="reminders-header">
+                        <h4>یادآورها</h4>
+                        <div className="reminders-header-actions">
+                            <button type="button" className="add-reminder-btn" title="افزودن یادآور جدید" onClick={openAddModal}>
+                                <FontAwesomeIcon icon={faPlusCircle} />
+                            </button>
+                            <button type="button" className="reminders-close-btn" aria-label="بستن" onClick={() => setIsOpen(false)}>
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </div>
+                    </div>
+                    {reminders.length === 0 ? (
+                        <p className="no-reminders">
+                            یادآوری فعالی ندارید.
+                            {activeChildId ? ' با دکمه + می‌توانید یادآور جدید بسازید.' : ' ابتدا از بخش فرزندان، یک کودک اضافه کنید.'}
+                        </p>
+                    ) : (
+                        <ul className="reminders-list">
+                            {reminders.map((r) => {
+                                const body = (
+                                    <li className={`reminder-item type-${r.type || 'info'}`}>
+                                        <div className="reminder-content">
+                                            <strong>{r.title}</strong>
+                                            {r.childName ? <p className="reminder-child">{r.childName}</p> : null}
+                                            {r.description || r.message ? <p>{r.description || r.message}</p> : null}
+                                            {r.source === 'manual' && r.date && <p>تاریخ: {formatToShamsi(r.date)}</p>}
+                                            {r.alarmAt && (
+                                                <p>
+                                                    آلارم: {formatToShamsi(r.alarmAt)}{' '}
+                                                    {new Date(r.alarmAt).toLocaleTimeString('fa-IR', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="dismiss-btn"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleDismiss(r);
+                                            }}
+                                        >
+                                            <FontAwesomeIcon icon={faTimes} />
+                                        </button>
+                                    </li>
+                                );
+
+                                if (r.link) {
+                                    return (
+                                        <Link to={r.link} key={r.id} className="reminder-link" onClick={() => setIsOpen(false)}>
+                                            {body}
+                                        </Link>
+                                    );
+                                }
+                                return <React.Fragment key={r.id}>{body}</React.Fragment>;
+                            })}
+                        </ul>
+                    )}
+                </div>
+            </>,
+            document.body
+        )
+        : null;
+
     return (
-        <div className="reminders-widget" ref={widgetRef}>
+        <div className="reminders-widget">
             <button
                 type="button"
                 className="reminders-bell"
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => setIsOpen((open) => !open)}
                 ref={bellRef}
                 aria-label="یادآورها"
                 aria-expanded={isOpen}
@@ -217,82 +306,13 @@ const Reminders = () => {
                 <FontAwesomeIcon icon={faBell} />
                 {reminders.length > 0 && <span className="reminder-count">{reminders.length}</span>}
             </button>
-            {isOpen && (
-                <>
-                    <div className="reminders-backdrop" onClick={() => setIsOpen(false)} />
-                    <div className="reminders-dropdown" ref={dropdownMenuRef}>
-                        <div className="reminders-header">
-                            <h4>یادآورها</h4>
-                            <div className="reminders-header-actions">
-                                <button type="button" className="add-reminder-btn" title="افزودن یادآور جدید" onClick={openAddModal}>
-                                    <FontAwesomeIcon icon={faPlusCircle} />
-                                </button>
-                                <button type="button" className="reminders-close-btn" aria-label="بستن" onClick={() => setIsOpen(false)}>
-                                    <FontAwesomeIcon icon={faTimes} />
-                                </button>
-                            </div>
-                        </div>
-                        {reminders.length === 0 ? (
-                            <p className="no-reminders">
-                                یادآوری فعالی ندارید.
-                                {activeChildId ? ' با دکمه + می‌توانید یادآور جدید بسازید.' : ' ابتدا از بخش فرزندان، یک کودک اضافه کنید.'}
-                            </p>
-                        ) : (
-                            <ul className="reminders-list">
-                                {reminders.map(r => {
-                                    const reminderContent = (
-                                        <li key={r.id} className={`reminder-item type-${r.type || 'info'}`}>
-                                            <div className="reminder-content">
-                                                <strong>{r.title}</strong>
-                                                {r.childName ? <p className="reminder-child">{r.childName}</p> : null}
-                                                {r.description || r.message ? (
-                                                    <p>{r.description || r.message}</p>
-                                                ) : null}
-                                                {r.source === 'manual' && r.date && (
-                                                    <p>تاریخ: {formatToShamsi(r.date)}</p>
-                                                )}
-                                                {r.alarmAt && (
-                                                    <p>
-                                                        آلارم: {formatToShamsi(r.alarmAt)}{' '}
-                                                        {new Date(r.alarmAt).toLocaleTimeString('fa-IR', {
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}
-                                                    </p>
-                                                )}
-                                            </div>
-                                            {(r.source === 'manual' || r.source === 'user' || r.source === 'auto') && (
-                                                <button type="button" className="dismiss-btn" onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    handleDismiss(r);
-                                                }}>
-                                                    <FontAwesomeIcon icon={faTimes} />
-                                                </button>
-                                            )}
-                                        </li>
-                                    );
-
-                                    if (r.link) {
-                                        return (
-                                            <Link to={r.link} key={r.id} className="reminder-link" onClick={() => setIsOpen(false)}>
-                                                {reminderContent}
-                                            </Link>
-                                        );
-                                    }
-                                    return <React.Fragment key={r.id}>{reminderContent}</React.Fragment>;
-                                })}
-                            </ul>
-                        )}
-                    </div>
-                </>
-            )}
+            {panel}
             {activeChildId && (
                 <AddReminderModal
                     isOpen={isModalOpen}
                     onRequestClose={() => setIsModalOpen(false)}
                     childId={activeChildId}
-                    onReminderAdded={handleReminderAdded}
+                    onReminderAdded={fetchReminders}
                 />
             )}
         </div>

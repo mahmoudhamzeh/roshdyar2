@@ -50,7 +50,6 @@ const MainNavbar = () => {
                         <Link to="/news" onClick={closeMenu}>مجله سلامت</Link>
                         <Link to="/shop" onClick={closeMenu}>فروشگاه</Link>
                         <Link to="/my-children" onClick={closeMenu}>فرزندان من</Link>
-                        <Link to="/orders" onClick={closeMenu}>سفارش‌ها</Link>
                         {isAdmin && (
                             <Link to="/admin" className="admin-link" onClick={closeMenu}>
                                 پنل مدیریت
