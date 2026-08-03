@@ -226,6 +226,11 @@ const VaccinationPage = () => {
 
         setIsExporting(true);
         try {
+            // Wait for web fonts so Persian glyphs don't overlap in the capture
+            if (document.fonts?.ready) {
+                await document.fonts.ready;
+            }
+
             const canvas = await html2canvas(element, {
                 scale: 2,
                 useCORS: true,
@@ -233,19 +238,24 @@ const VaccinationPage = () => {
                 logging: false,
                 windowWidth: element.scrollWidth,
                 windowHeight: element.scrollHeight,
+                onclone: (clonedDoc) => {
+                    const report = clonedDoc.querySelector('.vax-pdf-report');
+                    if (report) {
+                        report.style.fontFamily = '"Vazirmatn", Tahoma, sans-serif';
+                    }
+                },
             });
 
             const pdf = new jsPDF('p', 'mm', 'a4');
             const pageWidth = pdf.internal.pageSize.getWidth();
             const pageHeight = pdf.internal.pageSize.getHeight();
-            const marginX = 8;
-            const marginTop = 8;
-            const marginBottom = 12;
+            const marginX = 10;
+            const marginTop = 10;
+            const marginBottom = 14;
             const usableWidth = pageWidth - marginX * 2;
             const usableHeight = pageHeight - marginTop - marginBottom;
 
             const imgWidth = usableWidth;
-            const imgHeight = (canvas.height * imgWidth) / canvas.width;
             const pageCanvasHeight = Math.floor((usableHeight * canvas.width) / imgWidth);
 
             const totalPages = Math.max(1, Math.ceil(canvas.height / pageCanvasHeight));
@@ -273,11 +283,11 @@ const VaccinationPage = () => {
                     sliceHeight
                 );
 
-                const pageData = pageCanvas.toDataURL('image/png');
+                const pageData = pageCanvas.toDataURL('image/jpeg', 0.86);
                 const slicePdfHeight = (sliceHeight * imgWidth) / canvas.width;
 
                 if (pageIndex > 0) pdf.addPage();
-                pdf.addImage(pageData, 'PNG', marginX, marginTop, imgWidth, slicePdfHeight);
+                pdf.addImage(pageData, 'JPEG', marginX, marginTop, imgWidth, slicePdfHeight, undefined, 'FAST');
 
                 pdf.setFontSize(8);
                 pdf.setTextColor(120);
@@ -292,7 +302,9 @@ const VaccinationPage = () => {
                 pageIndex += 1;
             }
 
-            const safeName = (childName || 'child').replace(/[\\/:*?"<>|]/g, '-');
+            const safeName = (childName || 'child')
+                .replace(/[\\/:*?"<>|]/g, '-')
+                .replace(/\s+/g, '-');
             pdf.save(`گزارش-واکسیناسیون-${safeName}.pdf`);
             showSaveMessage('گزارش PDF با موفقیت تهیه شد.');
         } catch (err) {
