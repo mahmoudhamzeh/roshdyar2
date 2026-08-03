@@ -198,7 +198,21 @@ const Reminders = () => {
                                     <li key={r.id} className={`reminder-item type-${r.type}`}>
                                         <div className="reminder-content">
                                             <strong>{r.title}</strong>
-                                            <p>{r.source === 'manual' && r.date ? `تاریخ: ${formatToShamsi(r.date)}` : r.message}</p>
+                                            {r.description || r.message ? (
+                                                <p>{r.description || r.message}</p>
+                                            ) : null}
+                                            {r.source === 'manual' && r.date && (
+                                                <p>تاریخ: {formatToShamsi(r.date)}</p>
+                                            )}
+                                            {r.alarmAt && (
+                                                <p>
+                                                    آلارم: {formatToShamsi(r.alarmAt)}{' '}
+                                                    {new Date(r.alarmAt).toLocaleTimeString('fa-IR', {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </p>
+                                            )}
                                         </div>
                                         {r.source === 'manual' && (
                                             <button className="dismiss-btn" onClick={(e) => {

@@ -7,8 +7,23 @@ import './AddReminderModal.css';
 
 const AddReminderModal = ({ isOpen, onRequestClose, childId, onReminderAdded }) => {
     const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
     const [date, setDate] = useState(getCurrentShamsiDate());
+    const [alarmTime, setAlarmTime] = useState('09:00');
     const [error, setError] = useState('');
+
+    const resetForm = () => {
+        setTitle('');
+        setDescription('');
+        setDate(getCurrentShamsiDate());
+        setAlarmTime('09:00');
+        setError('');
+    };
+
+    const handleClose = () => {
+        resetForm();
+        onRequestClose();
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -20,15 +35,25 @@ const AddReminderModal = ({ isOpen, onRequestClose, childId, onReminderAdded }) 
 
         try {
             const gregorianDate = fromShamsi(date);
+            const normalizedDate = String(gregorianDate).replace(/\//g, '-');
+            const alarmAt = alarmTime
+                ? new Date(`${normalizedDate}T${alarmTime}:00`).toISOString()
+                : null;
+
             const res = await fetch(`http://localhost:5000/api/reminders/manual/${childId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, date: gregorianDate }),
+                body: JSON.stringify({
+                    title,
+                    date: gregorianDate,
+                    description,
+                    alarmAt
+                }),
             });
 
             if (res.ok) {
-                onReminderAdded(); // Callback to refresh the list
-                onRequestClose(); // Close the modal
+                onReminderAdded();
+                handleClose();
             } else {
                 setError('خطا در ثبت یادآور. لطفاً دوباره تلاش کنید.');
             }
@@ -40,7 +65,7 @@ const AddReminderModal = ({ isOpen, onRequestClose, childId, onReminderAdded }) 
     return (
         <Modal
             isOpen={isOpen}
-            onRequestClose={onRequestClose}
+            onRequestClose={handleClose}
             className="add-reminder-modal"
             overlayClassName="modal-overlay"
         >
@@ -57,6 +82,16 @@ const AddReminderModal = ({ isOpen, onRequestClose, childId, onReminderAdded }) 
                     />
                 </div>
                 <div className="form-group">
+                    <label htmlFor="reminder-description">توضیحات</label>
+                    <textarea
+                        id="reminder-description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="توضیحات یادآوری را بنویسید..."
+                        rows="3"
+                    />
+                </div>
+                <div className="form-group">
                     <label htmlFor="reminder-date">تاریخ</label>
                     <DatePicker
                         value={date}
@@ -69,15 +104,23 @@ const AddReminderModal = ({ isOpen, onRequestClose, childId, onReminderAdded }) 
                                 readOnly
                                 ref={ref}
                                 value={date ? `${date.year}/${date.month}/${date.day}` : ''}
-                                // The input will be styled by the parent .form-group selector
                             />
                         )}
+                    />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="reminder-alarm-time">ساعت آلارم</label>
+                    <input
+                        id="reminder-alarm-time"
+                        type="time"
+                        value={alarmTime}
+                        onChange={(e) => setAlarmTime(e.target.value)}
                     />
                 </div>
                 {error && <p className="error-message">{error}</p>}
                 <div className="modal-actions">
                     <button type="submit" className="btn-submit">ثبت یادآور</button>
-                    <button type="button" className="btn-cancel" onClick={onRequestClose}>انصراف</button>
+                    <button type="button" className="btn-cancel" onClick={handleClose}>انصراف</button>
                 </div>
             </form>
         </Modal>

@@ -25,7 +25,7 @@ const upload = multer({ storage });
 
 const dbPath = path.join(__dirname, 'db.json');
 
-let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, childIdCounter, userIdCounter, banners, articles, news, tickets, videos, podcasts;
+let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts;
 
 const loadData = () => {
     if (fs.existsSync(dbPath)) {
@@ -41,9 +41,12 @@ const loadData = () => {
         medicalDocuments = data.medicalDocuments || {};
         checkups = data.checkups || {};
         reminders = data.reminders || {};
+        userReminders = data.userReminders || {};
+        messages = data.messages || [];
         childIdCounter = data.childIdCounter || 1;
         const userKeys = Object.keys(users).map(Number).filter(k => !isNaN(k));
         userIdCounter = data.userIdCounter || (userKeys.length ? Math.max(...userKeys) + 1 : 1);
+        messageIdCounter = data.messageIdCounter || (messages.length ? Math.max(...messages.map(m => m.id || 0)) + 1 : 1);
         banners = data.banners || [];
         articles = data.articles || [];
         news = data.news || [];
@@ -58,8 +61,11 @@ const loadData = () => {
         medicalDocuments = {};
         checkups = {};
         reminders = {};
+        userReminders = {};
+        messages = [];
         childIdCounter = 1;
         userIdCounter = 1;
+        messageIdCounter = 1;
         banners = [];
         articles = [];
         news = [];
@@ -80,8 +86,11 @@ const saveData = () => {
         medicalDocuments,
         checkups,
         reminders,
+        userReminders,
+        messages,
         childIdCounter,
         userIdCounter,
+        messageIdCounter,
         banners,
         articles,
         news,
@@ -855,27 +864,48 @@ app.delete('/api/admin/videos/:id', isAdmin, (req, res) => {
 app.get('/api/podcasts', (req, res) => res.json(podcasts));
 
 // --- Reminder / Vaccination ---
-const getOverdueVaccinationReminders = (child) => {
+const childHasOverdueVaccination = (child) => {
     const ageInMonths = calculateAgeInMonths(new Date(child.birthDate));
     const childVaccinations = child.vaccinationRecords || {};
-    const remindersList = [];
-    vaccinationSchedule.forEach(group => {
-        if (ageInMonths >= group.age) {
-            group.vaccines.forEach(vaccine => {
-                if (!childVaccinations[group.age] || !childVaccinations[group.age][vaccine.name]) {
-                    remindersList.push({
-                        id: `vaccine-${child.id}-${group.age}-${vaccine.name}`,
-                        title: `تأخیر در واکسن: ${vaccine.name}`,
-                        message: `واکسن ${vaccine.name} (${group.label}) کودک شما به تأخیر افتاده است.`,
-                        type: 'danger',
-                        link: `/vaccination-status/${child.id}`,
-                        source: 'auto'
-                    });
-                }
-            });
-        }
+    return vaccinationSchedule.some(group => {
+        if (ageInMonths < group.age) return false;
+        return group.vaccines.some(vaccine =>
+            !childVaccinations[group.age] || !childVaccinations[group.age][vaccine.name]
+        );
     });
-    return remindersList;
+};
+
+// One consolidated message per child for vaccine injection delay
+const getOverdueVaccinationReminders = (child) => {
+    if (!childHasOverdueVaccination(child)) return [];
+    return [{
+        id: `vaccine-delay-${child.id}`,
+        title: 'تاخیر در تزریق واکس',
+        message: 'تاخیر در تزریق واکس',
+        type: 'danger',
+        link: `/vaccination-status/${child.id}`,
+        source: 'auto',
+        category: 'vaccine_delay'
+    }];
+};
+
+const getVaccineDelayMessagesForUser = (userId) => {
+    const userChildren = children.filter(c => c.userId === parseInt(userId, 10));
+    return userChildren
+        .filter(childHasOverdueVaccination)
+        .map(child => ({
+            id: `vaccine-delay-${child.id}`,
+            title: 'تاخیر در تزریق واکس',
+            body: 'تاخیر در تزریق واکس',
+            link: `/vaccination-status/${child.id}`,
+            imageUrl: null,
+            type: 'vaccine_delay',
+            source: 'auto',
+            createdAt: new Date().toISOString(),
+            isRead: false,
+            childId: child.id,
+            childName: getChildDisplayName(child)
+        }));
 };
 
 app.get('/api/vaccination-schedule', (req, res) => res.json(vaccinationSchedule));
@@ -888,30 +918,22 @@ app.post('/api/generate-reminders/:userId', (req, res) => {
     userChildren.forEach(child => {
         const childKey = String(child.id);
         if (!reminders[childKey]) reminders[childKey] = [];
-        const ageInMonths = calculateAgeInMonths(child.birthDate);
-        const childVaccinations = child.vaccinationRecords || {};
-        const childName = getChildDisplayName(child);
+        const reminderId = `generated-vaccine-delay-${child.id}`;
+        const alreadyExists = reminders[childKey].some(r => r.id === reminderId || r.id === `vaccine-delay-${child.id}`);
 
-        vaccinationSchedule.forEach(group => {
-            if (ageInMonths < group.age - 1) return;
-            group.vaccines.forEach(vaccine => {
-                const reminderId = `generated-vaccine-${child.id}-${group.age}-${vaccine.name}`;
-                const alreadyExists = reminders[childKey].some(r => r.id === reminderId);
-                const isDone = childVaccinations[group.age] && childVaccinations[group.age][vaccine.name];
-                if (!alreadyExists && !isDone) {
-                    reminders[childKey].push({
-                        id: reminderId,
-                        title: `واکسن ${vaccine.name}`,
-                        date: new Date().toISOString().split('T')[0],
-                        message: `واکسن ${vaccine.name} (${group.label}) برای ${childName}`,
-                        type: ageInMonths >= group.age ? 'danger' : 'info',
-                        link: `/vaccination-status/${child.id}`,
-                        source: 'manual'
-                    });
-                    created++;
-                }
+        if (!alreadyExists && childHasOverdueVaccination(child)) {
+            reminders[childKey].push({
+                id: reminderId,
+                title: 'تاخیر در تزریق واکس',
+                date: new Date().toISOString().split('T')[0],
+                message: 'تاخیر در تزریق واکس',
+                type: 'danger',
+                link: `/vaccination-status/${child.id}`,
+                source: 'manual',
+                category: 'vaccine_delay'
             });
-        });
+            created++;
+        }
     });
 
     saveData();
@@ -923,19 +945,32 @@ app.get('/api/reminders/all/:childId', (req, res) => {
     const child = children.find(c => c.id === parseInt(childId));
     if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
 
-    const manualReminders = reminders[childId] || [];
+    const manualReminders = (reminders[childId] || []).filter(r => {
+        if (r.category === 'vaccine_delay') return false;
+        if (r.id && String(r.id).startsWith('generated-vaccine')) return false;
+        if (r.title && (r.title.includes('تأخیر در واکسن') || r.title.includes('تاخیر در تزریق'))) return false;
+        return true;
+    });
     const autoReminders = getOverdueVaccinationReminders(child);
     res.json([...autoReminders, ...manualReminders]);
 });
 
 app.post('/api/reminders/manual/:childId', (req, res) => {
     const { childId } = req.params;
-    const { title, date } = req.body;
+    const { title, date, description, alarmAt } = req.body;
     if (!title || !date) return res.status(400).json({ message: 'عنوان و تاریخ الزامی است' });
 
     if (!reminders[childId]) reminders[childId] = [];
-    // The message will be constructed on the client-side to ensure consistent date formatting.
-    const newReminder = { id: `manual-${Date.now()}`, title, date, type: 'info', source: 'manual' };
+    const newReminder = {
+        id: `manual-${Date.now()}`,
+        title,
+        date,
+        description: description || '',
+        message: description || '',
+        alarmAt: alarmAt || null,
+        type: 'info',
+        source: 'manual'
+    };
     reminders[childId].push(newReminder);
     saveData();
     res.status(201).json(newReminder);
@@ -949,6 +984,230 @@ app.delete('/api/reminders/manual/:childId/:reminderId', (req, res) => {
     reminders[childId] = reminders[childId].filter(r => r.id !== reminderId);
     if (reminders[childId].length < initialLength) { saveData(); res.status(200).json({ message: 'یادآوری با موفقیت حذف شد' }); }
     else res.status(404).json({ message: 'یادآوری مشخص شده یافت نشد' });
+});
+
+// --- User personal reminders / alarms ---
+app.get('/api/user-reminders', (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+    const list = userReminders[String(userId)] || [];
+    res.json(list);
+});
+
+app.post('/api/user-reminders', (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+    if (!users[userId]) return res.status(404).json({ message: 'کاربر یافت نشد' });
+
+    const { title, description, alarmAt } = req.body;
+    if (!title || !alarmAt) {
+        return res.status(400).json({ message: 'عنوان و زمان آلارم الزامی است' });
+    }
+    if (Number.isNaN(new Date(alarmAt).getTime())) {
+        return res.status(400).json({ message: 'زمان آلارم نامعتبر است' });
+    }
+
+    const key = String(userId);
+    if (!userReminders[key]) userReminders[key] = [];
+    const newReminder = {
+        id: `user-reminder-${Date.now()}`,
+        title,
+        description: description || '',
+        alarmAt: new Date(alarmAt).toISOString(),
+        createdAt: new Date().toISOString(),
+        notified: false,
+        type: 'info',
+        source: 'user'
+    };
+    userReminders[key].push(newReminder);
+    saveData();
+    res.status(201).json(newReminder);
+});
+
+app.put('/api/user-reminders/:id', (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+    const key = String(userId);
+    const list = userReminders[key] || [];
+    const index = list.findIndex(r => r.id === req.params.id);
+    if (index === -1) return res.status(404).json({ message: 'یادآوری یافت نشد' });
+
+    const { title, description, alarmAt, notified } = req.body;
+    if (title !== undefined) list[index].title = title;
+    if (description !== undefined) list[index].description = description;
+    if (alarmAt !== undefined) {
+        if (Number.isNaN(new Date(alarmAt).getTime())) {
+            return res.status(400).json({ message: 'زمان آلارم نامعتبر است' });
+        }
+        list[index].alarmAt = new Date(alarmAt).toISOString();
+    }
+    if (notified !== undefined) list[index].notified = !!notified;
+    userReminders[key] = list;
+    saveData();
+    res.json(list[index]);
+});
+
+app.delete('/api/user-reminders/:id', (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+    const key = String(userId);
+    const list = userReminders[key] || [];
+    const initialLength = list.length;
+    userReminders[key] = list.filter(r => r.id !== req.params.id);
+    if (userReminders[key].length < initialLength) {
+        saveData();
+        return res.status(200).json({ message: 'یادآوری حذف شد' });
+    }
+    res.status(404).json({ message: 'یادآوری یافت نشد' });
+});
+
+// --- Messages (inbox) ---
+app.get('/api/messages', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+
+    const inbox = messages
+        .filter(m => Array.isArray(m.recipientIds) && m.recipientIds.includes(userId))
+        .map(m => ({
+            id: m.id,
+            title: m.title,
+            body: m.body,
+            link: m.link || null,
+            imageUrl: m.imageUrl || null,
+            type: m.type || 'admin',
+            source: 'admin',
+            isBulk: !!m.isBulk,
+            createdAt: m.createdAt,
+            isRead: Array.isArray(m.readBy) && m.readBy.includes(userId)
+        }));
+
+    const vaccineMessages = getVaccineDelayMessagesForUser(userId);
+    const combined = [...vaccineMessages, ...inbox].sort((a, b) =>
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    res.json(combined);
+});
+
+app.get('/api/messages/unread-count', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+
+    const unreadAdmin = messages.filter(m =>
+        Array.isArray(m.recipientIds) &&
+        m.recipientIds.includes(userId) &&
+        !(Array.isArray(m.readBy) && m.readBy.includes(userId))
+    ).length;
+    const unreadVaccine = getVaccineDelayMessagesForUser(userId).length;
+    res.json({ count: unreadAdmin + unreadVaccine });
+});
+
+app.put('/api/messages/:id/read', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+
+    const messageId = req.params.id;
+    if (String(messageId).startsWith('vaccine-delay-')) {
+        return res.json({ message: 'پیام واکسن به‌عنوان خوانده‌شده در نظر گرفته شد' });
+    }
+
+    const msg = messages.find(m => m.id === parseInt(messageId, 10));
+    if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
+        return res.status(404).json({ message: 'پیام یافت نشد' });
+    }
+    msg.readBy = msg.readBy || [];
+    if (!msg.readBy.includes(userId)) msg.readBy.push(userId);
+    saveData();
+    res.json({ message: 'پیام خوانده شد', id: msg.id });
+});
+
+app.delete('/api/messages/:id', (req, res) => {
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+
+    const messageId = parseInt(req.params.id, 10);
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
+        return res.status(404).json({ message: 'پیام یافت نشد' });
+    }
+    msg.recipientIds = msg.recipientIds.filter(id => id !== userId);
+    msg.readBy = (msg.readBy || []).filter(id => id !== userId);
+    if (msg.recipientIds.length === 0) {
+        messages = messages.filter(m => m.id !== messageId);
+    }
+    saveData();
+    res.json({ message: 'پیام حذف شد' });
+});
+
+app.get('/api/admin/messages', isAdmin, (req, res) => {
+    const sorted = [...messages].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(sorted);
+});
+
+app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
+    const { title, body, link, mode, userId, userIds } = req.body;
+    if (!title || !String(title).trim()) {
+        return res.status(400).json({ message: 'عنوان پیام الزامی است' });
+    }
+
+    let recipientIds = [];
+    const sendMode = mode === 'bulk' ? 'bulk' : 'single';
+
+    if (sendMode === 'bulk') {
+        if (userIds) {
+            try {
+                const parsed = typeof userIds === 'string' ? JSON.parse(userIds) : userIds;
+                recipientIds = (Array.isArray(parsed) ? parsed : [])
+                    .map(id => parseInt(id, 10))
+                    .filter(id => !Number.isNaN(id) && users[id]);
+            } catch (e) {
+                return res.status(400).json({ message: 'لیست کاربران نامعتبر است' });
+            }
+        }
+        if (recipientIds.length === 0) {
+            recipientIds = Object.keys(users).map(Number).filter(id => users[id] && !users[id].isAdmin);
+            if (recipientIds.length === 0) {
+                recipientIds = Object.keys(users).map(Number).filter(id => users[id]);
+            }
+        }
+    } else {
+        const targetId = parseInt(userId, 10);
+        if (!targetId || !users[targetId]) {
+            return res.status(400).json({ message: 'کاربر گیرنده معتبر نیست' });
+        }
+        recipientIds = [targetId];
+    }
+
+    if (recipientIds.length === 0) {
+        return res.status(400).json({ message: 'هیچ گیرنده‌ای یافت نشد' });
+    }
+
+    const newMessage = {
+        id: messageIdCounter++,
+        title: String(title).trim(),
+        body: body ? String(body).trim() : '',
+        link: link ? String(link).trim() : null,
+        imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        type: 'admin',
+        isBulk: sendMode === 'bulk',
+        recipientIds,
+        readBy: [],
+        createdAt: new Date().toISOString(),
+        createdBy: parseInt(req.headers['x-user-id'], 10)
+    };
+    messages.push(newMessage);
+    saveData();
+    res.status(201).json(newMessage);
+});
+
+app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const initialLength = messages.length;
+    messages = messages.filter(m => m.id !== id);
+    if (messages.length < initialLength) {
+        saveData();
+        return res.status(200).json({ message: 'پیام حذف شد' });
+    }
+    res.status(404).json({ message: 'پیام یافت نشد' });
 });
 
 app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
