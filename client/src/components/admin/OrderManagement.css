@@ -1,0 +1,72 @@
+.order-management h2 {
+    text-align: right;
+    margin-bottom: 1.25rem;
+}
+
+.order-mgmt-error {
+    color: #dc2626;
+}
+
+.orders-admin-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.order-admin-item {
+    background: #fff;
+    border: 1px solid #d7e5e2;
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    box-shadow: 0 2px 6px rgba(15, 118, 110, 0.06);
+}
+
+.order-admin-info {
+    text-align: right;
+    flex: 1;
+    min-width: 0;
+}
+
+.order-admin-info h3 {
+    margin: 0 0 0.4rem;
+}
+
+.order-admin-info p {
+    margin: 0 0 0.3rem;
+    color: #5b716e;
+}
+
+.order-admin-info ul {
+    margin: 0.5rem 0;
+    padding-right: 1.1rem;
+    color: #134e4a;
+}
+
+.order-admin-info small {
+    color: #8aa09c;
+}
+
+.order-admin-status label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 600;
+    color: #5b716e;
+}
+
+.order-admin-status select {
+    min-width: 160px;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-family: inherit;
+}
+
+@media (max-width: 700px) {
+    .order-admin-item {
+        flex-direction: column;
+    }
+}

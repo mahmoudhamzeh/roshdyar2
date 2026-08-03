@@ -603,5 +603,98 @@
   ],
   "messages": [],
   "userReminders": {},
-  "messageIdCounter": 1
+  "messageIdCounter": 1,
+  "products": [
+    {
+      "id": 1,
+      "name": "مولتی‌ویتامین کودک رشدیار",
+      "description": "مکمل ویتامین روزانه مناسب کودکان ۱ تا ۸ سال، با طعم میوه‌ای ملایم و بدون شکر افزوده.",
+      "category": "تغذیه",
+      "price": 285000,
+      "stock": 40,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-01T10:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "پوره میوه ارگانیک سیب و موز",
+      "description": "پوره آماده بدون مواد نگهدارنده، مناسب تغذیه تکمیلی از ۶ ماهگی.",
+      "category": "تغذیه",
+      "price": 89000,
+      "stock": 80,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-02T10:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "name": "اسباب‌بازی حلقه‌های رنگارنگ",
+      "description": "اسباب‌بازی آموزشی برای تقویت هماهنگی دست و چشم و مهارت‌های حرکتی ظریف.",
+      "category": "اسباب‌بازی",
+      "price": 195000,
+      "stock": 35,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-03T10:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "کتاب داستان شب‌بخیر ماه",
+      "description": "کتاب مصور مناسب سن ۳ تا ۶ سال برای ایجاد روتین خواب آرام.",
+      "category": "کتاب",
+      "price": 145000,
+      "stock": 50,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-04T10:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "name": "بادی نخی نوزاد",
+      "description": "بادی ۱۰۰٪ پنبه ارگانیک، نرم و مناسب پوست حساس نوزاد، سایز ۰ تا ۱۲ ماه.",
+      "category": "پوشاک",
+      "price": 220000,
+      "stock": 60,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-05T10:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "name": "شامپو ملایم کودک",
+      "description": "فرمول بدون سولفات و عطر قوی، مناسب شستشوی روزانه مو و بدن کودک.",
+      "category": "بهداشت",
+      "price": 168000,
+      "stock": 45,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-06T10:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "name": "پازل چوبی حیوانات",
+      "description": "پازل آموزشی ۱۲ تکه برای آشنایی با حیوانات و تقویت تمرکز کودک.",
+      "category": "اسباب‌بازی",
+      "price": 175000,
+      "stock": 28,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-07T10:00:00.000Z"
+    },
+    {
+      "id": 8,
+      "name": "کرم محافظ پوست کودک",
+      "description": "کرم مرطوب‌کننده سبک با عصاره بابونه برای مراقبت روزانه از پوست کودک.",
+      "category": "بهداشت",
+      "price": 198000,
+      "stock": 55,
+      "imageUrl": null,
+      "active": true,
+      "createdAt": "2026-07-08T10:00:00.000Z"
+    }
+  ],
+  "orders": [],
+  "productIdCounter": 9,
+  "orderIdCounter": 1
 }

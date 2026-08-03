@@ -9,6 +9,8 @@ import ArticleManagement from './admin/ArticleManagement';
 import TicketManagement from './admin/TicketManagement';
 import VideoManagement from './admin/VideoManagement';
 import MessageManagement from './admin/MessageManagement';
+import ProductManagement from './admin/ProductManagement';
+import OrderManagement from './admin/OrderManagement';
 
 
 const AdminPage = () => {
@@ -24,6 +26,8 @@ const AdminPage = () => {
                     <NavLink to={`${url}/dashboard`} activeClassName="active">داشبورد</NavLink>
                     <NavLink to={`${url}/users`} activeClassName="active">مدیریت کاربران</NavLink>
                     <NavLink to={`${url}/messages`} activeClassName="active">پیام‌ها</NavLink>
+                    <NavLink to={`${url}/products`} activeClassName="active">محصولات فروشگاه</NavLink>
+                    <NavLink to={`${url}/orders`} activeClassName="active">سفارش‌ها</NavLink>
                     <NavLink to={`${url}/banners`} activeClassName="active">مدیریت بنرها</NavLink>
                     <NavLink to={`${url}/articles`} activeClassName="active">مدیریت مقالات</NavLink>
                     <NavLink to={`${url}/videos`} activeClassName="active">مدیریت ویدیوها</NavLink>
@@ -39,6 +43,8 @@ const AdminPage = () => {
                     <Route exact path={`${path}/users`} component={UserManagement} />
                     <Route path={`${path}/users/:userId`} component={UserDetailPage} />
                     <Route path={`${path}/messages`} component={MessageManagement} />
+                    <Route path={`${path}/products`} component={ProductManagement} />
+                    <Route path={`${path}/orders`} component={OrderManagement} />
                     <Route path={`${path}/banners`} component={BannerManagement} />
                     <Route path={`${path}/articles`} component={ArticleManagement} />
                     <Route path={`${path}/videos`} component={VideoManagement} />

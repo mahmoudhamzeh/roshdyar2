@@ -17,6 +17,10 @@ import VaccinationPage from './components/VaccinationPage';
 import VaccinationStatusPage from './components/VaccinationStatusPage';
 import NewsPage from './components/NewsPage';
 import ArticleDetailPage from './components/ArticleDetailPage';
+import ShopPage from './components/ShopPage';
+import ProductDetailPage from './components/ProductDetailPage';
+import CartPage from './components/CartPage';
+import OrdersPage from './components/OrdersPage';
 import './App.css';
 
 const App = () => {
@@ -46,6 +50,10 @@ const App = () => {
                 <PrivateRoute path="/vaccination-status/:childId" component={VaccinationStatusPage} />
                 <PrivateRoute path="/vaccination/:childId" component={VaccinationPage} />
                 <PrivateRoute path="/profile" component={ProfilePage} />
+                <PrivateRoute exact path="/shop" component={ShopPage} />
+                <PrivateRoute path="/shop/:id" component={ProductDetailPage} />
+                <PrivateRoute path="/cart" component={CartPage} />
+                <PrivateRoute path="/orders" component={OrdersPage} />
                 <Route exact path="/news" component={NewsPage} />
                 <Route path="/news/:id" component={ArticleDetailPage} />
                 <AdminRoute path="/admin" component={AdminPage} />
