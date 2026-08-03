@@ -1439,12 +1439,12 @@ app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
 
 async function startServer() {
     try {
-        await connect();
-        const state = await loadState();
+        connect();
+        const state = loadState();
         applyState(state);
         app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
     } catch (err) {
-        console.error('Failed to start server with MongoDB:', err);
+        console.error('Failed to start server with SQLite:', err);
         process.exit(1);
     }
 }

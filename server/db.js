@@ -1,10 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { MongoClient } = require('mongodb');
+const Database = require('better-sqlite3');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
-const DB_NAME = process.env.MONGODB_DB || 'roshdyar';
-const STATE_ID = 'main';
+const DB_FILE =
+    process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
 
 const emptyState = () => ({
     users: {},
@@ -31,9 +30,7 @@ const emptyState = () => ({
     orderIdCounter: 1
 });
 
-let client = null;
-let collection = null;
-let writeChain = Promise.resolve();
+let db = null;
 
 function normalizeState(raw = {}) {
     const base = emptyState();
@@ -81,55 +78,52 @@ function normalizeState(raw = {}) {
     };
 }
 
-async function connect() {
-    if (collection) return collection;
-    client = new MongoClient(MONGODB_URI);
-    await client.connect();
-    const db = client.db(DB_NAME);
-    collection = db.collection('app_state');
-    await collection.createIndex({ updatedAt: -1 });
-    console.log(`Connected to MongoDB (${DB_NAME})`);
-    return collection;
+function connect() {
+    if (db) return db;
+    const dir = path.dirname(DB_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    db = new Database(DB_FILE);
+    db.pragma('journal_mode = WAL');
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS app_state (
+            id TEXT PRIMARY KEY,
+            data TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    `);
+    console.log(`Connected to SQLite (${DB_FILE})`);
+    return db;
 }
 
-async function loadState() {
-    await connect();
-    const doc = await collection.findOne({ _id: STATE_ID });
-    if (!doc) {
+function loadState() {
+    connect();
+    const row = db.prepare('SELECT data FROM app_state WHERE id = ?').get('main');
+    if (!row) {
         const state = emptyState();
-        await collection.updateOne(
-            { _id: STATE_ID },
-            { $set: { ...state, updatedAt: new Date() } },
-            { upsert: true }
-        );
+        saveState(state);
         return state;
     }
-    const { _id, updatedAt, ...raw } = doc;
-    return normalizeState(raw);
+    return normalizeState(JSON.parse(row.data));
 }
 
 function saveState(state) {
-    const snapshot = JSON.parse(JSON.stringify(state));
-    writeChain = writeChain
-        .then(async () => {
-            await connect();
-            await collection.updateOne(
-                { _id: STATE_ID },
-                { $set: { ...snapshot, updatedAt: new Date() } },
-                { upsert: true }
-            );
-        })
-        .catch((err) => {
-            console.error('Failed to persist state to MongoDB:', err);
-        });
-    return writeChain;
+    connect();
+    const payload = JSON.stringify(state);
+    const updatedAt = new Date().toISOString();
+    db.prepare(`
+        INSERT INTO app_state (id, data, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            data = excluded.data,
+            updated_at = excluded.updated_at
+    `).run('main', payload, updatedAt);
 }
 
-async function migrateFromJson(jsonPath) {
-    await connect();
-    const existing = await collection.findOne({ _id: STATE_ID });
+function migrateFromJson(jsonPath) {
+    connect();
+    const existing = db.prepare('SELECT id FROM app_state WHERE id = ?').get('main');
     if (existing && process.env.FORCE_MIGRATE !== '1') {
-        console.log('MongoDB already has data. Set FORCE_MIGRATE=1 to overwrite from db.json');
+        console.log('SQLite already has data. Set FORCE_MIGRATE=1 to overwrite from db.json');
         return false;
     }
     if (!fs.existsSync(jsonPath)) {
@@ -137,20 +131,15 @@ async function migrateFromJson(jsonPath) {
     }
     const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
     const state = normalizeState(raw);
-    await collection.updateOne(
-        { _id: STATE_ID },
-        { $set: { ...state, updatedAt: new Date(), migratedFrom: path.basename(jsonPath) } },
-        { upsert: true }
-    );
-    console.log(`Migrated ${jsonPath} -> MongoDB database "${DB_NAME}"`);
+    saveState(state);
+    console.log(`Migrated ${jsonPath} -> SQLite database "${DB_FILE}"`);
     return true;
 }
 
-async function close() {
-    if (client) {
-        await client.close();
-        client = null;
-        collection = null;
+function close() {
+    if (db) {
+        db.close();
+        db = null;
     }
 }
 
@@ -162,6 +151,5 @@ module.exports = {
     close,
     emptyState,
     normalizeState,
-    MONGODB_URI,
-    DB_NAME
+    DB_FILE
 };
