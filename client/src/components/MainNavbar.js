@@ -1,15 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Reminders from './Reminders';
+import BrandLogo from './BrandLogo';
 import './MainNavbar.css';
-
-const BrandIcon = () => (
-    <svg className="navbar-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="16" cy="16" r="15" stroke="rgba(255,255,255,0.55)" strokeWidth="1.25" fill="rgba(255,255,255,0.1)" />
-        <path d="M9 21c1.8-5 4.4-8.5 7-10.5 2.6 2 5.2 5.5 7 10.5" stroke="#FDE68A" strokeWidth="2" strokeLinecap="round" fill="none" />
-        <circle cx="16" cy="9.5" r="2" fill="#FDE68A" />
-    </svg>
-);
 
 const MainNavbar = () => {
     const [isAdmin, setIsAdmin] = useState(false);
@@ -39,8 +32,11 @@ const MainNavbar = () => {
                 <div className="navbar-left">
                     <div className="navbar-brand">
                         <Link to="/dashboard">
-                            <BrandIcon />
-                            <span>رشدیار</span>
+                            <BrandLogo className="navbar-brand-icon" size={34} alt="" />
+                            <span className="navbar-brand-text">
+                                <span className="navbar-brand-fa">تات کیدز</span>
+                                <span className="navbar-brand-en">TatKids</span>
+                            </span>
                         </Link>
                     </div>
                 </div>

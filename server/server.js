@@ -1467,4 +1467,4 @@ app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
     res.status(404).json({ message: 'پیام یافت نشد' });
 });
 
-app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
+app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));

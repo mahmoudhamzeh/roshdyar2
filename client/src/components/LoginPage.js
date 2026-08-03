@@ -1,22 +1,7 @@
 import React, { useState } from 'react';
 import { useHistory } from 'react-router-dom';
+import BrandLogo from './BrandLogo';
 import './LoginPage.css';
-
-const BrandMark = () => (
-    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="24" cy="24" r="22" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5" />
-        <path
-            d="M14 30c2.5-7 6-12 10-15 4 3 7.5 8 10 15"
-            stroke="#FDE68A"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            fill="none"
-            strokeDasharray="48"
-            style={{ animation: 'mark-draw 1.2s ease forwards' }}
-        />
-        <circle cx="24" cy="14" r="3" fill="#FDE68A" style={{ animation: 'soft-pulse 2.8s ease-in-out infinite' }} />
-    </svg>
-);
 
 const LoginPage = () => {
     const history = useHistory();
@@ -87,11 +72,14 @@ const LoginPage = () => {
 
     return (
         <div className="login-page">
-            <section className="login-hero" aria-label="معرفی رشدیار">
+            <section className="login-hero" aria-label="معرفی تات کیدز">
                 <div className="login-hero-content">
                     <div className="login-brand-mark animate-fade-up">
-                        <BrandMark />
-                        <p className="brand-name">رشدیار</p>
+                        <BrandLogo className="login-brand-logo" size={64} alt="" />
+                        <div className="brand-name-wrap">
+                            <p className="brand-name">تات کیدز</p>
+                            <p className="brand-name-en">TatKids</p>
+                        </div>
                     </div>
                     <h1 className="animate-fade-up-delay">همراه هوشمند رشد و سلامت کودک</h1>
                     <p className="animate-fade-up-delay-2">

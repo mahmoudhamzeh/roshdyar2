@@ -45,9 +45,33 @@
 }
 
 .navbar-brand-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: block;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+}
+
+.navbar-brand-text {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.05;
+  gap: 0.1rem;
+}
+
+.navbar-brand-fa {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.navbar-brand-en {
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.82;
 }
 
 .navbar-links {

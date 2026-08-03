@@ -153,7 +153,7 @@ const NewsPage = () => {
 
                         {selectedCategory === 'همه' && podcasts.length > 0 && (
                             <section className="podcast-section">
-                                <h2>پادکست‌های رشدیار</h2>
+                                <h2>پادکست‌های تات کیدز</h2>
                                 <div className="podcasts-grid">
                                     {podcasts.map(podcast => (
                                         <a href={podcast.url} key={podcast.id} target="_blank" rel="noopener noreferrer" className="podcast-card">
