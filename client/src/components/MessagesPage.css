@@ -1,0 +1,265 @@
+.messages-page {
+  direction: rtl;
+}
+
+.messages-header {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.messages-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.messages-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.messages-tabs button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.messages-tabs button.active {
+  background: var(--brand-soft);
+  border-color: var(--brand-mid);
+  color: var(--brand-deep);
+  font-weight: 700;
+}
+
+.messages-tabs .badge {
+  background: #dc2626;
+  color: #fff;
+  border-radius: 999px;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.35rem;
+}
+
+.messages-list,
+.user-reminders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.message-item,
+.user-reminder-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+  text-align: right;
+}
+
+.message-item:hover,
+.user-reminder-item:hover {
+  border-color: var(--brand-mid);
+}
+
+.message-item.unread {
+  background: var(--brand-wash);
+  border-color: var(--brand-soft);
+}
+
+.message-item.type-vaccine_delay {
+  border-right: 4px solid #dc2626;
+  background: #fff7f7;
+}
+
+.message-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.message-title-row h3,
+.user-reminder-item h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.vaccine-icon {
+  color: #dc2626;
+}
+
+.new-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+  display: inline-block;
+}
+
+.message-body,
+.reminder-desc {
+  margin: 0.45rem 0;
+  color: var(--ink-muted);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.message-meta,
+.message-date,
+.reminder-alarm {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+}
+
+.message-link {
+  margin: 0.4rem 0 0;
+  color: var(--brand-deep);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  word-break: break-all;
+}
+
+.message-image {
+  margin-top: 0.65rem;
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 10px;
+  object-fit: cover;
+  display: block;
+}
+
+.btn-delete-msg {
+  border: none;
+  background: transparent;
+  color: #b91c1c;
+  cursor: pointer;
+  padding: 0.35rem;
+  align-self: flex-start;
+}
+
+.empty-state {
+  color: var(--ink-muted);
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.reminders-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.reminders-toolbar p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.btn-add-reminder,
+.btn-submit {
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-cancel {
+  background: #f3f4f6;
+  color: var(--ink);
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.reminder-form {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+  background: #fafafa;
+}
+
+.reminder-form textarea {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-family: var(--font-body);
+  resize: vertical;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.user-reminder-item {
+  cursor: default;
+}
+
+.user-reminder-item.due {
+  border-right: 4px solid var(--accent);
+  background: #fffbeb;
+}
+
+.due-badge {
+  display: inline-block;
+  margin-right: 0.5rem;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .messages-header {
+    flex-direction: column;
+  }
+}

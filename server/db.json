@@ -600,5 +600,8 @@
       "duration": "15:10",
       "createdAt": "2023-10-17T09:20:00Z"
     }
-  ]
+  ],
+  "messages": [],
+  "userReminders": {},
+  "messageIdCounter": 1
 }

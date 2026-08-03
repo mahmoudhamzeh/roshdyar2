@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import UserInfo from './UserInfo';
 import ChangePassword from './ChangePassword';
+import MessagesPage from './MessagesPage';
 import Placeholder from './Placeholder';
 import './ProfilePage.css';
 
@@ -23,7 +24,8 @@ const ProfilePage = () => {
                 method: 'POST',
             });
             if (!res.ok) throw new Error('Failed to generate reminders');
-            alert('یادآورها با موفقیت تولید شدند. لطفاً بخش یادآورها را چک کنید.');
+            alert('یادآورها با موفقیت تولید شدند. لطفاً بخش پیام‌ها یا یادآورها را چک کنید.');
+            setActiveTab('messages');
         } catch (error) {
             alert(error.message);
         }
@@ -33,6 +35,8 @@ const ProfilePage = () => {
         switch (activeTab) {
             case 'userInfo':
                 return <UserInfo />;
+            case 'messages':
+                return <MessagesPage />;
             case 'changePassword':
                 return <ChangePassword />;
             case 'appointments':
@@ -58,6 +62,7 @@ const ProfilePage = () => {
             <div className="profile-layout">
                 <aside className="profile-sidebar">
                     <button onClick={() => setActiveTab('userInfo')} className={activeTab === 'userInfo' ? 'active' : ''}>اطلاعات کاربری</button>
+                    <button onClick={() => setActiveTab('messages')} className={activeTab === 'messages' ? 'active' : ''}>پیام ها</button>
                     <button onClick={() => setActiveTab('appointments')} className={activeTab === 'appointments' ? 'active' : ''}>نوبت های من</button>
                     <button onClick={() => setActiveTab('consultations')} className={activeTab === 'consultations' ? 'active' : ''}>مشاوره های متنی</button>
                     <button onClick={() => setActiveTab('support')} className={activeTab === 'support' ? 'active' : ''}>پشتبانی</button>

@@ -39,12 +39,20 @@
     font-weight: 500;
 }
 
-.form-group input, .date-picker-full-width {
+.form-group input,
+.form-group textarea,
+.date-picker-full-width {
     width: 100%;
     padding: 0.8rem;
     border: 1px solid #ccc;
     border-radius: 8px;
     font-size: 1rem;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+.form-group textarea {
+    resize: vertical;
 }
 
 .modal-actions {
