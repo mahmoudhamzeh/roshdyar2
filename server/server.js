@@ -1437,15 +1437,12 @@ app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
     res.status(404).json({ message: 'پیام یافت نشد' });
 });
 
-<<<<<<< HEAD
-app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));
-=======
 async function startServer() {
     try {
         connect();
         const state = loadState();
         applyState(state);
-        app.listen(port, () => console.log(`Roshdyar server is listening on port ${port}`));
+        app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));
     } catch (err) {
         console.error('Failed to start server with SQLite:', err);
         process.exit(1);
@@ -1453,4 +1450,3 @@ async function startServer() {
 }
 
 startServer();
->>>>>>> origin/cursor/add-mongodb-database-31a9
