@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useHistory } from 'react-router-dom';
+import { Link, useHistory } from 'react-router-dom';
 import UserInfo from './UserInfo';
 import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
@@ -34,6 +34,7 @@ const ProfilePage = () => {
     const tabs = [
         { id: 'userInfo', label: 'اطلاعات' },
         { id: 'messages', label: 'پیام‌ها' },
+        { id: 'orders', label: 'سفارش‌ها', href: '/orders' },
         { id: 'changePassword', label: 'رمز عبور' }
     ];
 
@@ -63,16 +64,26 @@ const ProfilePage = () => {
             <div className="profile-layout">
                 <aside className="profile-sidebar" role="tablist">
                     {tabs.map((tab) => (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={activeTab === tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={activeTab === tab.id ? 'active' : ''}
-                        >
-                            {tab.label}
-                        </button>
+                        tab.href ? (
+                            <Link
+                                key={tab.id}
+                                to={tab.href}
+                                className="profile-sidebar-link"
+                            >
+                                {tab.label}
+                            </Link>
+                        ) : (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={activeTab === tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={activeTab === tab.id ? 'active' : ''}
+                            >
+                                {tab.label}
+                            </button>
+                        )
                     ))}
                     <button type="button" onClick={handleGenerateReminders} className="generate-reminders-btn">
                         تولید یادآورها
