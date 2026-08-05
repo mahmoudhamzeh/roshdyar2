@@ -21,6 +21,7 @@ import ShopPage from './components/ShopPage';
 import ProductDetailPage from './components/ProductDetailPage';
 import CartPage from './components/CartPage';
 import OrdersPage from './components/OrdersPage';
+import AgeGuidancePage from './components/AgeGuidancePage';
 import MobileBottomNav from './components/MobileBottomNav';
 import './App.css';
 
@@ -50,6 +51,7 @@ const App = () => {
                 <PrivateRoute path="/lab-tests/:childId" component={LabTestsPage} />
                 <PrivateRoute path="/vaccination-status/:childId" component={VaccinationStatusPage} />
                 <PrivateRoute path="/vaccination/:childId" component={VaccinationPage} />
+                <PrivateRoute path="/age-guidance/:childId" component={AgeGuidancePage} />
                 <PrivateRoute path="/profile" component={ProfilePage} />
                 <PrivateRoute exact path="/shop" component={ShopPage} />
                 <PrivateRoute path="/shop/:id" component={ProductDetailPage} />

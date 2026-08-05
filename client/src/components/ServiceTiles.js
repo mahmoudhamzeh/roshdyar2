@@ -11,12 +11,14 @@ import {
     faFlask,
     faStore,
     faGamepad,
+    faSeedling,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
     { name: 'کودکان من', icon: faChild, link: '/my-children', id: 'my-children', tone: 'teal' },
+    { name: 'راهنمای سنی', icon: faSeedling, link: '#', id: 'age-guidance', tone: 'mint' },
     { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
     { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
     { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal', soon: true },
@@ -98,7 +100,10 @@ const ServiceTiles = () => {
                 </div>
                 <div className="tiles-container">
                     {services.map((service, index) => {
-                        const requiresChild = service.id === 'growth-chart' || service.id === 'vaccination';
+                        const requiresChild =
+                            service.id === 'growth-chart' ||
+                            service.id === 'vaccination' ||
+                            service.id === 'age-guidance';
                         const style = { animationDelay: `${0.05 * index}s` };
                         if (service.soon) {
                             return (
