@@ -43,7 +43,16 @@ const ProfilePage = () => {
             case 'userInfo':
                 return <UserInfo />;
             case 'messages':
-                return <MessagesPage />;
+                return (
+                    <div className="profile-messages-wrap">
+                        <div className="profile-messages-actions">
+                            <button type="button" onClick={handleGenerateReminders} className="generate-reminders-btn">
+                                تولید یادآورها
+                            </button>
+                        </div>
+                        <MessagesPage />
+                    </div>
+                );
             case 'changePassword':
                 return <ChangePassword />;
             default:
@@ -54,45 +63,38 @@ const ProfilePage = () => {
     return (
         <div className="profile-page">
             <MainNavbar />
-            <nav className="page-nav-final">
-                <button type="button" onClick={() => history.push('/dashboard')} className="back-btn">
-                    &rarr; <span>خانه</span>
+            <header className="profile-topbar">
+                <div className="profile-topbar-text">
+                    <p className="profile-topbar-kicker">حساب کاربری</p>
+                    <h1>پروفایل</h1>
+                </div>
+                <button type="button" onClick={handleLogout} className="profile-logout-btn">
+                    خروج
                 </button>
-                <h1>پروفایل</h1>
-                <button type="button" onClick={handleLogout} className="logout-btn">خروج</button>
+            </header>
+
+            <nav className="profile-tabs" aria-label="بخش‌های پروفایل">
+                {tabs.map((tab) => (
+                    tab.href ? (
+                        <Link key={tab.id} to={tab.href} className="profile-tab">
+                            {tab.label}
+                        </Link>
+                    ) : (
+                        <button
+                            key={tab.id}
+                            type="button"
+                            className={`profile-tab${activeTab === tab.id ? ' is-active' : ''}`}
+                            onClick={() => setActiveTab(tab.id)}
+                        >
+                            {tab.label}
+                        </button>
+                    )
+                ))}
             </nav>
-            <div className="profile-layout">
-                <aside className="profile-sidebar" role="tablist">
-                    {tabs.map((tab) => (
-                        tab.href ? (
-                            <Link
-                                key={tab.id}
-                                to={tab.href}
-                                className="profile-sidebar-link"
-                            >
-                                {tab.label}
-                            </Link>
-                        ) : (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                role="tab"
-                                aria-selected={activeTab === tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={activeTab === tab.id ? 'active' : ''}
-                            >
-                                {tab.label}
-                            </button>
-                        )
-                    ))}
-                    <button type="button" onClick={handleGenerateReminders} className="generate-reminders-btn">
-                        تولید یادآورها
-                    </button>
-                </aside>
-                <main className="profile-content">
-                    {renderContent()}
-                </main>
-            </div>
+
+            <main className="profile-content">
+                {renderContent()}
+            </main>
         </div>
     );
 };
