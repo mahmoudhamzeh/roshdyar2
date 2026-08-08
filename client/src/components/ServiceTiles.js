@@ -44,7 +44,7 @@ const ServiceTiles = () => {
 
             if (!userId) {
                 alert('لطفا برای مشاهده این بخش ابتدا وارد شوید.');
-                history.push('/login');
+                history.push('/register');
                 return;
             }
 

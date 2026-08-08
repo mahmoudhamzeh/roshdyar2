@@ -14,7 +14,7 @@ const ProfilePage = () => {
 
     const handleLogout = () => {
         localStorage.removeItem('loggedInUser');
-        history.push('/login');
+        history.push('/news');
     };
 
     const handleGenerateReminders = async () => {

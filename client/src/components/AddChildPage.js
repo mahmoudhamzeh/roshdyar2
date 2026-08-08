@@ -138,7 +138,7 @@ const AddChildPage = () => {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
             if (!loggedInUser || !loggedInUser.id) {
                 alert('لطفا برای افزودن کودک ابتدا وارد شوید.');
-                history.push('/login');
+                history.push('/register');
                 return;
             }
 

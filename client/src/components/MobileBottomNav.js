@@ -28,7 +28,9 @@ const MobileBottomNav = () => {
     useEffect(() => {
         const hide =
             location.pathname.startsWith('/login') ||
-            location.pathname.startsWith('/admin');
+            location.pathname.startsWith('/register') ||
+            location.pathname.startsWith('/admin') ||
+            location.pathname.startsWith('/news');
         if (hide) {
             document.body.classList.remove('has-mobile-bottom-nav');
             return undefined;
@@ -37,7 +39,12 @@ const MobileBottomNav = () => {
         return () => document.body.classList.remove('has-mobile-bottom-nav');
     }, [location.pathname]);
 
-    if (location.pathname.startsWith('/login') || location.pathname.startsWith('/admin')) {
+    if (
+        location.pathname.startsWith('/login') ||
+        location.pathname.startsWith('/register') ||
+        location.pathname.startsWith('/admin') ||
+        location.pathname.startsWith('/news')
+    ) {
         return null;
     }
 

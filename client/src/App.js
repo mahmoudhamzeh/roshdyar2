@@ -27,17 +27,6 @@ import MobileBottomNav from './components/MobileBottomNav';
 import './App.css';
 
 const App = () => {
-    const isLoggedIn = () => {
-        try {
-            const loggedInUser = localStorage.getItem('loggedInUser');
-            if (!loggedInUser) return false;
-            const user = JSON.parse(loggedInUser);
-            return !!(user && user.id);
-        } catch (error) {
-            return false;
-        }
-    };
-
     return (
         <Router>
             <Switch>
@@ -63,8 +52,9 @@ const App = () => {
                 <Route path="/news/:id" component={ArticleDetailPage} />
                 <AdminRoute path="/admin" component={AdminPage} />
 
+                {/* Public home = content magazine; auth happens when user takes an action */}
                 <Route path="/">
-                    <Redirect to={isLoggedIn() ? "/dashboard" : "/login"} />
+                    <Redirect to="/news" />
                 </Route>
             </Switch>
             <MobileBottomNav />

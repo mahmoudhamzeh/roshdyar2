@@ -9,6 +9,17 @@ const NewsHeader = () => {
         setIsMenuOpen(!isMenuOpen);
     };
 
+    const isLoggedIn = (() => {
+        try {
+            const raw = localStorage.getItem('loggedInUser');
+            if (!raw) return false;
+            const user = JSON.parse(raw);
+            return !!(user && user.id);
+        } catch {
+            return false;
+        }
+    })();
+
     return (
         <>
             <nav className="news-navbar">
@@ -26,10 +37,29 @@ const NewsHeader = () => {
                         <Link to={{ pathname: "/news", state: { category: 'تغذیه' } }} onClick={() => setIsMenuOpen(false)}>تغذیه</Link>
                         <Link to={{ pathname: "/news", state: { category: 'مادر و کودک' } }} onClick={() => setIsMenuOpen(false)}>مادر و کودک</Link>
                         <Link to={{ pathname: "/news", state: { category: 'تربیتی' } }} onClick={() => setIsMenuOpen(false)}>تربیتی</Link>
+                        {isLoggedIn ? (
+                            <Link to="/dashboard" className="news-login-cta" onClick={() => setIsMenuOpen(false)}>
+                                داشبورد
+                            </Link>
+                        ) : (
+                            <Link to="/register" className="news-login-cta" onClick={() => setIsMenuOpen(false)}>
+                                ورود / ثبت‌نام
+                            </Link>
+                        )}
                     </div>
                 </div>
 
                 <div className="navbar-right">
+                    {!isLoggedIn && (
+                        <Link to="/register" className="news-login-cta news-login-cta--desktop">
+                            ورود
+                        </Link>
+                    )}
+                    {isLoggedIn && (
+                        <Link to="/dashboard" className="news-login-cta news-login-cta--desktop">
+                            داشبورد
+                        </Link>
+                    )}
                     <button
                         className="navbar-toggler"
                         type="button"

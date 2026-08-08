@@ -156,6 +156,58 @@ function findUserByPhone(phone) {
     );
 }
 
+/** Admin accounts accept both "Amin" and "admin" as login aliases. */
+const ADMIN_LOGIN_ALIASES = new Set(['amin', 'admin']);
+
+function identitiesMatch(user, login) {
+    const loginRaw = String(login || '').trim();
+    if (!loginRaw) return false;
+
+    const loginLower = loginRaw.toLowerCase();
+    const usernameLower = String(user.username || '').toLowerCase();
+    const emailLower = String(user.email || '').toLowerCase();
+    const normalizedLogin = normalizePhone(loginRaw);
+
+    const adminAliasMatch =
+        user.isAdmin &&
+        ADMIN_LOGIN_ALIASES.has(loginLower) &&
+        ADMIN_LOGIN_ALIASES.has(usernameLower);
+
+    return (
+        usernameLower === loginLower ||
+        emailLower === loginLower ||
+        adminAliasMatch ||
+        (normalizedLogin &&
+            (normalizePhone(user.mobile) === normalizedLogin ||
+                normalizePhone(user.username) === normalizedLogin))
+    );
+}
+
+function ensureDefaultAdmin() {
+    const existingAdmin = Object.values(users).find((u) => u.isAdmin);
+    if (existingAdmin) {
+        // Normalize legacy "admin" username to "Amin" (login still accepts both).
+        if (String(existingAdmin.username || '').toLowerCase() === 'admin') {
+            existingAdmin.username = 'Amin';
+            users[String(existingAdmin.id)] = existingAdmin;
+            saveData();
+            console.log('Renamed legacy admin username to Amin');
+        }
+        return;
+    }
+
+    const newId = userIdCounter++;
+    users[String(newId)] = {
+        id: newId,
+        username: 'Amin',
+        email: 'admin@example.com',
+        password: 'admin',
+        isAdmin: true
+    };
+    saveData();
+    console.log('Created default admin user: Amin / admin');
+}
+
 function publicUser(user) {
     const { password, ...userToSend } = user;
     return userToSend;
@@ -277,15 +329,12 @@ async function deliverOtp(phone, code) {
 // --- Auth Routes ---
 app.post('/api/login', (req, res) => {
     const { login, password } = req.body;
-    const normalizedLogin = normalizePhone(login);
-    const user = Object.values(users).find((u) => {
-        const matchesIdentity =
-            u.username === login ||
-            u.email === login ||
-            normalizePhone(u.mobile) === normalizedLogin ||
-            normalizePhone(u.username) === normalizedLogin;
-        return matchesIdentity && u.password === password;
-    });
+    if (!login || !password) {
+        return res.status(400).json({ message: 'نام کاربری و رمز عبور الزامی است' });
+    }
+    const user = Object.values(users).find(
+        (u) => identitiesMatch(u, login) && u.password != null && u.password === password
+    );
     if (user) {
         res.status(200).json({ message: 'ورود موفقیت‌آمیز', user: publicUser(user) });
     } else {
@@ -313,10 +362,7 @@ app.post('/api/auth/send-otp', async (req, res) => {
         return res.status(400).json({ message: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲xxxxxxx' });
     }
 
-    if (findUserByPhone(phone)) {
-        return res.status(409).json({ message: 'این شماره قبلاً ثبت شده است. وارد شوید.' });
-    }
-
+    // OTP is used for both login and registration — do not block existing phones.
     const existing = otpStore.get(phone);
     const now = Date.now();
     if (existing && now - existing.sentAt < OTP_RESEND_COOLDOWN_MS) {
@@ -1721,6 +1767,7 @@ async function startServer() {
         connect();
         const state = loadState();
         applyState(state);
+        ensureDefaultAdmin();
         app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));
     } catch (err) {
         console.error('Failed to start server with SQLite:', err);
