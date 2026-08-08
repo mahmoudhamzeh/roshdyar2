@@ -6,14 +6,20 @@ import ServiceTiles from './ServiceTiles';
 import ContentRow from './ContentRow';
 import './DashboardPage.css';
 
-const fallbackVideos = Array.from({ length: 8 }, (_, i) => ({
+const fallbackVideos = Array.from({ length: 4 }, (_, i) => ({
     id: `fallback-${i}`,
     title: `ویدیو آموزشی ${i + 1}`,
     summary: 'ویدیوهای آموزشی و تربیتی برای والدین',
-    image: `https://placehold.co/320x180/0F766E/FFFFFF?text=Video+${i + 1}`,
+    image: null,
     link: '/news#educational-videos',
     isVideo: true,
 }));
+
+const youtubeThumb = (url) => {
+    if (!url) return null;
+    const match = String(url).match(/(?:youtu\.be\/|v=|embed\/)([A-Za-z0-9_-]{6,})/);
+    return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
+};
 
 const DashboardPage = () => {
     const [banners, setBanners] = useState([]);
@@ -48,7 +54,7 @@ const DashboardPage = () => {
                         id: article.id,
                         title: article.title,
                         summary: article.summary,
-                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : `https://placehold.co/320x180/0F766E/FFFFFF?text=Article`,
+                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : null,
                         link: `/news/${article.id}`
                     }));
                     setArticles(formattedArticles);
@@ -62,13 +68,13 @@ const DashboardPage = () => {
                 if (videosResponse.ok) {
                     const data = await videosResponse.json();
                     if (Array.isArray(data) && data.length > 0) {
-                        const formattedVideos = data.map((video, index) => ({
+                        const formattedVideos = data.map((video) => ({
                             id: video.id,
                             title: video.title,
                             summary: video.summary,
                             image: video.thumbnailUrl
                                 ? `http://localhost:5000${video.thumbnailUrl}`
-                                : `https://placehold.co/480x270/0F766E/FFFFFF?text=Video+${index + 1}`,
+                                : youtubeThumb(video.url),
                             externalUrl: video.url,
                             isVideo: true,
                         }));

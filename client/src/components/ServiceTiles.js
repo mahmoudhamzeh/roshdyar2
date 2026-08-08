@@ -11,19 +11,21 @@ import {
     faFlask,
     faStore,
     faGamepad,
+    faSeedling,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
     { name: 'کودکان من', icon: faChild, link: '/my-children', id: 'my-children', tone: 'teal' },
+    { name: 'راهنمای سنی', icon: faSeedling, link: '#', id: 'age-guidance', tone: 'mint' },
     { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
     { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
-    { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal' },
-    { name: 'مشاوره روانشناسی', icon: faBrain, link: '#', id: 'psychology', tone: 'amber' },
-    { name: 'آزمایش در محل', icon: faFlask, link: '#', id: 'lab-test', tone: 'mint' },
+    { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal', soon: true },
+    { name: 'مشاوره روانشناسی', icon: faBrain, link: '#', id: 'psychology', tone: 'amber', soon: true },
+    { name: 'آزمایش در محل', icon: faFlask, link: '#', id: 'lab-test', tone: 'mint', soon: true },
     { name: 'فروشگاه', icon: faStore, link: '/shop', id: 'store', tone: 'teal' },
-    { name: 'سرگرمی', icon: faGamepad, link: '#', id: 'entertainment', tone: 'amber' },
+    { name: 'سرگرمی', icon: faGamepad, link: '#', id: 'entertainment', tone: 'amber', soon: true },
 ];
 
 Modal.setAppElement('#root');
@@ -80,11 +82,12 @@ const ServiceTiles = () => {
     };
 
     const renderTile = (service) => (
-        <div className={`tile tile-${service.tone}`}>
+        <div className={`tile tile-${service.tone}${service.soon ? ' tile-soon' : ''}`}>
             <div className="tile-icon" aria-hidden="true">
                 <FontAwesomeIcon icon={service.icon} />
             </div>
             <div className="tile-name">{service.name}</div>
+            {service.soon && <span className="tile-soon-badge">به‌زودی</span>}
         </div>
     );
 
@@ -92,13 +95,29 @@ const ServiceTiles = () => {
         <>
             <section className="tiles-section">
                 <div className="tiles-header animate-fade-up">
-                    <h2>خدمات رشدیار</h2>
+                    <h2>خدمات تات کیدز</h2>
                     <p>از پیگیری رشد تا مراقبت روزانه — همه در یک نگاه</p>
                 </div>
                 <div className="tiles-container">
                     {services.map((service, index) => {
-                        const requiresChild = service.id === 'growth-chart' || service.id === 'vaccination';
+                        const requiresChild =
+                            service.id === 'growth-chart' ||
+                            service.id === 'vaccination' ||
+                            service.id === 'age-guidance';
                         const style = { animationDelay: `${0.05 * index}s` };
+                        if (service.soon) {
+                            return (
+                                <button
+                                    type="button"
+                                    key={service.id}
+                                    className="tile-link tile-button animate-fade-up"
+                                    style={style}
+                                    onClick={() => alert(`«${service.name}» به‌زودی فعال می‌شود.`)}
+                                >
+                                    {renderTile(service)}
+                                </button>
+                            );
+                        }
                         if (requiresChild) {
                             return (
                                 <Link

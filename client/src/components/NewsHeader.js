@@ -14,7 +14,7 @@ const NewsHeader = () => {
             <nav className="news-navbar">
                 <div className="navbar-left">
                     <div className="navbar-brand">
-                        <Link to="/news">مجله سلامت رشدیار</Link>
+                        <Link to="/news">مجله سلامت تات کیدز</Link>
                     </div>
                 </div>
 

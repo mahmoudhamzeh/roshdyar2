@@ -3,53 +3,119 @@
   font-family: var(--font-body);
   background: transparent;
   min-height: 100vh;
+  padding-bottom: 0.5rem;
 }
 
-.profile-layout {
+.profile-topbar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   max-width: 1200px;
-  margin: 1.5rem auto;
-  gap: 1.25rem;
-  padding: 0 1rem;
+  margin: 0 auto;
+  padding: 1rem clamp(0.85rem, 3vw, 1.5rem) 0.35rem;
 }
 
-.profile-sidebar {
-  flex: 0 0 250px;
-  background-color: var(--surface);
-  border-radius: var(--radius-md);
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  align-self: flex-start;
+.profile-topbar-kicker {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
 }
 
-.profile-sidebar button {
-  display: block;
-  width: 100%;
-  padding: 0.95rem 1rem;
-  text-align: right;
-  background: none;
+.profile-topbar h1 {
+  margin: 0.1rem 0 0;
+  font-size: clamp(1.25rem, 3vw, 1.6rem);
+}
+
+.profile-logout-btn {
   border: none;
-  border-radius: 10px;
-  font-size: 0.98rem;
-  font-family: var(--font-body);
-  cursor: pointer;
-  color: var(--ink);
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.profile-sidebar button:hover {
-  background-color: var(--brand-wash);
-}
-
-.profile-sidebar button.active {
-  background-color: var(--brand-soft);
-  color: var(--brand-deep);
+  background: var(--danger-soft);
+  color: var(--danger);
   font-weight: 700;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  min-height: var(--tap-min);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.profile-tabs {
+  display: flex;
+  gap: 0.5rem;
+  max-width: 1200px;
+  margin: 0.75rem auto 0;
+  padding: 0 clamp(0.85rem, 3vw, 1.5rem);
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.profile-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.profile-tab {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  min-height: var(--tap-min);
+  font-size: 0.92rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.profile-tab.is-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.profile-tab:hover {
+  border-color: var(--brand-mid);
+  color: var(--brand-deep);
+}
+
+.profile-tab.is-active:hover {
+  color: #fff;
 }
 
 .profile-content {
-  flex-grow: 1;
+  max-width: 1200px;
+  margin: 1rem auto 0;
+  padding: 0 clamp(0.85rem, 3vw, 1.5rem) 1.5rem;
+}
+
+.profile-messages-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.profile-messages-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.generate-reminders-btn {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-family: var(--font-body);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  min-height: var(--tap-min);
+  cursor: pointer;
 }
 
 .card {
@@ -77,20 +143,29 @@
   margin: 0;
 }
 
-.edit-btn {
+.edit-btn,
+.btn-save {
   background-color: var(--brand);
   color: white;
   border: none;
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   border-radius: 8px;
   cursor: pointer;
   font-weight: 600;
   font-family: var(--font-body);
+  min-height: var(--tap-min);
   transition: background-color 0.2s ease;
 }
 
-.edit-btn:hover {
+.edit-btn:hover,
+.btn-save:hover {
   background-color: var(--brand-deep);
+}
+
+.btn-save {
+  margin-top: 1rem;
+  width: 100%;
+  max-width: 220px;
 }
 
 .info-grid {
@@ -103,6 +178,7 @@
   display: flex;
   flex-direction: column;
   padding: 0.5rem 0;
+  min-width: 0;
 }
 
 .info-label {
@@ -120,15 +196,17 @@
 .info-value {
   color: var(--ink);
   font-size: 1.02rem;
+  word-break: break-word;
 }
 
 .info-input {
   width: 100%;
-  max-width: 280px;
-  padding: 0.65rem 0.85rem;
+  max-width: 100%;
+  padding: 0.75rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   font-family: var(--font-body);
+  font-size: 1rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -158,6 +236,7 @@
   border-radius: 8px;
   box-sizing: border-box;
   font-family: var(--font-body);
+  font-size: 1rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -184,34 +263,102 @@
   margin-bottom: 1rem;
 }
 
-.generate-reminders-btn {
-  margin-top: 15px;
-  background-color: var(--accent) !important;
-  color: #fff !important;
-  font-weight: 700;
+@media (min-width: 900px) {
+  .profile-page {
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    column-gap: 1.25rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem 2rem;
+  }
+
+  .profile-page > .navbar,
+  .profile-page > .menu-backdrop {
+    grid-column: 1 / -1;
+  }
+
+  .profile-topbar {
+    grid-column: 1 / -1;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .profile-tabs {
+    flex-direction: column;
+    overflow: visible;
+    margin: 0;
+    padding: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    align-self: start;
+    position: sticky;
+    top: 5.5rem;
+  }
+
+  .profile-tab {
+    width: 100%;
+    border-radius: 10px;
+    justify-content: flex-start;
+  }
+
+  .profile-content {
+    margin: 0;
+    padding: 0;
+  }
 }
 
-@media (max-width: 768px) {
-  .profile-layout {
-    flex-direction: column;
-    margin: 0.75rem auto;
-    gap: 0.75rem;
+@media (max-width: 899px) {
+  .profile-topbar {
+    padding-top: 0.85rem;
   }
 
-  .profile-sidebar {
-    flex-basis: auto;
-    display: flex;
+  .profile-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 850;
+    margin-top: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    background: rgba(240, 253, 250, 0.94);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .profile-content {
+    margin-top: 0.85rem;
+    padding-bottom: 1.25rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .card-header {
     flex-wrap: wrap;
-    padding: 0.4rem;
+    gap: 0.65rem;
   }
 
-  .profile-sidebar button {
-    flex-grow: 1;
-    text-align: center;
+  .card-header h2 {
+    font-size: 1.1rem;
   }
 
   .info-grid {
     grid-template-columns: 1fr;
-    gap: 0.75rem;
+    gap: 0.65rem;
+  }
+
+  .btn-save {
+    max-width: none;
+  }
+
+  .generate-reminders-btn {
+    width: 100%;
+  }
+
+  .profile-messages-wrap .messages-page .card,
+  .profile-content .card {
+    overflow: hidden;
   }
 }

@@ -44,10 +44,19 @@
   margin-bottom: 1.5rem;
 }
 
-.login-brand-mark svg {
-  width: 48px;
-  height: 48px;
-  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+.login-brand-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  animation: soft-pulse 2.8s ease-in-out infinite;
+}
+
+.brand-name-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
 
 .login-brand-mark .brand-name {
@@ -59,6 +68,15 @@
   margin: 0;
   color: #fff;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.25);
+}
+
+.login-brand-mark .brand-name-en {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .login-hero h1 {
@@ -205,10 +223,6 @@
   background: var(--success-soft);
 }
 
-.login-mobile-brand {
-  display: none;
-}
-
 @media (max-width: 900px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -237,10 +251,6 @@
     padding: 1.75rem 1.25rem 2.5rem;
     align-items: flex-start;
   }
-
-  .login-mobile-brand {
-    display: none;
-  }
 }
 
 @media (max-width: 480px) {
@@ -248,7 +258,7 @@
     min-height: 32vh;
   }
 
-  .login-brand-mark svg {
+  .login-brand-mark .login-brand-logo {
     width: 40px;
     height: 40px;
   }

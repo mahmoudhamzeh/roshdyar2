@@ -1,112 +1,393 @@
 .health-analysis-page {
-    padding: 1rem;
-    background-color: #f4f7f9; /* Consistent Theme Background */
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: transparent;
+  padding-bottom: 1.5rem;
 }
 
-.analysis-content {
-    /* This class is not used, but keeping it in case it's added back */
+.ha-loading,
+.ha-empty {
+  text-align: center;
+  color: var(--ink-muted);
+  padding: 3rem 1rem;
 }
 
-.analysis-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
+.ha-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem 1rem;
+  align-items: center;
+  max-width: 1100px;
+  margin: 0.75rem auto 1.25rem;
+  padding: 1rem;
+  background: linear-gradient(145deg, #0f766e 0%, #115e59 60%, #0b3d3a 100%);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
 }
 
-.analysis-card {
-    background: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-    transition: transform 0.2s;
+.ha-hero-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 1.35rem;
 }
 
-.analysis-card:hover {
-    transform: translateY(-5px);
+.ha-hero-kicker {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 0.85rem;
 }
 
-.analysis-card h3 {
-    margin-top: 0;
-    color: #333;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+.ha-hero-text h2 {
+  margin: 0.15rem 0 0.35rem;
+  color: #fff;
+  font-size: clamp(1.2rem, 3.5vw, 1.55rem);
 }
 
-.full-width-card {
-    grid-column: 1 / -1;
+.ha-hero-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.92rem;
 }
 
-.tags-container {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
+.ha-hero-meta span {
+  opacity: 0.55;
 }
 
-.tag {
-    background-color: #e9ecef;
-    padding: 5px 10px;
-    border-radius: 15px;
-    font-size: 0.9em;
-    color: #495057;
+.ha-hero-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.allergy-tag { background-color: #f8d7da; color: #721c24; }
-.illness-tag { background-color: #d1ecf1; color: #0c5460; }
-
-.visits-list, .documents-list {
-    list-style: none;
-    padding: 0;
+.ha-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  padding: 0.55rem 0.95rem;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--brand-deep);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.92rem;
 }
 
-.visits-list li, .documents-list li {
-    padding: 10px;
-    border-bottom: 1px solid #eee;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.ha-link-btn.is-soft {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
-.visits-list li:last-child, .documents-list li:last-child {
-    border-bottom: none;
+.ha-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.page-nav-final {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
+.ha-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
 }
 
-.back-btn {
-    background: none;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 1em; /* Adjusted for consistency */
-    color: #007bff; /* Primary Blue */
+.ha-section-head {
+  margin-bottom: 0.85rem;
 }
 
-.nav-placeholder {
-    width: 80px; /* to balance the back button */
+.ha-section-head h3,
+.ha-panel h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.05rem;
+  color: var(--ink);
 }
 
-.trend-stable {
-    color: #666;
-    font-size: 0.9em;
+.ha-metric-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
 }
 
-.trend-improving {
-    color: #4caf50;
-    font-size: 0.9em;
+.ha-metric-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--brand-wash);
+  padding: 0.9rem 1rem;
 }
 
-.trend-declining {
-    color: #f44336;
-    font-size: 0.9em;
+.ha-metric-label {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.ha-metric-value {
+  margin: 0.35rem 0 0.7rem;
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--ink);
+  font-family: var(--font-display);
+  line-height: 1.1;
+}
+
+.ha-metric-value span {
+  margin-right: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+
+.ha-metric-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.ha-status,
+.ha-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ha-status.is-ok {
+  background: var(--success-soft);
+  color: #065f46;
+}
+
+.ha-status.is-warn {
+  background: var(--warning-soft);
+  color: #92400e;
+}
+
+.ha-status.is-muted {
+  background: #eef2f1;
+  color: var(--ink-muted);
+}
+
+.ha-trend.is-up {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.ha-trend.is-down {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.ha-trend.is-stable {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.ha-overview-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.ha-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+}
+
+.ha-panel h3 {
+  margin-bottom: 0.85rem;
+}
+
+.ha-facts {
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.ha-facts > div {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.ha-facts > div:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ha-facts dt {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.ha-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.ha-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ha-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.ha-tag.is-allergy {
+  background: var(--danger-soft);
+  color: #991b1b;
+}
+
+.ha-tag.is-illness {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.ha-note,
+.ha-empty-text {
+  margin: 0.75rem 0 0;
+  color: var(--ink-muted);
+  line-height: 1.7;
+}
+
+.ha-timeline,
+.ha-docs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ha-timeline li,
+.ha-docs li {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 0.85rem 0.95rem;
+}
+
+.ha-timeline-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.35rem;
+}
+
+.ha-timeline-meta strong {
+  color: var(--ink);
+}
+
+.ha-timeline p {
+  margin: 0;
+  color: var(--ink-muted);
+  line-height: 1.65;
+}
+
+.ha-docs li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ha-docs a {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--brand-deep);
+  word-break: break-word;
+}
+
+.ha-date {
+  color: var(--ink-faint);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.ha-vax-wrap {
+  overflow-x: auto;
+}
+
+@media (min-width: 700px) {
+  .ha-hero {
+    grid-template-columns: auto 1fr auto;
+    padding: 1.25rem 1.35rem;
+  }
+
+  .ha-hero-actions {
+    grid-column: auto;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ha-metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ha-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ha-main {
+    padding: 0 1rem 1.5rem;
+    gap: 1.15rem;
+  }
+}
+
+@media (max-width: 699px) {
+  .page-nav-final .back-btn span {
+    display: none;
+  }
+
+  .ha-hero {
+    margin: 0.5rem 0.75rem 1rem;
+  }
+
+  .ha-docs li {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }

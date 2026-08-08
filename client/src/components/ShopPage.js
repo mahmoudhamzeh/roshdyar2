@@ -61,7 +61,7 @@ const ShopPage = () => {
             <main className="shop-main">
                 <header className="shop-hero animate-fade-up">
                     <div className="shop-hero-copy">
-                        <p className="shop-brand">رشدیار شاپ</p>
+                        <p className="shop-brand">فروشگاه تات کیدز</p>
                         <h1>فروشگاه مادر و کودک</h1>
                         <p className="shop-hero-text">
                             محصولات منتخب تغذیه، بازی، بهداشت و آموزش برای رشد سالم کودک شما
