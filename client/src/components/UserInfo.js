@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import CitySelector from './CitySelector';
 
 const UserInfo = () => {
+    const location = useLocation();
+    const wantsComplete = new URLSearchParams(location.search).get('complete') === '1';
     const [user, setUser] = useState(null);
-    const [isEditing, setIsEditing] = useState(false);
+    const [isEditing, setIsEditing] = useState(wantsComplete);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
@@ -52,6 +55,7 @@ const UserInfo = () => {
             }
             setSuccess('اطلاعات با موفقیت ذخیره شد.');
             setUser(result.user);
+            localStorage.setItem('loggedInUser', JSON.stringify(result.user));
             setIsEditing(false);
         } catch (err) {
             console.error('[User Submit] Error:', err);
@@ -78,7 +82,7 @@ const UserInfo = () => {
     return (
         <div className="card">
             <div className="card-header">
-                <h2>اطلاعات کاربر</h2>
+                <h2>{wantsComplete ? 'تکمیل پروفایل کاربری' : 'اطلاعات کاربر'}</h2>
                 <button onClick={() => setIsEditing(!isEditing)} className="edit-btn">{isEditing ? 'لغو' : 'ویرایش'}</button>
             </div>
             {success && <p className="success-message">{success}</p>}

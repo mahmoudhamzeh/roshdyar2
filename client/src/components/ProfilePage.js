@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useHistory } from 'react-router-dom';
+import { Link, useHistory, useLocation } from 'react-router-dom';
 import UserInfo from './UserInfo';
 import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
@@ -8,6 +8,8 @@ import './ProfilePage.css';
 
 const ProfilePage = () => {
     const history = useHistory();
+    const location = useLocation();
+    const needsComplete = new URLSearchParams(location.search).get('complete') === '1';
     const [activeTab, setActiveTab] = useState('userInfo');
 
     const handleLogout = () => {
@@ -72,6 +74,12 @@ const ProfilePage = () => {
                     خروج
                 </button>
             </header>
+
+            {needsComplete && (
+                <div className="profile-complete-banner" role="status">
+                    لطفاً اطلاعات کاربری خود را تکمیل کنید تا تجربه بهتری داشته باشید.
+                </div>
+            )}
 
             <nav className="profile-tabs" aria-label="بخش‌های پروفایل">
                 {tabs.map((tab) => (

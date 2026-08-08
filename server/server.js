@@ -121,13 +121,75 @@ function normalizeChildName(childData) {
     return childData;
 }
 
+// --- Auth helpers (OTP registration) ---
+const OTP_TTL_MS = 5 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+/** @type {Map<string, { code: string, expiresAt: number, sentAt: number, attempts: number }>} */
+const otpStore = new Map();
+
+function toEnglishDigits(value) {
+    return String(value || '')
+        .replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d))
+        .replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+}
+
+function normalizePhone(phone) {
+    let p = toEnglishDigits(phone).replace(/[\s\-_().]/g, '');
+    if (p.startsWith('+98')) p = `0${p.slice(3)}`;
+    else if (p.startsWith('0098')) p = `0${p.slice(4)}`;
+    else if (p.startsWith('98') && p.length === 12) p = `0${p.slice(2)}`;
+    return p;
+}
+
+function isValidIranMobile(phone) {
+    return /^09\d{9}$/.test(phone);
+}
+
+function generateOtpCode() {
+    return String(Math.floor(10000 + Math.random() * 90000));
+}
+
+function findUserByPhone(phone) {
+    return Object.values(users).find(
+        (u) => normalizePhone(u.mobile) === phone || normalizePhone(u.username) === phone
+    );
+}
+
+function publicUser(user) {
+    const { password, ...userToSend } = user;
+    return userToSend;
+}
+
+async function deliverOtp(phone, code) {
+    // Hook for real SMS providers (e.g. Kavenegar). Until configured, log for local/dev use.
+    const apiKey = process.env.SMS_API_KEY;
+    if (apiKey && process.env.SMS_PROVIDER === 'console') {
+        console.log(`[SMS] OTP for ${phone}: ${code}`);
+        return { delivered: true, channel: 'console' };
+    }
+    if (apiKey) {
+        console.log(`[SMS] Provider configured but not implemented. OTP for ${phone}: ${code}`);
+        return { delivered: true, channel: 'log' };
+    }
+    console.log(`[OTP] کد تأیید برای ${phone}: ${code} (معتبر به مدت ۵ دقیقه)`);
+    return { delivered: true, channel: 'log' };
+}
+
 // --- Auth Routes ---
 app.post('/api/login', (req, res) => {
     const { login, password } = req.body;
-    const user = Object.values(users).find(u => (u.username === login || u.email === login) && u.password === password);
+    const normalizedLogin = normalizePhone(login);
+    const user = Object.values(users).find((u) => {
+        const matchesIdentity =
+            u.username === login ||
+            u.email === login ||
+            normalizePhone(u.mobile) === normalizedLogin ||
+            normalizePhone(u.username) === normalizedLogin;
+        return matchesIdentity && u.password === password;
+    });
     if (user) {
-        const { password, ...userToSend } = user;
-        res.status(200).json({ message: 'ورود موفقیت‌آمیز', user: userToSend });
+        res.status(200).json({ message: 'ورود موفقیت‌آمیز', user: publicUser(user) });
     } else {
         res.status(401).json({ message: 'نام کاربری یا رمز عبور نامعتبر است' });
     }
@@ -145,6 +207,122 @@ app.post('/api/signup', (req, res) => {
     users[String(newId)] = newUser;
     saveData();
     res.status(201).json({ message: 'ثبت‌نام با موفقیت انجام شد. اکنون می‌توانید وارد شوید.' });
+});
+
+app.post('/api/auth/send-otp', async (req, res) => {
+    const phone = normalizePhone(req.body.phone || req.body.mobile);
+    if (!isValidIranMobile(phone)) {
+        return res.status(400).json({ message: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲xxxxxxx' });
+    }
+
+    if (findUserByPhone(phone)) {
+        return res.status(409).json({ message: 'این شماره قبلاً ثبت شده است. وارد شوید.' });
+    }
+
+    const existing = otpStore.get(phone);
+    const now = Date.now();
+    if (existing && now - existing.sentAt < OTP_RESEND_COOLDOWN_MS) {
+        const retryAfterSec = Math.ceil((OTP_RESEND_COOLDOWN_MS - (now - existing.sentAt)) / 1000);
+        return res.status(429).json({
+            message: `لطفاً ${retryAfterSec} ثانیه دیگر برای ارسال مجدد صبر کنید.`,
+            retryAfterSec
+        });
+    }
+
+    const code = generateOtpCode();
+    const expiresAt = now + OTP_TTL_MS;
+    otpStore.set(phone, { code, expiresAt, sentAt: now, attempts: 0 });
+
+    try {
+        await deliverOtp(phone, code);
+    } catch (err) {
+        otpStore.delete(phone);
+        console.error('OTP delivery failed:', err);
+        return res.status(502).json({ message: 'ارسال کد تأیید ناموفق بود. دوباره تلاش کنید.' });
+    }
+
+    const payload = {
+        message: 'کد تأیید ارسال شد.',
+        phone,
+        expiresInSec: Math.floor(OTP_TTL_MS / 1000),
+        expiresAt: new Date(expiresAt).toISOString()
+    };
+    // Help local testing when no SMS provider is configured
+    if (process.env.NODE_ENV !== 'production' || !process.env.SMS_API_KEY) {
+        payload.devOtp = code;
+    }
+    res.status(200).json(payload);
+});
+
+app.post('/api/auth/verify-otp', (req, res) => {
+    const phone = normalizePhone(req.body.phone || req.body.mobile);
+    const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
+
+    if (!isValidIranMobile(phone)) {
+        return res.status(400).json({ message: 'شماره موبایل معتبر نیست.' });
+    }
+    if (!/^\d{5}$/.test(code)) {
+        return res.status(400).json({ message: 'کد تأیید باید ۵ رقم باشد.' });
+    }
+
+    const entry = otpStore.get(phone);
+    if (!entry) {
+        return res.status(400).json({ message: 'کد تأیید یافت نشد. دوباره درخواست کنید.' });
+    }
+
+    const now = Date.now();
+    if (now > entry.expiresAt) {
+        otpStore.delete(phone);
+        return res.status(410).json({ message: 'کد تأیید منقضی شده است. دوباره درخواست کنید.' });
+    }
+
+    if (entry.attempts >= OTP_MAX_ATTEMPTS) {
+        otpStore.delete(phone);
+        return res.status(429).json({ message: 'تعداد تلاش بیش از حد مجاز است. کد جدید درخواست کنید.' });
+    }
+
+    if (entry.code !== code) {
+        entry.attempts += 1;
+        otpStore.set(phone, entry);
+        const remaining = OTP_MAX_ATTEMPTS - entry.attempts;
+        return res.status(401).json({
+            message: remaining > 0
+                ? `کد تأیید نادرست است. ${remaining} تلاش باقی مانده.`
+                : 'کد تأیید نادرست است. کد جدید درخواست کنید.'
+        });
+    }
+
+    otpStore.delete(phone);
+
+    let user = findUserByPhone(phone);
+    let isNewUser = false;
+    if (!user) {
+        isNewUser = true;
+        const newId = userIdCounter++;
+        user = {
+            id: newId,
+            username: phone,
+            email: '',
+            mobile: phone,
+            password: null,
+            firstName: '',
+            lastName: '',
+            birthDate: '',
+            province: '',
+            city: '',
+            isAdmin: false,
+            profileComplete: false,
+            createdAt: new Date().toISOString()
+        };
+        users[String(newId)] = user;
+        saveData();
+    }
+
+    res.status(isNewUser ? 201 : 200).json({
+        message: isNewUser ? 'ثبت‌نام با موفقیت انجام شد.' : 'ورود موفقیت‌آمیز.',
+        user: publicUser(user),
+        isNewUser
+    });
 });
 
 // --- User Profile Routes ---
@@ -173,9 +351,12 @@ app.put('/api/users/:id', (req, res) => {
         ...(mobile !== undefined && { mobile }),
         ...(email !== undefined && { email }),
     };
+    const hasName = Boolean(
+        String(users[id].firstName || '').trim() || String(users[id].lastName || '').trim()
+    );
+    users[id].profileComplete = hasName;
     saveData();
-    const { password, ...updatedUser } = users[id];
-    res.json({ message: 'اطلاعات با موفقیت ذخیره شد.', user: updatedUser });
+    res.json({ message: 'اطلاعات با موفقیت ذخیره شد.', user: publicUser(users[id]) });
 });
 
 app.put('/api/users/:id/password', (req, res) => {
