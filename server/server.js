@@ -1289,12 +1289,78 @@ app.delete('/api/user-reminders/:id', (req, res) => {
 });
 
 // --- Messages (inbox) ---
+const toUserId = (value) => {
+    const id = parseInt(value, 10);
+    return Number.isNaN(id) ? null : id;
+};
+
+const getUserById = (id) => {
+    const key = String(id);
+    return users[key] || users[id] || null;
+};
+
+const messageHasRecipient = (message, userId) => {
+    if (!message || !Array.isArray(message.recipientIds)) return false;
+    const target = Number(userId);
+    return message.recipientIds.some(id => Number(id) === target);
+};
+
+const messageIsReadBy = (message, userId) => {
+    if (!message || !Array.isArray(message.readBy)) return false;
+    const target = Number(userId);
+    return message.readBy.some(id => Number(id) === target);
+};
+
+const normalizeMobile = (mobile) => {
+    if (mobile === undefined || mobile === null) return '';
+    let value = String(mobile).trim();
+    value = value.replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString());
+    value = value.replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    value = value.replace(/[^\d+]/g, '');
+    if (value.startsWith('+98')) value = `0${value.slice(3)}`;
+    else if (value.startsWith('0098')) value = `0${value.slice(4)}`;
+    else if (value.startsWith('98') && value.length >= 12) value = `0${value.slice(2)}`;
+    if (value.length === 10 && value.startsWith('9')) value = `0${value}`;
+    return value;
+};
+
+const parseMobilesFromText = (text) => {
+    if (!text) return [];
+    return String(text)
+        .split(/[\n\r,;|\t]+/)
+        .map(normalizeMobile)
+        .filter(mobile => mobile.length >= 10);
+};
+
+const findUserIdsByMobiles = (mobileList) => {
+    const normalizedSet = new Set(mobileList.map(normalizeMobile).filter(Boolean));
+    const matchedIds = [];
+    const unmatchedMobiles = [];
+
+    normalizedSet.forEach(mobile => {
+        const match = Object.values(users).find(user => normalizeMobile(user.mobile) === mobile);
+        if (match) matchedIds.push(Number(match.id));
+        else unmatchedMobiles.push(mobile);
+    });
+
+    return {
+        matchedIds: [...new Set(matchedIds)],
+        unmatchedMobiles
+    };
+};
+
+const uniqueRecipientIds = (ids) => [...new Set(
+    (ids || [])
+        .map(toUserId)
+        .filter(id => id !== null && getUserById(id))
+)];
+
 app.get('/api/messages', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
+    const userId = toUserId(req.headers['x-user-id']);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
     const inbox = messages
-        .filter(m => Array.isArray(m.recipientIds) && m.recipientIds.includes(userId))
+        .filter(m => messageHasRecipient(m, userId))
         .map(m => ({
             id: m.id,
             title: m.title,
@@ -1305,7 +1371,7 @@ app.get('/api/messages', (req, res) => {
             source: 'admin',
             isBulk: !!m.isBulk,
             createdAt: m.createdAt,
-            isRead: Array.isArray(m.readBy) && m.readBy.includes(userId)
+            isRead: messageIsReadBy(m, userId)
         }));
 
     const vaccineMessages = getVaccineDelayMessagesForUser(userId);
@@ -1316,20 +1382,18 @@ app.get('/api/messages', (req, res) => {
 });
 
 app.get('/api/messages/unread-count', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
+    const userId = toUserId(req.headers['x-user-id']);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
     const unreadAdmin = messages.filter(m =>
-        Array.isArray(m.recipientIds) &&
-        m.recipientIds.includes(userId) &&
-        !(Array.isArray(m.readBy) && m.readBy.includes(userId))
+        messageHasRecipient(m, userId) && !messageIsReadBy(m, userId)
     ).length;
     const unreadVaccine = getVaccineDelayMessagesForUser(userId).length;
     res.json({ count: unreadAdmin + unreadVaccine });
 });
 
 app.put('/api/messages/:id/read', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
+    const userId = toUserId(req.headers['x-user-id']);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
     const messageId = req.params.id;
@@ -1337,29 +1401,33 @@ app.put('/api/messages/:id/read', (req, res) => {
         return res.json({ message: 'پیام واکسن به‌عنوان خوانده‌شده در نظر گرفته شد' });
     }
 
-    const msg = messages.find(m => m.id === parseInt(messageId, 10));
-    if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
+    const msg = messages.find(m => Number(m.id) === Number(messageId));
+    if (!msg || !messageHasRecipient(msg, userId)) {
         return res.status(404).json({ message: 'پیام یافت نشد' });
     }
     msg.readBy = msg.readBy || [];
-    if (!msg.readBy.includes(userId)) msg.readBy.push(userId);
+    if (!messageIsReadBy(msg, userId)) msg.readBy.push(userId);
     saveData();
     res.json({ message: 'پیام خوانده شد', id: msg.id });
 });
 
 app.delete('/api/messages/:id', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
+    const userId = toUserId(req.headers['x-user-id']);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
-    const messageId = parseInt(req.params.id, 10);
-    const msg = messages.find(m => m.id === messageId);
-    if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
+    const messageId = toUserId(req.params.id);
+    const msg = messages.find(m => Number(m.id) === Number(messageId));
+    if (!msg || !messageHasRecipient(msg, userId)) {
         return res.status(404).json({ message: 'پیام یافت نشد' });
     }
-    msg.recipientIds = msg.recipientIds.filter(id => id !== userId);
-    msg.readBy = (msg.readBy || []).filter(id => id !== userId);
+    msg.recipientIds = msg.recipientIds
+        .map(toUserId)
+        .filter(id => id !== null && id !== userId);
+    msg.readBy = (msg.readBy || [])
+        .map(toUserId)
+        .filter(id => id !== null && id !== userId);
     if (msg.recipientIds.length === 0) {
-        messages = messages.filter(m => m.id !== messageId);
+        messages = messages.filter(m => Number(m.id) !== Number(messageId));
     }
     saveData();
     res.json({ message: 'پیام حذف شد' });
@@ -1367,45 +1435,99 @@ app.delete('/api/messages/:id', (req, res) => {
 
 app.get('/api/admin/messages', isAdmin, (req, res) => {
     const sorted = [...messages].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(sorted);
+    const enriched = sorted.map(msg => ({
+        ...msg,
+        recipientIds: uniqueRecipientIds(msg.recipientIds),
+        recipients: uniqueRecipientIds(msg.recipientIds).map(id => {
+            const user = getUserById(id);
+            return {
+                id,
+                username: user?.username || '',
+                mobile: user?.mobile || '',
+                name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.username || `کاربر ${id}`
+            };
+        })
+    }));
+    res.json(enriched);
 });
 
-app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
-    const { title, body, link, mode, userId, userIds } = req.body;
+const messageUpload = upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'mobilesFile', maxCount: 1 }
+]);
+
+app.post('/api/admin/messages', isAdmin, messageUpload, (req, res) => {
+    const { title, body, link, mode, userId, userIds, mobiles } = req.body;
     if (!title || !String(title).trim()) {
         return res.status(400).json({ message: 'عنوان پیام الزامی است' });
     }
 
     let recipientIds = [];
+    let unmatchedMobiles = [];
     const sendMode = mode === 'bulk' ? 'bulk' : 'single';
+    const imageFile = req.files && req.files.image && req.files.image[0] ? req.files.image[0] : null;
+    const mobilesFile = req.files && req.files.mobilesFile && req.files.mobilesFile[0]
+        ? req.files.mobilesFile[0]
+        : null;
 
     if (sendMode === 'bulk') {
         if (userIds) {
             try {
                 const parsed = typeof userIds === 'string' ? JSON.parse(userIds) : userIds;
-                recipientIds = (Array.isArray(parsed) ? parsed : [])
-                    .map(id => parseInt(id, 10))
-                    .filter(id => !Number.isNaN(id) && users[id]);
+                recipientIds = uniqueRecipientIds(Array.isArray(parsed) ? parsed : []);
             } catch (e) {
                 return res.status(400).json({ message: 'لیست کاربران نامعتبر است' });
             }
         }
-        if (recipientIds.length === 0) {
-            recipientIds = Object.keys(users).map(Number).filter(id => users[id] && !users[id].isAdmin);
+
+        let mobilesFromFile = [];
+        if (mobilesFile) {
+            try {
+                const fileText = fs.readFileSync(mobilesFile.path, 'utf8');
+                mobilesFromFile = parseMobilesFromText(fileText);
+            } catch (e) {
+                return res.status(400).json({ message: 'خواندن فایل شماره موبایل ناموفق بود' });
+            }
+        }
+
+        const mobilesFromText = parseMobilesFromText(mobiles || '');
+        const allMobiles = [...mobilesFromFile, ...mobilesFromText];
+        if (allMobiles.length > 0) {
+            const matched = findUserIdsByMobiles(allMobiles);
+            recipientIds = uniqueRecipientIds([...recipientIds, ...matched.matchedIds]);
+            unmatchedMobiles = matched.unmatchedMobiles;
+        }
+
+        // Only fall back to all users when no explicit recipients/mobiles were provided
+        const hasExplicitTargets = Boolean(userIds) || allMobiles.length > 0;
+        if (recipientIds.length === 0 && !hasExplicitTargets) {
+            recipientIds = uniqueRecipientIds(
+                Object.keys(users).map(Number).filter(id => getUserById(id) && !getUserById(id).isAdmin)
+            );
             if (recipientIds.length === 0) {
-                recipientIds = Object.keys(users).map(Number).filter(id => users[id]);
+                recipientIds = uniqueRecipientIds(Object.keys(users).map(Number));
             }
         }
     } else {
-        const targetId = parseInt(userId, 10);
-        if (!targetId || !users[targetId]) {
-            return res.status(400).json({ message: 'کاربر گیرنده معتبر نیست' });
+        // Single: prefer explicit userId, otherwise resolve by mobile
+        let targetId = toUserId(userId);
+        if (!targetId && mobiles) {
+            const matched = findUserIdsByMobiles(parseMobilesFromText(mobiles));
+            targetId = matched.matchedIds[0] || null;
+            unmatchedMobiles = matched.unmatchedMobiles;
+        }
+        if (!targetId || !getUserById(targetId)) {
+            return res.status(400).json({ message: 'کاربر گیرنده معتبر نیست. شناسه یا موبایل صحیح وارد کنید.' });
         }
         recipientIds = [targetId];
     }
 
     if (recipientIds.length === 0) {
-        return res.status(400).json({ message: 'هیچ گیرنده‌ای یافت نشد' });
+        return res.status(400).json({
+            message: unmatchedMobiles.length
+                ? `هیچ گیرنده‌ای یافت نشد. موبایل‌های بدون کاربر: ${unmatchedMobiles.join(', ')}`
+                : 'هیچ گیرنده‌ای یافت نشد'
+        });
     }
 
     const newMessage = {
@@ -1413,23 +1535,41 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         title: String(title).trim(),
         body: body ? String(body).trim() : '',
         link: link ? String(link).trim() : null,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        imageUrl: imageFile ? `/uploads/${imageFile.filename}` : null,
         type: 'admin',
         isBulk: sendMode === 'bulk',
         recipientIds,
         readBy: [],
         createdAt: new Date().toISOString(),
-        createdBy: parseInt(req.headers['x-user-id'], 10)
+        createdBy: toUserId(req.headers['x-user-id']),
+        unmatchedMobiles
     };
     messages.push(newMessage);
     saveData();
-    res.status(201).json(newMessage);
+
+    // Clean uploaded mobiles file from uploads (not needed for serving)
+    if (mobilesFile && mobilesFile.path && fs.existsSync(mobilesFile.path)) {
+        try { fs.unlinkSync(mobilesFile.path); } catch (e) { /* ignore */ }
+    }
+
+    res.status(201).json({
+        ...newMessage,
+        recipients: recipientIds.map(id => {
+            const user = getUserById(id);
+            return {
+                id,
+                username: user?.username || '',
+                mobile: user?.mobile || '',
+                name: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || user?.username || `کاربر ${id}`
+            };
+        })
+    });
 });
 
 app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
-    const id = parseInt(req.params.id, 10);
+    const id = toUserId(req.params.id);
     const initialLength = messages.length;
-    messages = messages.filter(m => m.id !== id);
+    messages = messages.filter(m => Number(m.id) !== Number(id));
     if (messages.length < initialLength) {
         saveData();
         return res.status(200).json({ message: 'پیام حذف شد' });
