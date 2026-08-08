@@ -153,7 +153,7 @@ const AddChildPage = () => {
                 documents: []
             };
 
-            const createChildRes = await fetch('http://localhost:5000/api/children', {
+            const createChildRes = await fetch('/api/children', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -169,7 +169,7 @@ const AddChildPage = () => {
             if (avatarFile) {
                 const avatarUploadData = new FormData();
                 avatarUploadData.append('avatar', avatarFile);
-                const avatarRes = await fetch(`http://localhost:5000/api/children/${newChildId}/avatar`, {
+                const avatarRes = await fetch(`/api/children/${newChildId}/avatar`, {
                     method: 'POST',
                     headers: { 'x-user-id': loggedInUser.id },
                     body: avatarUploadData
@@ -183,7 +183,7 @@ const AddChildPage = () => {
                 for (const file of documentFiles) {
                     const docUploadData = new FormData();
                     docUploadData.append('document', file);
-                    const docRes = await fetch(`http://localhost:5000/api/documents/${newChildId}`, {
+                    const docRes = await fetch(`/api/documents/${newChildId}`, {
                         method: 'POST',
                         body: docUploadData
                     });

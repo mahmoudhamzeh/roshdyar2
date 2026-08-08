@@ -10,7 +10,7 @@ const VideoManagement = () => {
     const fetchVideos = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:5000/api/videos');
+            const response = await fetch('/api/videos');
             if (!response.ok) throw new Error('Failed to fetch videos');
             const data = await response.json();
             setVideos(data);
@@ -34,7 +34,7 @@ const VideoManagement = () => {
         e.preventDefault();
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch('http://localhost:5000/api/admin/videos', {
+            const response = await fetch('/api/admin/videos', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -58,7 +58,7 @@ const VideoManagement = () => {
         if (window.confirm('آیا از حذف این ویدیو اطمینان دارید؟')) {
             try {
                 const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                await fetch(`http://localhost:5000/api/admin/videos/${videoId}`, {
+                await fetch(`/api/admin/videos/${videoId}`, {
                     method: 'DELETE',
                     headers: { 'x-user-id': adminUser.id }
                 });

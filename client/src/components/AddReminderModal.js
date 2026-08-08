@@ -40,7 +40,7 @@ const AddReminderModal = ({ isOpen, onRequestClose, childId, onReminderAdded }) 
                 ? new Date(`${normalizedDate}T${alarmTime}:00`).toISOString()
                 : null;
 
-            const res = await fetch(`http://localhost:5000/api/reminders/manual/${childId}`, {
+            const res = await fetch(`/api/reminders/manual/${childId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

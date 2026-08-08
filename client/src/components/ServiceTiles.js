@@ -48,7 +48,7 @@ const ServiceTiles = () => {
                 return;
             }
 
-            const response = await fetch('http://localhost:5000/api/children', {
+            const response = await fetch('/api/children', {
                 headers: {
                     'x-user-id': userId,
                 },
@@ -164,7 +164,7 @@ const ServiceTiles = () => {
                         >
                             <img
                                 src={child.avatar && child.avatar.startsWith('/uploads')
-                                    ? `http://localhost:5000${child.avatar}`
+                                    ? `${child.avatar}`
                                     : (child.avatar || 'https://i.pravatar.cc/50')}
                                 alt={getChildDisplayName(child)}
                             />

@@ -14,7 +14,7 @@ const ArticleDetailPage = () => {
     useEffect(() => {
         const fetchArticle = async () => {
             try {
-                const response = await fetch(`http://localhost:5000/api/news/${id}`);
+                const response = await fetch(`/api/news/${id}`);
                 if (!response.ok) throw new Error('Failed to fetch article');
                 const data = await response.json();
                 setArticle(data);
@@ -43,7 +43,7 @@ const ArticleDetailPage = () => {
                 </header>
                 {article.imageUrl && (
                     <img
-                        src={`http://localhost:5000${article.imageUrl}`}
+                        src={`${article.imageUrl}`}
                         alt={article.title}
                         className="article-detail-image"
                     />

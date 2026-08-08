@@ -17,7 +17,7 @@ const UserInfo = () => {
                 setError("اطلاعات کاربری نامعتبر است.");
                 return;
             }
-            const response = await fetch(`http://localhost:5000/api/users/${loggedInUser.id}`);
+            const response = await fetch(`/api/users/${loggedInUser.id}`);
             if (!response.ok) {
                 const errorText = await response.text();
                 throw new Error(errorText || 'Failed to fetch user data');
@@ -43,7 +43,7 @@ const UserInfo = () => {
         setSuccess('');
         console.log('[User Submit] Sending user data:', user);
         try {
-            const response = await fetch(`http://localhost:5000/api/users/${user.id}`, {
+            const response = await fetch(`/api/users/${user.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(user),

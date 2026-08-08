@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
 import './ProductManagement.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 const CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
 
 const emptyForm = {

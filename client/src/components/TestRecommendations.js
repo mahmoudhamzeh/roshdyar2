@@ -9,7 +9,7 @@ const TestRecommendations = () => {
     const fetchRecommendations = useCallback(async () => {
         setIsLoading(true);
         try {
-            const res = await fetch(`http://localhost:5000/api/recommended-tests/${childId}`);
+            const res = await fetch(`/api/recommended-tests/${childId}`);
             if (!res.ok) throw new Error('Failed to fetch recommendations');
             const data = await res.json();
             setRecommendations(Array.isArray(data) ? data : []);

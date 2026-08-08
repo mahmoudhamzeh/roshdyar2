@@ -29,14 +29,14 @@ const DashboardPage = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const bannersResponse = await fetch('http://localhost:5000/api/banners');
+                const bannersResponse = await fetch('/api/banners');
                 if (bannersResponse.ok) {
                     const data = await bannersResponse.json();
                     const formattedBanners = data
                         .filter(banner => banner.imageUrl && banner.imageUrl.trim() !== '')
                         .map(banner => ({
                             id: banner.id,
-                            image: `http://localhost:5000${banner.imageUrl}`,
+                            image: `${banner.imageUrl}`,
                             title: banner.title,
                             link: banner.link,
                         }));
@@ -47,14 +47,14 @@ const DashboardPage = () => {
             }
 
             try {
-                const articlesResponse = await fetch('http://localhost:5000/api/news');
+                const articlesResponse = await fetch('/api/news');
                 if (articlesResponse.ok) {
                     const data = await articlesResponse.json();
                     const formattedArticles = data.slice(0, 8).map(article => ({
                         id: article.id,
                         title: article.title,
                         summary: article.summary,
-                        image: article.imageUrl ? `http://localhost:5000${article.imageUrl}` : null,
+                        image: article.imageUrl ? `${article.imageUrl}` : null,
                         link: `/news/${article.id}`
                     }));
                     setArticles(formattedArticles);
@@ -64,7 +64,7 @@ const DashboardPage = () => {
             }
 
             try {
-                const videosResponse = await fetch('http://localhost:5000/api/videos');
+                const videosResponse = await fetch('/api/videos');
                 if (videosResponse.ok) {
                     const data = await videosResponse.json();
                     if (Array.isArray(data) && data.length > 0) {
@@ -73,7 +73,7 @@ const DashboardPage = () => {
                             title: video.title,
                             summary: video.summary,
                             image: video.thumbnailUrl
-                                ? `http://localhost:5000${video.thumbnailUrl}`
+                                ? `${video.thumbnailUrl}`
                                 : youtubeThumb(video.url),
                             externalUrl: video.url,
                             isVideo: true,

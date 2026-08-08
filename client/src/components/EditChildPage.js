@@ -51,7 +51,7 @@ const EditChildPage = () => {
     useEffect(() => {
         const fetchChildData = async () => {
             try {
-                const response = await fetch(`http://localhost:5000/api/children/${id}`);
+                const response = await fetch(`/api/children/${id}`);
                 if (!response.ok) throw new Error('Child not found');
                 const data = await response.json();
 
@@ -72,7 +72,7 @@ const EditChildPage = () => {
                 setFormData(data);
                 setBirthDate(parseBirthDate(data.birthDate));
                 if (data.avatar) {
-                    setPreview(data.avatar.startsWith('/uploads') ? `http://localhost:5000${data.avatar}` : data.avatar);
+                    setPreview(data.avatar.startsWith('/uploads') ? `${data.avatar}` : data.avatar);
                 }
             } catch {
                 alert('موفق به دریافت اطلاعات کودک نشدیم.');
@@ -173,7 +173,7 @@ const EditChildPage = () => {
             if (avatarFile) {
                 const avatarUploadData = new FormData();
                 avatarUploadData.append('avatar', avatarFile);
-                const avatarRes = await fetch(`http://localhost:5000/api/children/${id}/avatar`, {
+                const avatarRes = await fetch(`/api/children/${id}/avatar`, {
                     method: 'POST',
                     headers: { 'x-user-id': loggedInUser.id },
                     body: avatarUploadData
@@ -188,7 +188,7 @@ const EditChildPage = () => {
                 for (const file of documentFiles) {
                     const docUploadData = new FormData();
                     docUploadData.append('document', file);
-                    const docRes = await fetch(`http://localhost:5000/api/documents/${id}`, {
+                    const docRes = await fetch(`/api/documents/${id}`, {
                         method: 'POST',
                         body: docUploadData
                     });
@@ -212,7 +212,7 @@ const EditChildPage = () => {
                 documents: [...(formData.documents || []), ...newDocumentPaths]
             };
 
-            const response = await fetch(`http://localhost:5000/api/children/${id}`, {
+            const response = await fetch(`/api/children/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(finalData)
@@ -524,7 +524,7 @@ const EditChildPage = () => {
                                     <ul className="file-list existing-files">
                                         {formData.documents.map((doc, index) => (
                                             <li key={`${doc}-${index}`}>
-                                                <a href={`http://localhost:5000${doc}`} target="_blank" rel="noopener noreferrer">
+                                                <a href={`${doc}`} target="_blank" rel="noopener noreferrer">
                                                     {String(doc).split('/').pop()}
                                                 </a>
                                                 <button type="button" onClick={() => handleDeleteExistingDocument(doc)} className="delete-doc-btn">

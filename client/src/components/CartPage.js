@@ -14,7 +14,7 @@ import {
 } from '../utils/cart';
 import './CartPage.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 
 const CartPage = () => {
     const history = useHistory();

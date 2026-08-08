@@ -10,7 +10,7 @@ const AdminDashboard = () => {
         const fetchStats = async () => {
             try {
                 const user = JSON.parse(localStorage.getItem('loggedInUser'));
-                const response = await fetch('http://localhost:5000/api/admin/stats', {
+                const response = await fetch('/api/admin/stats', {
                     headers: {
                         'x-user-id': user.id
                     }

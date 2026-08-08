@@ -10,7 +10,7 @@ const BannerManagement = () => {
     const fetchBanners = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:5000/api/banners');
+            const response = await fetch('/api/banners');
             if (!response.ok) throw new Error('Failed to fetch banners');
             const data = await response.json();
             setBanners(data);
@@ -48,7 +48,7 @@ const BannerManagement = () => {
 
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch('http://localhost:5000/api/admin/banners', {
+            const response = await fetch('/api/admin/banners', {
                 method: 'POST',
                 headers: { 'x-user-id': adminUser.id },
                 body: formData,
@@ -73,7 +73,7 @@ const BannerManagement = () => {
         if (window.confirm('آیا از حذف این بنر اطمینان دارید؟')) {
             try {
                 const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                const response = await fetch(`http://localhost:5000/api/admin/banners/${bannerId}`, {
+                const response = await fetch(`/api/admin/banners/${bannerId}`, {
                     method: 'DELETE',
                     headers: { 'x-user-id': adminUser.id }
                 });
@@ -107,7 +107,7 @@ const BannerManagement = () => {
             <div className="banners-list">
                 {banners.map(banner => (
                     <div key={banner.id} className="banner-card">
-                        <img src={`http://localhost:5000${banner.imageUrl}`} alt={banner.title} />
+                        <img src={`${banner.imageUrl}`} alt={banner.title} />
                         <div className="banner-info">
                             <h4>{banner.title}</h4>
                             <a href={banner.link} target="_blank" rel="noopener noreferrer">{banner.link}</a>

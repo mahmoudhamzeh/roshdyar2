@@ -16,13 +16,13 @@ const UserDetailPage = () => {
                 const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
 
                 // Fetch user details
-                const userResponse = await fetch(`http://localhost:5000/api/users/${userId}`);
+                const userResponse = await fetch(`/api/users/${userId}`);
                 if (!userResponse.ok) throw new Error('Failed to fetch user details');
                 const userData = await userResponse.json();
                 setUser(userData);
 
                 // Fetch user's children
-                const childrenResponse = await fetch(`http://localhost:5000/api/admin/users/${userId}/children`, {
+                const childrenResponse = await fetch(`/api/admin/users/${userId}/children`, {
                     headers: { 'x-user-id': adminUser.id }
                 });
                 if (!childrenResponse.ok) throw new Error("Failed to fetch user's children");
@@ -56,7 +56,7 @@ const UserDetailPage = () => {
                 {children.length > 0 ? (
                     children.map(child => (
                         <div key={child.id} className="child-card">
-                            <img src={child.avatar.startsWith('http') ? child.avatar : `http://localhost:5000${child.avatar}`} alt={child.name || `${child.firstName || ''} ${child.lastName || ''}`.trim()} />
+                            <img src={child.avatar.startsWith('http') ? child.avatar : `${child.avatar}`} alt={child.name || `${child.firstName || ''} ${child.lastName || ''}`.trim()} />
                             <p>{child.name || `${child.firstName || ''} ${child.lastName || ''}`.trim()}</p>
                             <Link to={`/health-profile/${child.id}`} className="btn-view-profile">
                                 مشاهده پروفایل سلامت

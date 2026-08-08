@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './MessageManagement.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 
 const MessageManagement = () => {
     const [users, setUsers] = useState([]);

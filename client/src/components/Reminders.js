@@ -84,7 +84,7 @@ const Reminders = () => {
             const seen = getSeenReminders();
             const collected = [];
 
-            const childrenRes = await fetch('http://localhost:5000/api/children', {
+            const childrenRes = await fetch('/api/children', {
                 headers: { 'x-user-id': loggedInUser.id }
             });
             let childrenData = [];
@@ -97,7 +97,7 @@ const Reminders = () => {
                 const childReminderLists = await Promise.all(
                     childrenData.map(async (child) => {
                         try {
-                            const res = await fetch(`http://localhost:5000/api/reminders/all/${child.id}`);
+                            const res = await fetch(`/api/reminders/all/${child.id}`);
                             if (!res.ok) return [];
                             const data = await res.json();
                             return (data || []).map((r) => ({
@@ -116,7 +116,7 @@ const Reminders = () => {
             }
 
             try {
-                const userRes = await fetch('http://localhost:5000/api/user-reminders', {
+                const userRes = await fetch('/api/user-reminders', {
                     headers: { 'x-user-id': loggedInUser.id }
                 });
                 if (userRes.ok) {
@@ -180,7 +180,7 @@ const Reminders = () => {
         if (reminder.source === 'manual' && reminder.childId) {
             try {
                 const response = await fetch(
-                    `http://localhost:5000/api/reminders/manual/${reminder.childId}/${reminder.id}`,
+                    `/api/reminders/manual/${reminder.childId}/${reminder.id}`,
                     { method: 'DELETE' }
                 );
                 if (!response.ok) {
@@ -196,7 +196,7 @@ const Reminders = () => {
         if (reminder.source === 'user') {
             try {
                 const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-                await fetch(`http://localhost:5000/api/user-reminders/${reminder.id}`, {
+                await fetch(`/api/user-reminders/${reminder.id}`, {
                     method: 'DELETE',
                     headers: { 'x-user-id': loggedInUser.id }
                 });

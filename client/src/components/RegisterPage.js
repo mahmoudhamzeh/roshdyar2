@@ -6,7 +6,7 @@ import './LoginPage.css';
 import './RegisterPage.css';
 
 const OTP_TTL_SEC = 5 * 60;
-const API_BASE = 'http://localhost:5000';
+const API_BASE = '';
 
 const toEnglishDigits = (value) =>
     String(value || '')

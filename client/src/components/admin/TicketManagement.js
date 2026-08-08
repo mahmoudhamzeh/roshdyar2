@@ -12,7 +12,7 @@ const TicketManagement = () => {
         setLoading(true);
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch('http://localhost:5000/api/admin/tickets', {
+            const response = await fetch('/api/admin/tickets', {
                 headers: { 'x-user-id': adminUser.id }
             });
             if (!response.ok) throw new Error('Failed to fetch tickets');
@@ -44,7 +44,7 @@ const TicketManagement = () => {
 
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch(`http://localhost:5000/api/admin/tickets/${selectedTicket.id}`, {
+            const response = await fetch(`/api/admin/tickets/${selectedTicket.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
