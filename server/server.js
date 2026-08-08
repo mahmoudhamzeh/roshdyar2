@@ -1,9 +1,9 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
@@ -345,8 +345,10 @@ app.post('/api/auth/send-otp', async (req, res) => {
         expiresInSec: Math.floor(OTP_TTL_MS / 1000),
         expiresAt: new Date(expiresAt).toISOString()
     };
-    // Help local testing when no SMS provider is configured
-    if (process.env.NODE_ENV !== 'production' || !process.env.SMS_API_KEY) {
+    // Only expose OTP in API response when SMS provider is not configured
+    const smsConfigured = Boolean(process.env.SMS_API_KEY) &&
+        !['console', 'log', ''].includes(String(process.env.SMS_PROVIDER || '').toLowerCase());
+    if (!smsConfigured) {
         payload.devOtp = code;
     }
     res.status(200).json(payload);
