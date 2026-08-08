@@ -56,7 +56,7 @@ const CartPage = () => {
 
         if (!user || !user.id) {
             alert('برای ثبت سفارش ابتدا وارد شوید.');
-            history.push('/login');
+            history.push('/register');
             return;
         }
 

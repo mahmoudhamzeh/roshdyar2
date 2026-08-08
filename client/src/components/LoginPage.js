@@ -69,19 +69,19 @@ const LoginPage = () => {
             <section className="login-panel">
                 <div className="login-card animate-fade-up">
                     <div className="login-card-header">
-                        <h2>ورود به حساب</h2>
-                        <p>برای ادامه، وارد شوید یا حساب جدید بسازید.</p>
+                        <h2>ورود با رمز عبور</h2>
+                        <p>برای ورود والدین، از ورود پیامکی استفاده کنید. این صفحه برای مدیران است.</p>
                     </div>
 
                     <div className="login-field">
-                        <label htmlFor="login-input">ایمیل یا شماره موبایل</label>
+                        <label htmlFor="login-input">نام کاربری</label>
                         <input
                             id="login-input"
                             type="text"
                             value={loginInput}
                             onChange={(e) => setLoginInput(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="مثال: ۰۹۱۲xxxxxxx"
+                            placeholder="مثال: Amin"
                             autoComplete="username"
                         />
                     </div>
@@ -104,7 +104,7 @@ const LoginPage = () => {
                             ورود
                         </button>
                         <button type="button" className="login-btn login-btn-secondary" onClick={handleSignup}>
-                            ثبت‌نام
+                            ورود / ثبت‌نام با پیامک
                         </button>
                     </div>
 

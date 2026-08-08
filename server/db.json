@@ -2,7 +2,7 @@
   "users": {
     "1": {
       "id": 1,
-      "username": "admin",
+      "username": "Amin",
       "email": "admin@example.com",
       "password": "admin",
       "isAdmin": true

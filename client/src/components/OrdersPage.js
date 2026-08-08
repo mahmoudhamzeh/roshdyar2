@@ -34,7 +34,7 @@ const OrdersPage = () => {
         })();
 
         if (!user || !user.id) {
-            history.push('/login');
+            history.push('/register');
             return;
         }
 

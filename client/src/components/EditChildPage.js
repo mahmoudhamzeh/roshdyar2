@@ -165,7 +165,7 @@ const EditChildPage = () => {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
             if (!loggedInUser || !loggedInUser.id) {
                 alert('برای انجام این عملیات باید وارد شده باشید.');
-                history.push('/login');
+                history.push('/register');
                 return;
             }
 

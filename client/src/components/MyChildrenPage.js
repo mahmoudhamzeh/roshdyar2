@@ -12,7 +12,7 @@ const MyChildrenPage = () => {
             if (!loggedInUser) {
                 console.error("No user logged in.");
                 // Optionally redirect to login
-                history.push('/login');
+                history.push('/register');
                 return;
             }
 

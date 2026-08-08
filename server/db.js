@@ -99,6 +99,19 @@ function loadState() {
     connect();
     const row = db.prepare('SELECT data FROM app_state WHERE id = ?').get('main');
     if (!row) {
+        // Seed from db.json on first boot so default admin (Amin) and sample data exist.
+        const jsonPath = path.join(__dirname, 'db.json');
+        if (fs.existsSync(jsonPath)) {
+            try {
+                const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+                const seeded = normalizeState(raw);
+                saveState(seeded);
+                console.log(`Seeded SQLite from ${jsonPath}`);
+                return seeded;
+            } catch (err) {
+                console.error('Failed to seed from db.json:', err.message);
+            }
+        }
         const state = emptyState();
         saveState(state);
         return state;

@@ -44,6 +44,7 @@ const RegisterPage = () => {
     const [secondsLeft, setSecondsLeft] = useState(0);
     const [showWelcome, setShowWelcome] = useState(false);
     const [devHint, setDevHint] = useState('');
+    const [isNewUser, setIsNewUser] = useState(false);
     const expiresAtRef = useRef(null);
 
     useEffect(() => {
@@ -137,7 +138,12 @@ const RegisterPage = () => {
             }
 
             localStorage.setItem('loggedInUser', JSON.stringify(data.user));
-            setShowWelcome(true);
+            if (data.isNewUser) {
+                setIsNewUser(true);
+                setShowWelcome(true);
+            } else {
+                history.push('/dashboard');
+            }
         } catch (error) {
             showError('خطا در ارتباط با سرور.');
         } finally {
@@ -165,9 +171,9 @@ const RegisterPage = () => {
                             <p className="brand-name-en">TatKids</p>
                         </div>
                     </div>
-                    <h1 className="animate-fade-up-delay">ثبت‌نام سریع با موبایل</h1>
+                    <h1 className="animate-fade-up-delay">ورود و ثبت‌نام با موبایل</h1>
                     <p className="animate-fade-up-delay-2">
-                        شماره را وارد کنید، کد تأیید بگیرید و پروفایل کودک‌تان را بسازید.
+                        شماره را وارد کنید، کد پیامکی بگیرید و وارد شوید.
                     </p>
                 </div>
             </section>
@@ -175,7 +181,7 @@ const RegisterPage = () => {
             <section className="login-panel">
                 <div className="login-card animate-fade-up">
                     <div className="login-card-header">
-                        <h2>{step === 'phone' ? 'ثبت‌نام' : 'کد تأیید'}</h2>
+                        <h2>{step === 'phone' ? 'ورود / ثبت‌نام' : 'کد تأیید'}</h2>
                         <p>
                             {step === 'phone'
                                 ? 'شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.'
@@ -209,8 +215,11 @@ const RegisterPage = () => {
                                 >
                                     {loading ? 'در حال ارسال...' : 'ارسال کد تأیید'}
                                 </button>
-                                <Link to="/login" className="login-btn login-btn-secondary register-link-btn">
-                                    بازگشت به ورود
+                                <Link to="/news" className="login-btn login-btn-secondary register-link-btn">
+                                    بازگشت به مجله
+                                </Link>
+                                <Link to="/login" className="register-text-btn">
+                                    ورود مدیران با رمز عبور
                                 </Link>
                             </div>
                         </>
@@ -253,7 +262,7 @@ const RegisterPage = () => {
                                     onClick={handleVerifyOtp}
                                     disabled={loading || secondsLeft <= 0}
                                 >
-                                    {loading ? 'در حال بررسی...' : 'تأیید و ثبت‌نام'}
+                                    {loading ? 'در حال بررسی...' : 'تأیید و ورود'}
                                 </button>
                                 <button
                                     type="button"
@@ -295,7 +304,11 @@ const RegisterPage = () => {
                 <div className="welcome-modal-body">
                     <BrandLogo className="welcome-modal-logo" size={56} alt="" />
                     <h2>به تات کیدز خوش آمدید</h2>
-                    <p>حساب شما ساخته شد. برای شروع بهتر، پروفایل کاربری‌تان را تکمیل کنید.</p>
+                    <p>
+                        {isNewUser
+                            ? 'حساب شما ساخته شد. برای شروع بهتر، پروفایل کاربری‌تان را تکمیل کنید.'
+                            : 'ورود شما موفقیت‌آمیز بود.'}
+                    </p>
                     <button type="button" className="login-btn login-btn-primary" onClick={goToCompleteProfile}>
                         تکمیل پروفایل کاربری
                     </button>
