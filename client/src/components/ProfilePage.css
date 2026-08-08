@@ -39,6 +39,18 @@
   white-space: nowrap;
 }
 
+.profile-complete-banner {
+  max-width: 1200px;
+  margin: 0.75rem auto 0;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--brand-deep, #0f766e);
+  font-weight: 600;
+  font-size: 0.95rem;
+  width: calc(100% - 2 * clamp(0.85rem, 3vw, 1.5rem));
+}
+
 .profile-tabs {
   display: flex;
   gap: 0.5rem;

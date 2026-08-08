@@ -38,30 +38,8 @@ const LoginPage = () => {
         }
     };
 
-    const handleSignup = async () => {
-        if (!loginInput || !passwordInput) {
-            setMessageType('error');
-            setLoginMessage('لطفاً فیلدها را پر کنید.');
-            return;
-        }
-        try {
-            const response = await fetch('http://localhost:5000/api/signup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: loginInput, password: passwordInput }),
-            });
-            const data = await response.json();
-            if (response.ok) {
-                setMessageType('success');
-                setLoginMessage(data.message);
-            } else {
-                setMessageType('error');
-                setLoginMessage(data.message || 'خطا در ثبت‌نام');
-            }
-        } catch (error) {
-            setMessageType('error');
-            setLoginMessage('خطا در ارتباط با سرور.');
-        }
+    const handleSignup = () => {
+        history.push('/register');
     };
 
     const handleKeyDown = (e) => {

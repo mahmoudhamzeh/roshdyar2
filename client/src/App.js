@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Switch, Redirect } from 'react-router-dom';
 import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
 import AdminPage from './components/AdminPage';
 import AdminRoute from './components/AdminRoute';
 import PrivateRoute from './components/PrivateRoute';
@@ -41,6 +42,7 @@ const App = () => {
         <Router>
             <Switch>
                 <Route path="/login" component={LoginPage} />
+                <Route path="/register" component={RegisterPage} />
                 <PrivateRoute path="/dashboard" component={DashboardPage} />
                 <PrivateRoute path="/my-children" component={MyChildrenPage} />
                 <PrivateRoute path="/add-child" component={AddChildPage} />
