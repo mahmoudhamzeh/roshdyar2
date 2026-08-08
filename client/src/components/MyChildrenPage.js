@@ -16,7 +16,7 @@ const MyChildrenPage = () => {
                 return;
             }
 
-            const response = await fetch('http://localhost:5000/api/children', {
+            const response = await fetch('/api/children', {
                 headers: {
                     'x-user-id': loggedInUser.id
                 }
@@ -40,7 +40,7 @@ const MyChildrenPage = () => {
     const handleDelete = async (childId) => {
         if (window.confirm('آیا از حذف این کودک مطمئن هستید؟')) {
             try {
-                await fetch(`http://localhost:5000/api/children/${childId}`, { method: 'DELETE' });
+                await fetch(`/api/children/${childId}`, { method: 'DELETE' });
                 fetchChildren(); // Refresh list
             } catch (error) { alert('خطا در حذف کودک'); }
         }
@@ -78,7 +78,7 @@ const MyChildrenPage = () => {
                 <div className="children-list-final">
                     {children.length === 0 ? <p className="no-children-message">هنوز کودکی اضافه نشده است.</p> :
                      children.map(child => {
-                        const avatarUrl = child.avatar && child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/100');
+                        const avatarUrl = child.avatar && child.avatar.startsWith('/uploads') ? `${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/100');
                         return (
                             <div key={child.id} className="child-card-final" data-id={child.id}>
                                 <img src={avatarUrl} alt={child.name} className="child-avatar-final" />

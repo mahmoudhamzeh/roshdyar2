@@ -8,7 +8,7 @@ import { formatPrice } from '../utils/cart';
 import { formatToShamsi } from '../utils/dateConverter';
 import './OrdersPage.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 
 const STATUS_LABELS = {
     pending: 'در انتظار تایید',

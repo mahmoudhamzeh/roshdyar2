@@ -13,7 +13,7 @@ import {
 import { formatToShamsi } from '../utils/dateConverter';
 import './MessagesPage.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 
 const getUser = () => {
     try {

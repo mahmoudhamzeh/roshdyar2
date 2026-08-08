@@ -12,7 +12,7 @@ const VaccinationStatus = () => {
 
     const fetchStatus = useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/vaccination-status/${childId}`);
+            const res = await fetch(`/api/vaccination-status/${childId}`);
             const data = await res.json();
             setVaccinationStatus(data);
         } catch (error) {
@@ -28,7 +28,7 @@ const VaccinationStatus = () => {
 
     const handleMarkAsDone = async (vaccine) => {
         try {
-            await fetch(`http://localhost:5000/api/vaccinate/${childId}`, {
+            await fetch(`/api/vaccinate/${childId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

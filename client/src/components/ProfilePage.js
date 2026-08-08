@@ -22,7 +22,7 @@ const ProfilePage = () => {
         if (!user) return;
 
         try {
-            const res = await fetch(`http://localhost:5000/api/generate-reminders/${user.id}`, {
+            const res = await fetch(`/api/generate-reminders/${user.id}`, {
                 method: 'POST',
             });
             if (!res.ok) throw new Error('Failed to generate reminders');

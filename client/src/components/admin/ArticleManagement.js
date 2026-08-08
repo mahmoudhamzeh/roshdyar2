@@ -10,7 +10,7 @@ const ArticleManagement = () => {
     const fetchArticles = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:5000/api/news');
+            const response = await fetch('/api/news');
             if (!response.ok) throw new Error('Failed to fetch articles');
             const data = await response.json();
             setArticles(data);
@@ -47,7 +47,7 @@ const ArticleManagement = () => {
 
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch('http://localhost:5000/api/admin/news', {
+            const response = await fetch('/api/admin/news', {
                 method: 'POST',
                 headers: { 'x-user-id': adminUser.id },
                 body: formData,
@@ -68,7 +68,7 @@ const ArticleManagement = () => {
         if (window.confirm('آیا از حذف این مقاله اطمینان دارید؟')) {
             try {
                 const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                await fetch(`http://localhost:5000/api/admin/news/${articleId}`, {
+                await fetch(`/api/admin/news/${articleId}`, {
                     method: 'DELETE',
                     headers: { 'x-user-id': adminUser.id }
                 });

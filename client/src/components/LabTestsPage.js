@@ -24,7 +24,7 @@ const CheckupItem = ({ checkup, child }) => {
                 <div className="checkup-details">
                     {checkup.fileUrl && (
                         <div className="checkup-file-link">
-                            <a href={`http://localhost:5000${checkup.fileUrl}`} target="_blank" rel="noopener noreferrer">مشاهده فایل گزارش کامل</a>
+                            <a href={`${checkup.fileUrl}`} target="_blank" rel="noopener noreferrer">مشاهده فایل گزارش کامل</a>
                         </div>
                     )}
                     <table>
@@ -82,8 +82,8 @@ const LabTestsPage = () => {
         setIsLoading(true);
         try {
             const [checkupsRes, childRes] = await Promise.all([
-                fetch(`http://localhost:5000/api/checkups/${childId}`),
-                fetch(`http://localhost:5000/api/children/${childId}`)
+                fetch(`/api/checkups/${childId}`),
+                fetch(`/api/children/${childId}`)
             ]);
             if (!childRes.ok) throw new Error('Child not found');
             const checkupsData = checkupsRes.ok ? await checkupsRes.json() : [];
@@ -132,7 +132,7 @@ const LabTestsPage = () => {
         }
 
         try {
-            const res = await fetch(`http://localhost:5000/api/checkups/${childId}`, {
+            const res = await fetch(`/api/checkups/${childId}`, {
                 method: 'POST',
                 body: formData, // No Content-Type header needed, browser sets it for FormData
             });

@@ -28,7 +28,7 @@ const AgeGuidancePage = () => {
         setIsLoading(true);
         setError('');
         try {
-            const res = await fetch(`http://localhost:5000/api/children/${childId}`);
+            const res = await fetch(`/api/children/${childId}`);
             if (!res.ok) throw new Error('کودک یافت نشد');
             const data = await res.json();
             setChild(data);

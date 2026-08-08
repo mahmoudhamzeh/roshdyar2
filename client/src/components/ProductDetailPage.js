@@ -7,7 +7,7 @@ import Footer from './Footer';
 import { addToCart, formatPrice } from '../utils/cart';
 import './ProductDetailPage.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 
 const ProductDetailPage = () => {
     const { id } = useParams();

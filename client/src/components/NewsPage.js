@@ -26,9 +26,9 @@ const NewsPage = () => {
             setLoading(true);
             try {
                 const [articlesRes, videosRes, podcastsRes] = await Promise.all([
-                    fetch('http://localhost:5000/api/news'),
-                    fetch('http://localhost:5000/api/videos'),
-                    fetch('http://localhost:5000/api/podcasts')
+                    fetch('/api/news'),
+                    fetch('/api/videos'),
+                    fetch('/api/podcasts')
                 ]);
                 if (!articlesRes.ok || !videosRes.ok || !podcastsRes.ok) throw new Error('Failed to fetch data');
                 const articlesData = await articlesRes.json();
@@ -88,7 +88,7 @@ const NewsPage = () => {
                                 <div className="puzzle-grid">
                                     {puzzleArticles.map(article => (
                                         <Link to={`/news/${article.id}`} key={article.id} className="puzzle-item">
-                                            <img src={article.imageUrl ? `http://localhost:5000${article.imageUrl}` : 'https://placehold.co/300x200/2c3e50/FFFFFF?text=مقاله'} alt={article.title} />
+                                            <img src={article.imageUrl ? `${article.imageUrl}` : 'https://placehold.co/300x200/2c3e50/FFFFFF?text=مقاله'} alt={article.title} />
                                             <div className="puzzle-item-content">
                                                 <span className="puzzle-category-badge">{article.category}</span>
                                                 <h3>{article.title}</h3>
@@ -112,7 +112,7 @@ const NewsPage = () => {
                                     <div className={selectedCategory === 'همه' ? 'articles-list' : 'articles-grid'}>
                                         {filteredArticles.map(article => (
                                             <Link to={`/news/${article.id}`} key={article.id} className={selectedCategory === 'همه' ? 'article-list-item' : 'article-card'}>
-                                                <img src={article.imageUrl ? `http://localhost:5000${article.imageUrl}` : 'https://placehold.co/150x100/2c3e50/FFFFFF?text=مقاله'} alt={article.title} />
+                                                <img src={article.imageUrl ? `${article.imageUrl}` : 'https://placehold.co/150x100/2c3e50/FFFFFF?text=مقاله'} alt={article.title} />
                                                 <div className={selectedCategory === 'همه' ? 'article-list-item-content' : 'article-card-content'}>
                                                     <h3>{article.title}</h3>
                                                     {selectedCategory !== 'همه' && <p className="article-category-badge">{article.category}</p>}
@@ -132,7 +132,7 @@ const NewsPage = () => {
                                         <div className="videos-list">
                                             {videos.map(video => (
                                                 <a href={video.url} key={video.id} target="_blank" rel="noopener noreferrer" className="video-card">
-                                                    <img src={video.thumbnailUrl ? `http://localhost:5000${video.thumbnailUrl}` : 'https://placehold.co/300x200/3498db/FFFFFF?text=ویدیو'} alt={video.title} />
+                                                    <img src={video.thumbnailUrl ? `${video.thumbnailUrl}` : 'https://placehold.co/300x200/3498db/FFFFFF?text=ویدیو'} alt={video.title} />
                                                     <div className="video-play-icon">▶</div>
                                                     <div className="video-card-content">
                                                         <h3>{video.title}</h3>
@@ -157,7 +157,7 @@ const NewsPage = () => {
                                 <div className="podcasts-grid">
                                     {podcasts.map(podcast => (
                                         <a href={podcast.url} key={podcast.id} target="_blank" rel="noopener noreferrer" className="podcast-card">
-                                            <img src={podcast.thumbnailUrl ? `http://localhost:5000${podcast.thumbnailUrl}` : 'https://placehold.co/300x300/1abc9c/FFFFFF?text=پادکست'} alt={podcast.title} />
+                                            <img src={podcast.thumbnailUrl ? `${podcast.thumbnailUrl}` : 'https://placehold.co/300x300/1abc9c/FFFFFF?text=پادکست'} alt={podcast.title} />
                                             <div className="podcast-card-content">
                                                 <h3>{podcast.title}</h3>
                                                 <p>{podcast.summary}</p>

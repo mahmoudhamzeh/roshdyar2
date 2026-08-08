@@ -7,7 +7,7 @@ import Footer from './Footer';
 import { formatPrice, getCartCount } from '../utils/cart';
 import './ShopPage.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 const CATEGORIES = ['همه', 'تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
 
 const ShopPage = () => {

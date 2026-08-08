@@ -54,7 +54,7 @@ const UserManagement = () => {
         setLoading(true);
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch('http://localhost:5000/api/admin/users', {
+            const response = await fetch('/api/admin/users', {
                 headers: { 'x-user-id': adminUser.id }
             });
             if (!response.ok) {
@@ -80,7 +80,7 @@ const UserManagement = () => {
         if (window.confirm('آیا از حذف این کاربر اطمینان دارید؟')) {
             try {
                 const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-                const response = await fetch(`http://localhost:5000/api/admin/users/${userId}`, {
+                const response = await fetch(`/api/admin/users/${userId}`, {
                     method: 'DELETE',
                     headers: { 'x-user-id': adminUser.id }
                 });
@@ -110,7 +110,7 @@ const UserManagement = () => {
     const handleSaveUser = async (updatedUser) => {
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch(`http://localhost:5000/api/admin/users/${updatedUser.id}`, {
+            const response = await fetch(`/api/admin/users/${updatedUser.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -144,7 +144,7 @@ const UserManagement = () => {
     const handleSetPassword = async (userId, newPassword) => {
         try {
             const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/set-password`, {
+            const response = await fetch(`/api/admin/users/${userId}/set-password`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',

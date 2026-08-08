@@ -219,8 +219,8 @@ const GrowthChartPage = () => {
         try {
             setLoadError('');
             const [childRes, growthRes] = await Promise.all([
-                fetch(`http://localhost:5000/api/children/${childId}`),
-                fetch(`http://localhost:5000/api/growth/${childId}`)
+                fetch(`/api/children/${childId}`),
+                fetch(`/api/growth/${childId}`)
             ]);
             if (!childRes.ok) throw new Error('کودک یافت نشد');
             const data = await childRes.json();
@@ -300,8 +300,8 @@ const GrowthChartPage = () => {
         try {
             const hasRecordId = Boolean(editingRecord && editingRecord.id);
             const url = hasRecordId
-                ? `http://localhost:5000/api/growth/${childId}/record/${editingRecord.id}`
-                : `http://localhost:5000/api/growth/${childId}`;
+                ? `/api/growth/${childId}/record/${editingRecord.id}`
+                : `/api/growth/${childId}`;
             const response = await fetch(url, {
                 method: hasRecordId ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -329,13 +329,13 @@ const GrowthChartPage = () => {
             let response;
             if (record.id) {
                 response = await fetch(
-                    `http://localhost:5000/api/growth/${childId}/record/${record.id}`,
+                    `/api/growth/${childId}/record/${record.id}`,
                     { method: 'DELETE' }
                 );
             } else {
                 const encodedDate = encodeURIComponent(normalizeDateString(record.date) || record.date);
                 response = await fetch(
-                    `http://localhost:5000/api/growth/${childId}/${encodedDate}`,
+                    `/api/growth/${childId}/${encodedDate}`,
                     { method: 'DELETE' }
                 );
             }

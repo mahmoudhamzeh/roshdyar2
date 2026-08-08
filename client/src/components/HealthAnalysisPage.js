@@ -47,15 +47,15 @@ const HealthAnalysisPage = () => {
     const fetchAllData = useCallback(async () => {
         setIsLoading(true);
         try {
-            const childRes = await fetch(`http://localhost:5000/api/children/${childId}`);
+            const childRes = await fetch(`/api/children/${childId}`);
             if (!childRes.ok) throw new Error('Child not found');
             const childData = await childRes.json();
             setChild(childData);
 
             const [visitsRes, docsRes, vacRes] = await Promise.all([
-                fetch(`http://localhost:5000/api/visits/${childId}`),
-                fetch(`http://localhost:5000/api/documents/${childId}`),
-                fetch(`http://localhost:5000/api/vaccination-status/${childId}`)
+                fetch(`/api/visits/${childId}`),
+                fetch(`/api/documents/${childId}`),
+                fetch(`/api/vaccination-status/${childId}`)
             ]);
 
             setVisits(visitsRes.ok ? await visitsRes.json() : []);
@@ -307,7 +307,7 @@ const HealthAnalysisPage = () => {
                         <ul className="ha-docs">
                             {documents.map((doc) => (
                                 <li key={doc.id}>
-                                    <a href={`http://localhost:5000${doc.url}`} target="_blank" rel="noopener noreferrer">
+                                    <a href={`${doc.url}`} target="_blank" rel="noopener noreferrer">
                                         {doc.title || 'مدرک پزشکی'}
                                     </a>
                                     <span className="ha-date">

@@ -3,7 +3,7 @@ import { formatPrice } from '../../utils/cart';
 import { toShamsi } from '../../utils/dateConverter';
 import './OrderManagement.css';
 
-const API = 'http://localhost:5000';
+const API = '';
 
 const STATUS_OPTIONS = [
     { value: 'pending', label: 'در انتظار تایید' },

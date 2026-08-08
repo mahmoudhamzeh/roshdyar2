@@ -8,7 +8,7 @@ import './VaccinationStatusPage.css';
 const getAvatarUrl = (avatar) => {
     if (!avatar) return null;
     if (avatar.startsWith('http') || avatar.startsWith('data:')) return avatar;
-    if (avatar.startsWith('/uploads')) return `http://localhost:5000${avatar}`;
+    if (avatar.startsWith('/uploads')) return `${avatar}`;
     return avatar;
 };
 
@@ -27,8 +27,8 @@ const VaccinationStatusPage = () => {
         setError('');
         try {
             const [childRes, scheduleRes] = await Promise.all([
-                fetch(`http://localhost:5000/api/children/${childId}`),
-                fetch('http://localhost:5000/api/vaccination-schedule'),
+                fetch(`/api/children/${childId}`),
+                fetch('/api/vaccination-schedule'),
             ]);
 
             if (!childRes.ok) {
@@ -111,7 +111,7 @@ const VaccinationStatusPage = () => {
         setSavingKey(key);
 
         try {
-            const response = await fetch(`http://localhost:5000/api/children/${childId}/vaccination-records`, {
+            const response = await fetch(`/api/children/${childId}/vaccination-records`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ vaccinationRecords: updatedRecords }),

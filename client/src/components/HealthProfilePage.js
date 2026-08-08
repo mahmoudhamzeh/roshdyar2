@@ -137,10 +137,10 @@ const HealthProfilePage = () => {
             setError('');
             try {
                 const [childRes, visitsRes, docsRes, vacRes] = await Promise.all([
-                    fetch(`http://localhost:5000/api/children/${childId}`, { signal }),
-                    fetch(`http://localhost:5000/api/visits/${childId}`, { signal }),
-                    fetch(`http://localhost:5000/api/documents/${childId}`, { signal }),
-                    fetch(`http://localhost:5000/api/vaccination-status/${childId}`, { signal }),
+                    fetch(`/api/children/${childId}`, { signal }),
+                    fetch(`/api/visits/${childId}`, { signal }),
+                    fetch(`/api/documents/${childId}`, { signal }),
+                    fetch(`/api/vaccination-status/${childId}`, { signal }),
                 ]);
 
                 if (!childRes.ok) throw new Error('Child not found');
@@ -199,7 +199,7 @@ const HealthProfilePage = () => {
     const displayName = getChildDisplayName(child);
     const ageLabel = calculateAge(child.birthDate);
     const avatarUrl = child.avatar
-        ? (child.avatar.startsWith('/uploads') ? `http://localhost:5000${child.avatar}` : child.avatar)
+        ? (child.avatar.startsWith('/uploads') ? `${child.avatar}` : child.avatar)
         : null;
     const allergyTags = getActiveTags(child.allergies);
     const illnessTags = getActiveTags(child.special_illnesses);
@@ -536,7 +536,7 @@ const HealthProfilePage = () => {
                             <li key={doc.id || doc.url || doc.title}>
                                 <div className="hp-modal-item-top">
                                     <a
-                                        href={doc.url ? `http://localhost:5000${doc.url}` : '#'}
+                                        href={doc.url ? `${doc.url}` : '#'}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >

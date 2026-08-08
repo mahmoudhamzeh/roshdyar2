@@ -24,7 +24,7 @@ const ChangePassword = () => {
             return;
         }
         try {
-            const response = await fetch(`http://localhost:5000/api/users/${loggedInUser.id}/password`, {
+            const response = await fetch(`/api/users/${loggedInUser.id}/password`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ currentPassword: password.current, newPassword: password.new }),
