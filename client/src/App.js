@@ -52,9 +52,9 @@ const App = () => {
                 <Route path="/news/:id" component={ArticleDetailPage} />
                 <AdminRoute path="/admin" component={AdminPage} />
 
-                {/* Public home = content magazine; auth happens when user takes an action */}
+                {/* App home = dashboard; guests are sent to SMS login via PrivateRoute */}
                 <Route path="/">
-                    <Redirect to="/news" />
+                    <Redirect to="/dashboard" />
                 </Route>
             </Switch>
             <MobileBottomNav />

@@ -73,7 +73,7 @@ const NewsPage = () => {
             <NewsHeader />
             <main className="news-page-container">
                 <header className="news-page-header">
-                    <h1>مجله سلامت رشد‌یار</h1>
+                    <h1>مجله سلامت تات کیدز</h1>
                     <p>جدیدترین مقالات، ویدیوها و توصیه‌های تخصصی برای والدین</p>
                 </header>
 

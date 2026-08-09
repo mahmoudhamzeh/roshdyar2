@@ -1,7 +1,7 @@
 {
-  "name": "roshdyar-server",
+  "name": "tatkids-server",
   "version": "1.0.0",
-  "description": "Backend for Roshdyar app",
+  "description": "Backend for TatKids app",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
