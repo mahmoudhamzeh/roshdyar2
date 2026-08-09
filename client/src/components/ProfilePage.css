@@ -286,12 +286,13 @@
   }
 
   .profile-page > .navbar,
-  .profile-page > .menu-backdrop {
+  .profile-page > .menu-backdrop,
+  .profile-page > .profile-complete-banner,
+  .profile-topbar {
     grid-column: 1 / -1;
   }
 
   .profile-topbar {
-    grid-column: 1 / -1;
     padding-left: 0;
     padding-right: 0;
   }
