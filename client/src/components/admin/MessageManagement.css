@@ -169,3 +169,17 @@
     cursor: pointer;
     align-self: flex-start;
 }
+
+.hint-text {
+    margin: 0.4rem 0 0;
+    font-size: 0.85rem;
+    color: #777;
+}
+
+.recipients-line {
+    word-break: break-word;
+}
+
+.unmatched {
+    color: #b45309 !important;
+}
