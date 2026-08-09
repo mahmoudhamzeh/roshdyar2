@@ -10,17 +10,19 @@ server/.env
 # SQLite database
 server/data/
 
-# Dependencies
-/node_modules/
+# Dependencies (never commit)
+node_modules/
+**/node_modules/
 /client/node_modules/
 /server/node_modules/
 
-# Cache
+# Cache / build
 /client/node_modules/.cache/
+/client/build/
 
 # Jules scratch
 jules-scratch/
 
-# Uploads
+# Uploads (keep on server, not in git)
 /uploads/
 /server/uploads/
