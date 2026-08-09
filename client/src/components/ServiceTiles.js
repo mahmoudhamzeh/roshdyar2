@@ -3,7 +3,6 @@ import { Link, useHistory } from 'react-router-dom';
 import Modal from 'react-modal';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-    faChild,
     faChartLine,
     faSyringe,
     faUserMd,
@@ -17,7 +16,6 @@ import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
-    { name: 'کودکان من', icon: faChild, link: '/my-children', id: 'my-children', tone: 'teal' },
     { name: 'راهنمای سنی', icon: faSeedling, link: '#', id: 'age-guidance', tone: 'mint' },
     { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
     { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
