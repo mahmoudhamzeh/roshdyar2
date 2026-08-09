@@ -6,6 +6,7 @@ import './LoginPage.css';
 import './RegisterPage.css';
 
 const OTP_TTL_SEC = 5 * 60;
+const OTP_RESEND_COOLDOWN_SEC = 60;
 const API_BASE = '';
 
 const toEnglishDigits = (value) =>
@@ -42,10 +43,13 @@ const RegisterPage = () => {
     const [messageType, setMessageType] = useState('error');
     const [loading, setLoading] = useState(false);
     const [secondsLeft, setSecondsLeft] = useState(0);
+    const [resendCooldown, setResendCooldown] = useState(0);
     const [showWelcome, setShowWelcome] = useState(false);
     const [devHint, setDevHint] = useState('');
     const [isNewUser, setIsNewUser] = useState(false);
     const expiresAtRef = useRef(null);
+    const resendUntilRef = useRef(null);
+    const sendingRef = useRef(false);
 
     useEffect(() => {
         if (step !== 'otp' || !expiresAtRef.current) return undefined;
@@ -53,6 +57,9 @@ const RegisterPage = () => {
         const tick = () => {
             const left = Math.max(0, Math.ceil((expiresAtRef.current - Date.now()) / 1000));
             setSecondsLeft(left);
+            if (resendUntilRef.current) {
+                setResendCooldown(Math.max(0, Math.ceil((resendUntilRef.current - Date.now()) / 1000)));
+            }
         };
 
         tick();
@@ -70,13 +77,42 @@ const RegisterPage = () => {
         setMessage(text);
     };
 
+    const enterOtpStep = (phone, data, { alreadySent = false } = {}) => {
+        setPhoneInput(phone);
+        expiresAtRef.current = data.expiresAt
+            ? new Date(data.expiresAt).getTime()
+            : Date.now() + (data.expiresInSec || OTP_TTL_SEC) * 1000;
+        setSecondsLeft(
+            data.expiresInSec != null
+                ? data.expiresInSec
+                : Math.max(0, Math.ceil((expiresAtRef.current - Date.now()) / 1000))
+        );
+
+        const cooldownSec = data.retryAfterSec != null ? data.retryAfterSec : OTP_RESEND_COOLDOWN_SEC;
+        resendUntilRef.current = Date.now() + cooldownSec * 1000;
+        setResendCooldown(cooldownSec);
+
+        setOtpInput('');
+        setStep('otp');
+        if (alreadySent) {
+            showError(data.message || 'کد قبلاً ارسال شده است. همان کد را وارد کنید یا کمی صبر کنید.');
+        } else {
+            showSuccess('کد تأیید ارسال شد.');
+        }
+        if (data.devOtp) {
+            setDevHint(`کد آزمایشی: ${data.devOtp}`);
+        }
+    };
+
     const handleSendOtp = async () => {
         const phone = normalizePhone(phoneInput);
         if (!isValidIranMobile(phone)) {
             showError('شماره موبایل معتبر نیست. مثال: ۰۹۱۲xxxxxxx');
             return;
         }
+        if (sendingRef.current) return;
 
+        sendingRef.current = true;
         setLoading(true);
         setMessage('');
         setDevHint('');
@@ -87,25 +123,23 @@ const RegisterPage = () => {
                 body: JSON.stringify({ phone }),
             });
             const data = await response.json();
+
+            // Code was already sent recently — take user to OTP entry instead of leaving them stuck.
+            if (response.status === 429 && (data.codeAlreadySent || data.expiresAt || data.expiresInSec)) {
+                enterOtpStep(phone, data, { alreadySent: true });
+                return;
+            }
+
             if (!response.ok) {
                 showError(data.message || 'ارسال کد ناموفق بود.');
                 return;
             }
 
-            setPhoneInput(phone);
-            expiresAtRef.current = data.expiresAt
-                ? new Date(data.expiresAt).getTime()
-                : Date.now() + (data.expiresInSec || OTP_TTL_SEC) * 1000;
-            setSecondsLeft(data.expiresInSec || OTP_TTL_SEC);
-            setOtpInput('');
-            setStep('otp');
-            showSuccess('کد تأیید ارسال شد.');
-            if (data.devOtp) {
-                setDevHint(`کد آزمایشی: ${data.devOtp}`);
-            }
+            enterOtpStep(phone, data);
         } catch (error) {
             showError('خطا در ارتباط با سرور.');
         } finally {
+            sendingRef.current = false;
             setLoading(false);
         }
     };
@@ -219,7 +253,7 @@ const RegisterPage = () => {
                                     بازگشت به صفحه اصلی
                                 </Link>
                                 <Link to="/login" className="register-text-btn">
-                                    ورود مدیران با رمز عبور
+                                    ورود یا تنظیم رمز عبور
                                 </Link>
                             </div>
                         </>
@@ -253,6 +287,10 @@ const RegisterPage = () => {
                                 )}
                             </div>
 
+                            {resendCooldown > 0 && (
+                                <p className="otp-resend-hint">ارسال مجدد تا {resendCooldown} ثانیه دیگر</p>
+                            )}
+
                             {devHint && <p className="otp-dev-hint">{devHint}</p>}
 
                             <div className="login-actions">
@@ -268,9 +306,9 @@ const RegisterPage = () => {
                                     type="button"
                                     className="login-btn login-btn-secondary"
                                     onClick={handleSendOtp}
-                                    disabled={loading || (secondsLeft > OTP_TTL_SEC - 60 && secondsLeft > 0)}
+                                    disabled={loading || resendCooldown > 0}
                                 >
-                                    ارسال مجدد کد
+                                    {resendCooldown > 0 ? `ارسال مجدد (${resendCooldown})` : 'ارسال مجدد کد'}
                                 </button>
                                 <button
                                     type="button"
@@ -280,7 +318,9 @@ const RegisterPage = () => {
                                         setOtpInput('');
                                         setMessage('');
                                         setDevHint('');
+                                        setResendCooldown(0);
                                         expiresAtRef.current = null;
+                                        resendUntilRef.current = null;
                                     }}
                                     disabled={loading}
                                 >
