@@ -252,6 +252,9 @@ const RegisterPage = () => {
                                 <Link to="/dashboard" className="login-btn login-btn-secondary register-link-btn">
                                     بازگشت به صفحه اصلی
                                 </Link>
+                                <Link to="/login" className="register-text-btn">
+                                    ورود یا تنظیم رمز عبور
+                                </Link>
                             </div>
                         </>
                     ) : (
