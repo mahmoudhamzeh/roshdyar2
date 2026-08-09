@@ -286,17 +286,19 @@
   }
 
   .profile-page > .navbar,
-  .profile-page > .menu-backdrop {
+  .profile-page > .menu-backdrop,
+  .profile-page > .profile-complete-banner,
+  .profile-topbar {
     grid-column: 1 / -1;
   }
 
   .profile-topbar {
-    grid-column: 1 / -1;
     padding-left: 0;
     padding-right: 0;
   }
 
   .profile-tabs {
+    grid-column: 1;
     flex-direction: column;
     overflow: visible;
     margin: 0;
@@ -317,8 +319,10 @@
   }
 
   .profile-content {
+    grid-column: 2;
     margin: 0;
     padding: 0;
+    min-width: 0;
   }
 }
 
