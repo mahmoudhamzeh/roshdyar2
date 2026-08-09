@@ -215,8 +215,8 @@ const RegisterPage = () => {
                                 >
                                     {loading ? 'در حال ارسال...' : 'ارسال کد تأیید'}
                                 </button>
-                                <Link to="/news" className="login-btn login-btn-secondary register-link-btn">
-                                    بازگشت به مجله
+                                <Link to="/dashboard" className="login-btn login-btn-secondary register-link-btn">
+                                    بازگشت به صفحه اصلی
                                 </Link>
                                 <Link to="/login" className="register-text-btn">
                                     ورود مدیران با رمز عبور
