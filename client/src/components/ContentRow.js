@@ -143,7 +143,7 @@ const ContentRow = ({
                     style={
                         scrollable
                             ? {
-                                '--visible-count': visibleCount,
+                                '--desktop-visible-count': visibleCount,
                                 '--mobile-visible-count': mobileVisibleCount,
                             }
                             : undefined

@@ -273,7 +273,7 @@
   }
 
   .content-row.scrollable {
-    --visible-count: 4;
+    --visible-count: var(--desktop-visible-count, 4);
     --row-gap: 1.25rem;
     flex-wrap: nowrap;
     overflow-x: auto;
