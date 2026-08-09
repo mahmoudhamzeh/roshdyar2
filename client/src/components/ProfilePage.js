@@ -35,6 +35,7 @@ const ProfilePage = () => {
 
     const tabs = [
         { id: 'userInfo', label: 'اطلاعات' },
+        { id: 'myChildren', label: 'کودکان من', href: '/my-children' },
         { id: 'messages', label: 'پیام‌ها' },
         { id: 'orders', label: 'سفارش‌ها', href: '/orders' },
         { id: 'changePassword', label: 'رمز عبور' }

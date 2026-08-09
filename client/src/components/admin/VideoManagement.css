@@ -8,7 +8,38 @@
 .video-management h2 {
     text-align: right;
     color: #2c3e50;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.video-management-hint {
+    text-align: right;
+    color: #5f6b7a;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    margin: 0 0 1.25rem;
+}
+
+.video-thumbnail-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: right;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.video-thumbnail-preview {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    max-width: 320px;
+}
+
+.video-thumbnail-preview img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
 }
 
 .btn-add-video {
@@ -67,6 +98,37 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 1rem;
+}
+
+.video-item-media {
+    width: 120px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #0f766e;
+    aspect-ratio: 16 / 10;
+}
+
+.video-item-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.video-item-fallback {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.5rem;
+}
+
+.video-item-info {
+    flex: 1;
+    min-width: 0;
 }
 
 .video-item-info h3 {

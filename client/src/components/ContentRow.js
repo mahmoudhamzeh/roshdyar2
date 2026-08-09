@@ -4,7 +4,14 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import './ContentRow.css';
 
-const ContentRow = ({ title, items, viewAllLink, scrollable = false, visibleCount = 4 }) => {
+const ContentRow = ({
+    title,
+    items,
+    viewAllLink,
+    scrollable = false,
+    visibleCount = 4,
+    mobileVisibleCount = 2,
+}) => {
     const rowRef = useRef(null);
     const [canScrollPrev, setCanScrollPrev] = useState(false);
     const [canScrollNext, setCanScrollNext] = useState(false);
@@ -44,7 +51,7 @@ const ContentRow = ({ title, items, viewAllLink, scrollable = false, visibleCoun
             el.removeEventListener('scroll', updateScrollState);
             window.removeEventListener('resize', updateScrollState);
         };
-    }, [scrollable, items, visibleCount]);
+    }, [scrollable, items, visibleCount, mobileVisibleCount]);
 
     const scrollByPage = (direction) => {
         const el = rowRef.current;
@@ -133,7 +140,14 @@ const ContentRow = ({ title, items, viewAllLink, scrollable = false, visibleCoun
                 <div
                     ref={rowRef}
                     className={`content-row ${scrollable ? 'scrollable' : ''}`}
-                    style={scrollable ? { '--visible-count': visibleCount } : undefined}
+                    style={
+                        scrollable
+                            ? {
+                                '--desktop-visible-count': visibleCount,
+                                '--mobile-visible-count': mobileVisibleCount,
+                            }
+                            : undefined
+                    }
                 >
                     {items.map(renderItem)}
                 </div>

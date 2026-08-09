@@ -266,13 +266,33 @@
   }
 
   .tiles-container {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
+    --tile-visible-count: 2;
+    --tile-gap: 0.65rem;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: var(--tile-gap);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    padding-bottom: 0.35rem;
+  }
+
+  .tiles-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tiles-container > .tile-link {
+    flex: 0 0 calc((100% - (var(--tile-visible-count) - 1) * var(--tile-gap)) / var(--tile-visible-count));
+    width: auto;
+    max-width: none;
+    scroll-snap-align: start;
   }
 
   .tile {
     min-height: 104px;
     padding: 0.9rem 0.5rem;
+    height: 100%;
   }
 
   .tile-icon {

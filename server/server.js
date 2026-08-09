@@ -1279,10 +1279,18 @@ app.delete('/api/admin/news/:id', isAdmin, (req, res) => {
 });
 
 app.get('/api/videos', (req, res) => res.json(videos));
-app.post('/api/admin/videos', isAdmin, (req, res) => {
+app.post('/api/admin/videos', isAdmin, upload.single('thumbnail'), (req, res) => {
     const { title, url, summary } = req.body;
     if (!title || !url) return res.status(400).json({ message: 'Title and URL are required' });
-    const newVideo = { id: Date.now(), title, url, summary, createdAt: new Date().toISOString() };
+    if (!req.file) return res.status(400).json({ message: 'تصویر کاور ویدیو الزامی است' });
+    const newVideo = {
+        id: Date.now(),
+        title,
+        url,
+        summary: summary || '',
+        thumbnailUrl: `/uploads/${req.file.filename}`,
+        createdAt: new Date().toISOString(),
+    };
     videos.unshift(newVideo);
     saveData();
     res.status(201).json(newVideo);
@@ -1290,9 +1298,16 @@ app.post('/api/admin/videos', isAdmin, (req, res) => {
 app.delete('/api/admin/videos/:id', isAdmin, (req, res) => {
     const { id } = req.params;
     const initialLength = videos.length;
+    const removed = videos.find(v => v.id === parseInt(id));
     videos = videos.filter(v => v.id !== parseInt(id));
-    if (videos.length < initialLength) { saveData(); res.status(200).json({ message: 'ویدیو با موفقیت حذف شد' }); }
-    else res.status(404).json({ message: 'ویدیو یافت نشد' });
+    if (videos.length < initialLength) {
+        if (removed?.thumbnailUrl && removed.thumbnailUrl.startsWith('/uploads/')) {
+            const filePath = path.join(uploadsDir, path.basename(removed.thumbnailUrl));
+            fs.unlink(filePath, () => {});
+        }
+        saveData();
+        res.status(200).json({ message: 'ویدیو با موفقیت حذف شد' });
+    } else res.status(404).json({ message: 'ویدیو یافت نشد' });
 });
 
 app.get('/api/podcasts', (req, res) => res.json(podcasts));

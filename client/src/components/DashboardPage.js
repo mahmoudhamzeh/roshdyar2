@@ -99,6 +99,7 @@ const DashboardPage = () => {
                     items={videos}
                     scrollable={true}
                     visibleCount={4}
+                    mobileVisibleCount={2}
                     viewAllLink="/news#educational-videos"
                 />
                 <ContentRow
@@ -106,6 +107,7 @@ const DashboardPage = () => {
                     items={articles}
                     scrollable={true}
                     visibleCount={4}
+                    mobileVisibleCount={2}
                     viewAllLink="/news"
                 />
             </main>

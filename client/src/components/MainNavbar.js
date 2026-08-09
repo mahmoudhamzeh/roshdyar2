@@ -49,7 +49,6 @@ const MainNavbar = () => {
                         <Link to="/dashboard" onClick={closeMenu}>داشبورد</Link>
                         <Link to="/news" onClick={closeMenu}>مجله سلامت</Link>
                         <Link to="/shop" onClick={closeMenu}>فروشگاه</Link>
-                        <Link to="/my-children" onClick={closeMenu}>فرزندان من</Link>
                         {isAdmin && (
                             <Link to="/admin" className="admin-link" onClick={closeMenu}>
                                 پنل مدیریت
