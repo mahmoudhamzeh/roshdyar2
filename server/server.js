@@ -8,6 +8,12 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const { connect, loadState, saveState } = require('./db');
+const {
+    MILESTONE_STATUS,
+    buildAgeGuidePayload,
+    getBandForAge,
+    recommendActivities,
+} = require('./child-growth-data');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -25,7 +31,7 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts, products, orders, productIdCounter, orderIdCounter;
+let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts, products, orders, productIdCounter, orderIdCounter, childMilestones, activityCompletions, childConcerns;
 
 function applyState(data) {
     users = data.users;
@@ -50,6 +56,9 @@ function applyState(data) {
     orders = data.orders;
     productIdCounter = data.productIdCounter;
     orderIdCounter = data.orderIdCounter;
+    childMilestones = data.childMilestones || {};
+    activityCompletions = data.activityCompletions || {};
+    childConcerns = data.childConcerns || {};
 }
 
 function getStateSnapshot() {
@@ -75,7 +84,10 @@ function getStateSnapshot() {
         products,
         orders,
         productIdCounter,
-        orderIdCounter
+        orderIdCounter,
+        childMilestones,
+        activityCompletions,
+        childConcerns,
     };
 }
 
@@ -702,6 +714,190 @@ app.get('/api/children/:childId', (req, res) => {
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
+});
+
+function findChildOrNull(childId) {
+    return children.find((c) => c.id === parseInt(childId, 10)) || null;
+}
+
+function getChildMilestoneMap(childId) {
+    const key = String(childId);
+    if (!childMilestones[key]) childMilestones[key] = {};
+    return childMilestones[key];
+}
+
+function getChildCompletionMap(childId) {
+    const key = String(childId);
+    if (!activityCompletions[key]) activityCompletions[key] = {};
+    return activityCompletions[key];
+}
+
+function buildGrowthSummaryForChild(childId, child) {
+    const records = [...(growthData[String(childId)] || growthData[childId] || [])].sort((a, b) => {
+        const da = new Date(String(a.date || '').replace(/\//g, '-')).getTime() || 0;
+        const db = new Date(String(b.date || '').replace(/\//g, '-')).getTime() || 0;
+        return da - db;
+    });
+    if (!records.length) {
+        return {
+            lastMeasurement: null,
+            indicators: { heightForAge: null, weightForAge: null, bmiForAge: null },
+            trend: 'UNKNOWN',
+            note: 'هنوز اندازه‌گیری جدیدی ثبت نکرده‌اید.',
+        };
+    }
+    const latest = records[records.length - 1];
+    const prev = records.length > 1 ? records[records.length - 2] : null;
+    let trend = 'STABLE';
+    if (prev && latest.height != null && prev.height != null) {
+        const diff = Number(latest.height) - Number(prev.height);
+        if (diff > 1.5) trend = 'INCREASING';
+        else if (diff < -0.5) trend = 'DECREASING';
+    }
+    return {
+        lastMeasurement: {
+            date: latest.date || null,
+            height: latest.height ?? null,
+            weight: latest.weight ?? null,
+            headCircumference: latest.headCircumference ?? null,
+        },
+        indicators: {
+            heightForAge: { value: latest.height ?? null, note: 'روند قد را در نمودار رشد مشاهده کنید.' },
+            weightForAge: { value: latest.weight ?? null, note: 'از یک اندازه‌گیری به‌تنهایی نتیجه پزشکی گرفته نمی‌شود.' },
+            bmiForAge: null,
+        },
+        trend,
+        note: 'بر اساس اندازه‌گیری‌های ثبت‌شده، روند رشد در نمودار قابل مشاهده است.',
+    };
+}
+
+// —— Child Growth module (رشد کودک من) ——
+app.get('/api/children/:childId/age-guide', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const childId = String(req.params.childId);
+    const milestoneStatuses = getChildMilestoneMap(childId);
+    const completions = getChildCompletionMap(childId);
+    const growthSummary = buildGrowthSummaryForChild(childId, child);
+    const payload = buildAgeGuidePayload(
+        { ...child, name: getChildDisplayName(child) },
+        {
+            milestoneStatuses,
+            completions,
+            growthSummary,
+            parentConcern: req.query.concern || null,
+        }
+    );
+    res.json(payload);
+});
+
+app.get('/api/children/:childId/milestones', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const contentAge = guide.child.isPremature && guide.child.ageInMonths < 24
+        ? guide.child.correctedAgeInMonths
+        : guide.child.ageInMonths;
+    const band = getBandForAge(contentAge);
+    const statuses = getChildMilestoneMap(req.params.childId);
+    const items = (band.milestones || []).map((m) => ({
+        ...m,
+        status: statuses[m.id]?.status || MILESTONE_STATUS.NOT_CHECKED,
+        observedAt: statuses[m.id]?.observedAt || statuses[m.id]?.updatedAt || null,
+    }));
+    res.json({
+        band: { id: band.id, title: band.title, subtitle: band.subtitle },
+        total: items.length,
+        checked: items.filter((i) => i.status !== MILESTONE_STATUS.NOT_CHECKED).length,
+        observed: items.filter((i) => i.status === MILESTONE_STATUS.OBSERVED).length,
+        items,
+    });
+});
+
+app.post('/api/children/:childId/milestones/:milestoneId/status', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const { status, observedAt } = req.body || {};
+    const allowed = Object.values(MILESTONE_STATUS);
+    if (!allowed.includes(status)) {
+        return res.status(400).json({ message: 'وضعیت نامعتبر است' });
+    }
+    const map = getChildMilestoneMap(req.params.childId);
+    map[req.params.milestoneId] = {
+        status,
+        observedAt: observedAt || (status === MILESTONE_STATUS.OBSERVED ? new Date().toISOString().slice(0, 10) : null),
+        updatedAt: new Date().toISOString(),
+    };
+    saveData();
+    res.json({ milestoneId: req.params.milestoneId, ...map[req.params.milestoneId] });
+});
+
+app.get('/api/children/:childId/activities', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const contentAge = guide.child.isPremature && guide.child.ageInMonths < 24
+        ? guide.child.correctedAgeInMonths
+        : guide.child.ageInMonths;
+    const band = getBandForAge(contentAge);
+    const completions = getChildCompletionMap(req.params.childId);
+    const recommended = recommendActivities(band, {
+        milestoneStatuses: getChildMilestoneMap(req.params.childId),
+        completions,
+        parentConcern: req.query.concern || null,
+    });
+    res.json({
+        band: { id: band.id, title: band.title },
+        activities: recommended.map((a) => ({
+            ...a,
+            completed: Boolean(completions[a.id]?.completed),
+            completion: completions[a.id] || null,
+        })),
+    });
+});
+
+app.post('/api/children/:childId/activities/:activityId/completion', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const { completed = true, duration = null } = req.body || {};
+    const map = getChildCompletionMap(req.params.childId);
+    map[req.params.activityId] = {
+        completed: Boolean(completed),
+        duration,
+        completedAt: new Date().toISOString(),
+    };
+    saveData();
+    res.json({ activityId: req.params.activityId, ...map[req.params.activityId] });
+});
+
+app.get('/api/children/:childId/growth-summary', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    res.json(buildGrowthSummaryForChild(req.params.childId, child));
+});
+
+app.get('/api/children/:childId/concerns', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const key = String(req.params.childId);
+    res.json({ concerns: childConcerns[key] || [] });
+});
+
+app.post('/api/children/:childId/concerns', (req, res) => {
+    const child = findChildOrNull(req.params.childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const key = String(req.params.childId);
+    if (!childConcerns[key]) childConcerns[key] = [];
+    const entry = {
+        id: `c-${Date.now()}`,
+        topic: req.body?.topic || 'موضوع دیگر',
+        answers: req.body?.answers || [],
+        result: req.body?.result || 'green',
+        createdAt: new Date().toISOString(),
+    };
+    childConcerns[key].unshift(entry);
+    saveData();
+    res.status(201).json(entry);
 });
 
 app.put('/api/children/:childId', (req, res) => {

@@ -16,6 +16,7 @@ import {
     faStethoscope,
     faPen,
     faSyringe,
+    faSeedling,
     faDroplet,
     faCalendarDay,
     faVenusMars,
@@ -217,6 +218,14 @@ const HealthProfilePage = () => {
     const totalVaccines = Array.isArray(vaccinationStatus) ? vaccinationStatus.length : 0;
 
     const quickActions = [
+        {
+            key: 'child-growth',
+            title: 'رشد کودک من',
+            subtitle: 'این ماه، مهارت‌ها و فعالیت‌ها',
+            icon: faSeedling,
+            tone: 'mint',
+            onClick: () => history.push(`/child-growth/${childId}`),
+        },
         {
             key: 'growth',
             title: 'نمودار رشد',
