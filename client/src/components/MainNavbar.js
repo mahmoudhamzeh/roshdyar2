@@ -31,7 +31,7 @@ const MainNavbar = () => {
 
     return (
         <>
-            <nav className="navbar">
+            <nav className={`navbar ${isMenuOpen ? 'menu-open' : ''}`}>
                 <div className="navbar-left">
                     <div className="navbar-brand">
                         <Link to="/dashboard" onClick={closeMenu}>
@@ -80,7 +80,7 @@ const MainNavbar = () => {
                     </button>
                 </div>
             </nav>
-            {isMenuOpen && <div className="menu-backdrop" onClick={closeMenu} />}
+            {isMenuOpen && <div className="menu-backdrop" onClick={closeMenu} aria-hidden="true" />}
         </>
     );
 };

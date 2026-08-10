@@ -14,6 +14,13 @@
   backdrop-filter: blur(8px);
 }
 
+/* Keep the whole nav (drawer + toggler) above the sibling backdrop.
+   Sticky + z-index creates a stacking context that would otherwise trap
+   the drawer's z-index below .menu-backdrop and swallow link taps. */
+.navbar.menu-open {
+  z-index: 2100;
+}
+
 .navbar-left,
 .navbar-center,
 .navbar-right {
@@ -161,7 +168,8 @@
   width: 100%;
   height: 100%;
   background-color: rgba(15, 61, 58, 0.45);
-  z-index: 1999;
+  /* Above page chrome (e.g. bottom nav 1500), below .navbar.menu-open (2100) */
+  z-index: 2050;
   animation: fade-up 0.25s ease both;
 }
 
@@ -238,7 +246,9 @@
     display: block;
   }
 
-  .menu-backdrop {
-    z-index: 1998;
+  /* Keep the close control above the slide-in drawer panel */
+  .navbar.menu-open .navbar-right {
+    position: relative;
+    z-index: 2001;
   }
 }
