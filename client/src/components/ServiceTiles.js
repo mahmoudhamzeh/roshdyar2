@@ -16,7 +16,7 @@ import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
-    { name: 'راهنمای سنی', icon: faSeedling, link: '#', id: 'age-guidance', tone: 'mint' },
+    { name: 'رشد کودک من', icon: faSeedling, link: '#', id: 'child-growth', tone: 'mint' },
     { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
     { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
     { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal', soon: true },
@@ -101,7 +101,7 @@ const ServiceTiles = () => {
                         const requiresChild =
                             service.id === 'growth-chart' ||
                             service.id === 'vaccination' ||
-                            service.id === 'age-guidance';
+                            service.id === 'child-growth';
                         const style = { animationDelay: `${0.05 * index}s` };
                         if (service.soon) {
                             return (
