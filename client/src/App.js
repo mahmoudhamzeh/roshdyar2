@@ -43,12 +43,8 @@ const App = () => {
                 <PrivateRoute path="/vaccination-status/:childId" component={VaccinationStatusPage} />
                 <PrivateRoute path="/vaccination/:childId" component={VaccinationPage} />
                 <PrivateRoute path="/child-growth/:childId" component={ChildGrowthPage} />
-                <PrivateRoute
-                    path="/age-guidance/:childId"
-                    component={({ match }) => (
-                        <Redirect to={`/child-growth/${match.params.childId}`} />
-                    )}
-                />
+                {/* Legacy tile/route id from older builds */}
+                <PrivateRoute path="/age-guidance/:childId" component={ChildGrowthPage} />
                 <PrivateRoute path="/profile" component={ProfilePage} />
                 <PrivateRoute exact path="/shop" component={ShopPage} />
                 <PrivateRoute path="/shop/:id" component={ProductDetailPage} />
