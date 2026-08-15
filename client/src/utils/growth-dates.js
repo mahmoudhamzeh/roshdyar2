@@ -75,5 +75,9 @@ export const roundAgeMonths = (months, digits = 1) => {
 export const formatAgeLabel = (months) => {
     const value = roundAgeMonths(months, 1);
     if (value == null) return '—';
-    return `${value} ماهگی`;
+    if (value < 12) return `${value} ماهگی`;
+    const years = Math.floor(value / 12);
+    const rem = roundAgeMonths(value - years * 12, 1);
+    if (rem < 0.3) return `${years} سالگی`;
+    return `${years} سال و ${rem} ماه`;
 };

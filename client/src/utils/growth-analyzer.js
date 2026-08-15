@@ -40,6 +40,12 @@ const getPercentileForValue = (value, ageMonths, gender, metric) => {
     return 50 + 47 * ((value - standard.P50) / (standard.P97 - standard.P50));
 };
 
+export const METRIC_META = {
+    height: { key: 'height', label: 'قد', unit: 'cm', unitFa: 'سانتی‌متر' },
+    weight: { key: 'weight', label: 'وزن', unit: 'kg', unitFa: 'کیلوگرم' },
+    headCircumference: { key: 'headCircumference', label: 'دور سر', unit: 'cm', unitFa: 'سانتی‌متر' },
+};
+
 export const getAbsoluteStatus = (percentile) => {
     if (percentile === null || percentile === undefined) return 'نامشخص';
     if (percentile < 3) return 'کمبود';
@@ -47,9 +53,71 @@ export const getAbsoluteStatus = (percentile) => {
     return 'نرمال';
 };
 
+export const roundPercentile = (percentile) => {
+    if (percentile == null || Number.isNaN(percentile)) return null;
+    return Math.round(percentile);
+};
+
+export const getTrendMeta = (trend) => {
+    if (trend === 'improving') return { key: 'improving', label: 'صدک رو به افزایش', short: 'افزایشی' };
+    if (trend === 'declining') return { key: 'declining', label: 'صدک رو به کاهش', short: 'کاهشی' };
+    return { key: 'stable', label: 'روند پایدار', short: 'پایدار' };
+};
+
+export const getGrowthInterpretation = (metric, analysis) => {
+    const name = METRIC_META[metric]?.label || 'رشد';
+    if (!analysis || analysis.value == null || analysis.value === '') {
+        return `هنوز ${name} ثبت نشده است. با ثبت اندازه‌گیری، جایگاه کودک روی منحنی رشد مشخص می‌شود.`;
+    }
+
+    const percentile = roundPercentile(analysis.percentile);
+    if (analysis.status === 'کمبود') {
+        return `آخرین ${name} پایین‌تر از صدک ۳ منحنی سازمان بهداشت جهانی است. این به‌تنهایی تشخیص نیست؛ برای تفسیر با پزشک کودک مشورت کنید.`;
+    }
+    if (analysis.status === 'اضافه') {
+        return `آخرین ${name} بالاتر از صدک ۹۷ است. این به‌تنهایی تشخیص نیست؛ برای تفسیر با پزشک کودک مشورت کنید.`;
+    }
+    if (percentile != null) {
+        return `آخرین ${name} حدود صدک ${percentile} است و در محدوده طبیعی منحنی رشد قرار دارد.`;
+    }
+    return `آخرین ${name} ثبت شده است.`;
+};
+
+export const analyzeRecordMetric = (metric, child, record) => {
+    if (!child || !record) {
+        return { value: null, percentile: null, status: 'نامشخص', ageInMonths: null };
+    }
+    const raw = record[metric];
+    const value = raw === undefined || raw === null || raw === '' ? null : Number(raw);
+    const age = ageInMonths(record.date, child.birthDate);
+    if (value == null || Number.isNaN(value)) {
+        return { value: null, percentile: null, status: 'نامشخص', ageInMonths: age };
+    }
+    const percentile = getPercentileForValue(value, age, child.gender, metric);
+    return {
+        value,
+        percentile,
+        status: getAbsoluteStatus(percentile),
+        ageInMonths: age,
+    };
+};
+
 export const analyzeGrowthMetric = (metric, child) => {
+    const empty = {
+        value: null,
+        date: null,
+        ageInMonths: null,
+        percentile: null,
+        status: 'نامشخص',
+        trend: 'stable',
+        previousValue: null,
+        previousDate: null,
+        delta: null,
+        count: 0,
+    };
+
     if (!child || !child.growthData || child.growthData.length === 0) {
-        return { value: null, date: null, ageInMonths: null, status: 'نامشخص', trend: 'stable' };
+        return empty;
     }
 
     const sortedData = [...child.growthData].sort(
@@ -61,18 +129,26 @@ export const analyzeGrowthMetric = (metric, child) => {
     });
 
     if (recordsWithMetric.length === 0) {
-        return { value: null, date: null, ageInMonths: null, status: 'نامشخص', trend: 'stable' };
+        return empty;
     }
 
     const latestRecord = recordsWithMetric[recordsWithMetric.length - 1];
     const latestAge = ageInMonths(latestRecord.date, child.birthDate);
-    const latestP = getPercentileForValue(latestRecord[metric], latestAge, child.gender, metric);
+    const latestValue = Number(latestRecord[metric]);
+    const latestP = getPercentileForValue(latestValue, latestAge, child.gender, metric);
 
     let trend = 'stable';
+    let previousValue = null;
+    let previousDate = null;
+    let delta = null;
+
     if (recordsWithMetric.length >= 2) {
         const previousRecord = recordsWithMetric[recordsWithMetric.length - 2];
         const previousAge = ageInMonths(previousRecord.date, child.birthDate);
-        const previousP = getPercentileForValue(previousRecord[metric], previousAge, child.gender, metric);
+        previousValue = Number(previousRecord[metric]);
+        previousDate = previousRecord.date || null;
+        delta = latestValue - previousValue;
+        const previousP = getPercentileForValue(previousValue, previousAge, child.gender, metric);
         if (latestP !== null && previousP !== null) {
             const diff = latestP - previousP;
             if (Math.abs(diff) > 5) {
@@ -82,11 +158,15 @@ export const analyzeGrowthMetric = (metric, child) => {
     }
 
     return {
-        value: latestRecord[metric],
+        value: latestValue,
         date: latestRecord.date || null,
         ageInMonths: latestAge,
         percentile: latestP,
         status: getAbsoluteStatus(latestP),
         trend,
+        previousValue,
+        previousDate,
+        delta,
+        count: recordsWithMetric.length,
     };
 };
