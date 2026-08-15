@@ -1,4 +1,4 @@
 {
-  "watch": ["server.js", "recommendations.js", "vaccination-schedule.js"],
+  "watch": ["server.js", "db.js", "schema.sql", "recommendations.js", "vaccination-schedule.js"],
   "ignore": ["db.json", "node_modules/"]
 }

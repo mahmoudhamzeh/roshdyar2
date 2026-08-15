@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "migrate:sqlite": "node migrate-to-sqlite.js"
+    "migrate:sqlite": "node migrate-to-sqlite.js",
+    "test": "node test-relational-db.js && node test-api.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
