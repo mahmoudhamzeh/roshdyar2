@@ -1,24 +1,8 @@
 #!/usr/bin/env node
 /**
- * Migrate server/db.json into SQLite.
- *
- * Usage:
- *   node migrate-to-sqlite.js
- *   FORCE_MIGRATE=1 node migrate-to-sqlite.js
+ * @deprecated Use migrate-to-postgres.js — the app now uses PostgreSQL.
  */
-require('dotenv').config();
-const path = require('path');
-const { migrateFromJson, close, DB_FILE } = require('./db');
-
-async function main() {
-    const jsonPath = path.join(__dirname, 'db.json');
-    console.log(`SQLite file: ${DB_FILE}`);
-    migrateFromJson(jsonPath);
-    close();
-}
-
-main().catch((err) => {
-    console.error(err);
-    close();
-    process.exit(1);
-});
+console.error('SQLite is no longer the application database.');
+console.error('Use: npm run migrate --prefix server');
+console.error('Or:  DATABASE_URL=postgres://... node migrate-to-postgres.js');
+process.exit(1);

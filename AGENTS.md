@@ -5,11 +5,14 @@
 1.  **`client`**: اپلیکیشن فرانت‌اند که با React نوشته شده است.
 2.  **`server`**: اپلیکیشن بک‌اند که با Node.js و Express ساخته شده است.
 
+دیتابیس اصلی **PostgreSQL** است.
+
 ## دستورالعمل‌های راه‌اندازی
 
-برای راه‌اندازی کامل پروژه، دستورات زیر را در ترمینال اجرا کنید:
-
 ```bash
+# PostgreSQL (لوکال با Docker)
+docker compose up -d postgres
+
 # نصب وابستگی‌های سرور
 npm install --prefix server
 
@@ -17,9 +20,13 @@ npm install --prefix server
 npm install --prefix client
 ```
 
-## اجرای پروژه
+متغیر اتصال پیش‌فرض:
 
-برای اجرای همزمان هر دو بخش پروژه، دو ترمینال جداگانه باز کرده و دستورات زیر را اجرا کنید:
+```
+DATABASE_URL=postgres://roshdyar:roshdyar@127.0.0.1:5432/roshdyar
+```
+
+## اجرای پروژه
 
 **ترمینال ۱ (برای سرور):**
 
@@ -34,3 +41,5 @@ npm start --prefix client
 ```
 
 سرور روی پورت `5000` و کلاینت روی پورت `3000` اجرا خواهد شد.
+هلث‌چک دیتابیس: `GET http://localhost:5000/api/health`
+

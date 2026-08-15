@@ -7,10 +7,23 @@ const path = require('path');
 const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
-const { connect, loadState, saveState } = require('./db');
+const store = require('./db');
 
 const app = express();
 const port = process.env.PORT || 5000;
+
+function wrapAsync(handler) {
+    if (typeof handler !== 'function') return handler;
+    if (handler.length >= 4) {
+        return (err, req, res, next) => Promise.resolve(handler(err, req, res, next)).catch(next);
+    }
+    return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+['get', 'post', 'put', 'delete'].forEach((method) => {
+    const original = app[method].bind(app);
+    app[method] = (path, ...handlers) => original(path, ...handlers.map(wrapAsync));
+});
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -25,63 +38,13 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-let users, children, growthData, medicalVisits, medicalDocuments, checkups, reminders, userReminders, messages, childIdCounter, userIdCounter, messageIdCounter, banners, articles, news, tickets, videos, podcasts, products, orders, productIdCounter, orderIdCounter;
-
-function applyState(data) {
-    users = data.users;
-    children = data.children;
-    growthData = data.growthData;
-    medicalVisits = data.medicalVisits;
-    medicalDocuments = data.medicalDocuments;
-    checkups = data.checkups;
-    reminders = data.reminders;
-    userReminders = data.userReminders;
-    messages = data.messages;
-    childIdCounter = data.childIdCounter;
-    userIdCounter = data.userIdCounter;
-    messageIdCounter = data.messageIdCounter;
-    banners = data.banners;
-    articles = data.articles;
-    news = data.news;
-    tickets = data.tickets;
-    videos = data.videos;
-    podcasts = data.podcasts;
-    products = data.products;
-    orders = data.orders;
-    productIdCounter = data.productIdCounter;
-    orderIdCounter = data.orderIdCounter;
-}
-
-function getStateSnapshot() {
-    return {
-        users,
-        children,
-        growthData,
-        medicalVisits,
-        medicalDocuments,
-        checkups,
-        reminders,
-        userReminders,
-        messages,
-        childIdCounter,
-        userIdCounter,
-        messageIdCounter,
-        banners,
-        articles,
-        news,
-        tickets,
-        videos,
-        podcasts,
-        products,
-        orders,
-        productIdCounter,
-        orderIdCounter
-    };
-}
-
-const saveData = () => {
-    saveState(getStateSnapshot());
-};
+app.get('/api/health', async (req, res) => {
+    try {
+        res.json(await store.health());
+    } catch (err) {
+        res.status(503).json({ ok: false, message: err.message });
+    }
+});
 
 function calculateAge(birthDate) {
     const today = new Date();
@@ -125,8 +88,6 @@ function normalizeChildName(childData) {
 const OTP_TTL_MS = 5 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
-/** @type {Map<string, { code: string, expiresAt: number, sentAt: number, attempts: number, purpose: string }>} */
-const otpStore = new Map();
 /** Phones with an in-flight SMS send — prevents double-send races. */
 const otpPending = new Set();
 
@@ -177,10 +138,8 @@ function generateOtpCode() {
     return String(Math.floor(10000 + Math.random() * 90000));
 }
 
-function findUserByPhone(phone) {
-    return Object.values(users).find(
-        (u) => normalizePhone(u.mobile) === phone || normalizePhone(u.username) === phone
-    );
+async function findUserByPhone(phone) {
+    return await store.users.findByPhone(phone);
 }
 
 /** Admin accounts accept both "Amin" and "admin" as login aliases. */
@@ -210,28 +169,22 @@ function identitiesMatch(user, login) {
     );
 }
 
-function ensureDefaultAdmin() {
-    const existingAdmin = Object.values(users).find((u) => u.isAdmin);
+async function ensureDefaultAdmin() {
+    const existingAdmin = (await store.users.list()).find((u) => u.isAdmin);
     if (existingAdmin) {
-        // Normalize legacy "admin" username to "Amin" (login still accepts both).
         if (String(existingAdmin.username || '').toLowerCase() === 'admin') {
-            existingAdmin.username = 'Amin';
-            users[String(existingAdmin.id)] = existingAdmin;
-            saveData();
+            await store.users.update(existingAdmin.id, { username: 'Amin' });
             console.log('Renamed legacy admin username to Amin');
         }
         return;
     }
 
-    const newId = userIdCounter++;
-    users[String(newId)] = {
-        id: newId,
+    await store.users.create({
         username: 'Amin',
         email: 'admin@example.com',
         password: 'admin',
         isAdmin: true
-    };
-    saveData();
+    });
     console.log('Created default admin user: Amin / admin');
 }
 
@@ -354,12 +307,12 @@ async function deliverOtp(phone, code) {
 }
 
 // --- Auth Routes ---
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { login, password } = req.body;
     if (!login || !password) {
         return res.status(400).json({ message: 'نام کاربری و رمز عبور الزامی است' });
     }
-    const user = Object.values(users).find(
+    const user = (await store.users.findCandidatesForLogin(login)).find(
         (u) => identitiesMatch(u, login) && u.password != null && u.password === password
     );
     if (user) {
@@ -369,22 +322,19 @@ app.post('/api/login', (req, res) => {
     }
 });
 
-app.post('/api/signup', (req, res) => {
+app.post('/api/signup', async (req, res) => {
     const { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ message: 'نام کاربری و رمز عبور الزامی است' });
 
-    const existingUser = Object.values(users).find(u => u.username === login || u.email === login);
+    const existingUser = await store.users.findByUsernameOrEmail(login);
     if (existingUser) return res.status(409).json({ message: 'این نام کاربری قبلاً ثبت شده است' });
 
-    const newId = userIdCounter++;
-    const newUser = { id: newId, username: login, email: login, password, isAdmin: false };
-    users[String(newId)] = newUser;
-    saveData();
+    await store.users.create({ username: login, email: login, password, isAdmin: false });
     res.status(201).json({ message: 'ثبت‌نام با موفقیت انجام شد. اکنون می‌توانید وارد شوید.' });
 });
 
 async function issueOtp({ phone, purpose, res }) {
-    const existing = otpStore.get(phone);
+    const existing = await store.otp.get(phone);
     const now = Date.now();
 
     if (existing && existing.purpose === purpose && now - existing.sentAt < OTP_RESEND_COOLDOWN_MS) {
@@ -407,7 +357,7 @@ async function issueOtp({ phone, purpose, res }) {
         // Persist OTP only after SMS succeeds so failed sends do not trigger cooldown.
         await deliverOtp(phone, code);
         const sentAt = Date.now();
-        otpStore.set(phone, { code, expiresAt, sentAt, attempts: 0, purpose });
+        await store.otp.set(phone, { code, expiresAt, sentAt, attempts: 0, purpose });
     } catch (err) {
         console.error('OTP delivery failed:', err);
         return res.status(502).json({ message: 'ارسال کد تأیید ناموفق بود. دوباره تلاش کنید.' });
@@ -428,7 +378,7 @@ async function issueOtp({ phone, purpose, res }) {
     return res.status(200).json(payload);
 }
 
-function readOtpEntry({ phone, code, purpose, consume }) {
+async function readOtpEntry({ phone, code, purpose, consume }) {
     if (!isValidIranMobile(phone)) {
         return { error: { status: 400, body: { message: 'شماره موبایل معتبر نیست.' } } };
     }
@@ -436,19 +386,19 @@ function readOtpEntry({ phone, code, purpose, consume }) {
         return { error: { status: 400, body: { message: 'کد تأیید باید ۵ رقم باشد.' } } };
     }
 
-    const entry = otpStore.get(phone);
+    const entry = await store.otp.get(phone);
     if (!entry || entry.purpose !== purpose) {
         return { error: { status: 400, body: { message: 'کد تأیید یافت نشد. دوباره درخواست کنید.' } } };
     }
 
     const now = Date.now();
     if (now > entry.expiresAt) {
-        otpStore.delete(phone);
+        await store.otp.remove(phone);
         return { error: { status: 410, body: { message: 'کد تأیید منقضی شده است. دوباره درخواست کنید.' } } };
     }
 
     if (entry.attempts >= OTP_MAX_ATTEMPTS) {
-        otpStore.delete(phone);
+        await store.otp.remove(phone);
         return {
             error: {
                 status: 429,
@@ -459,7 +409,7 @@ function readOtpEntry({ phone, code, purpose, consume }) {
 
     if (entry.code !== code) {
         entry.attempts += 1;
-        otpStore.set(phone, entry);
+        await store.otp.set(phone, entry);
         const remaining = OTP_MAX_ATTEMPTS - entry.attempts;
         return {
             error: {
@@ -475,12 +425,12 @@ function readOtpEntry({ phone, code, purpose, consume }) {
     }
 
     if (consume) {
-        otpStore.delete(phone);
+        await store.otp.remove(phone);
     }
     return { ok: true, entry };
 }
 
-function consumeOtp({ phone, code, purpose }) {
+async function consumeOtp({ phone, code, purpose }) {
     return readOtpEntry({ phone, code, purpose, consume: true });
 }
 
@@ -494,21 +444,19 @@ app.post('/api/auth/send-otp', async (req, res) => {
     return issueOtp({ phone, purpose: 'auth', res });
 });
 
-app.post('/api/auth/verify-otp', (req, res) => {
+app.post('/api/auth/verify-otp', async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
-    const result = consumeOtp({ phone, code, purpose: 'auth' });
+    const result = await consumeOtp({ phone, code, purpose: 'auth' });
     if (result.error) {
         return res.status(result.error.status).json(result.error.body);
     }
 
-    let user = findUserByPhone(phone);
+    let user = await findUserByPhone(phone);
     let isNewUser = false;
     if (!user) {
         isNewUser = true;
-        const newId = userIdCounter++;
-        user = {
-            id: newId,
+        user = await store.users.create({
             username: phone,
             email: '',
             mobile: phone,
@@ -521,9 +469,7 @@ app.post('/api/auth/verify-otp', (req, res) => {
             isAdmin: false,
             profileComplete: false,
             createdAt: new Date().toISOString()
-        };
-        users[String(newId)] = user;
-        saveData();
+        });
     }
 
     res.status(isNewUser ? 201 : 200).json({
@@ -540,7 +486,7 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
         return res.status(400).json({ message: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲xxxxxxx' });
     }
 
-    const user = findUserByPhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
         return res.status(404).json({
             message: 'حسابی با این شماره یافت نشد. ابتدا با پیامک ثبت‌نام کنید.'
@@ -550,10 +496,10 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
     return issueOtp({ phone, purpose: 'reset', res });
 });
 
-app.post('/api/auth/forgot-password/verify-otp', (req, res) => {
+app.post('/api/auth/forgot-password/verify-otp', async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
-    const result = readOtpEntry({ phone, code, purpose: 'reset', consume: false });
+    const result = await readOtpEntry({ phone, code, purpose: 'reset', consume: false });
     if (result.error) {
         return res.status(result.error.status).json(result.error.body);
     }
@@ -565,7 +511,7 @@ app.post('/api/auth/forgot-password/verify-otp', (req, res) => {
     });
 });
 
-app.post('/api/auth/forgot-password/reset', (req, res) => {
+app.post('/api/auth/forgot-password/reset', async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
     const newPassword = req.body.newPassword || req.body.password;
@@ -574,43 +520,41 @@ app.post('/api/auth/forgot-password/reset', (req, res) => {
         return res.status(400).json({ message: passwordError });
     }
 
-    const result = consumeOtp({ phone, code, purpose: 'reset' });
+    const result = await consumeOtp({ phone, code, purpose: 'reset' });
     if (result.error) {
         return res.status(result.error.status).json(result.error.body);
     }
 
-    const user = findUserByPhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
         return res.status(404).json({ message: 'کاربر یافت نشد.' });
     }
 
-    users[String(user.id)].password = String(newPassword);
-    saveData();
+    await store.users.update(user.id, { password: String(newPassword) });
+    const updated = await store.users.getById(user.id);
 
     res.status(200).json({
         message: 'رمز عبور با موفقیت ثبت شد. اکنون می‌توانید وارد شوید.',
-        user: publicUser(users[String(user.id)])
+        user: publicUser(updated)
     });
 });
 
 // --- User Profile Routes ---
-app.get('/api/users/:id', (req, res) => {
+app.get('/api/users/:id', async (req, res) => {
     const { id } = req.params;
-    const user = users[id];
+    const user = await store.users.getById(id);
     if (user) {
-        const { password, ...userToSend } = user;
-        res.json(userToSend);
+        res.json(publicUser(user));
     } else res.status(404).json({ message: 'کاربر یافت نشد' });
 });
 
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', async (req, res) => {
     const { id } = req.params;
-    if (!users[id]) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    const current = await store.users.getById(id);
+    if (!current) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
-    // Only allow safe profile fields from the client (prevents isAdmin escalation)
     const { firstName, lastName, birthDate, province, city, mobile, email } = req.body;
-    users[id] = {
-        ...users[id],
+    const patch = {
         ...(firstName !== undefined && { firstName }),
         ...(lastName !== undefined && { lastName }),
         ...(birthDate !== undefined && { birthDate }),
@@ -619,18 +563,17 @@ app.put('/api/users/:id', (req, res) => {
         ...(mobile !== undefined && { mobile }),
         ...(email !== undefined && { email }),
     };
-    const hasName = Boolean(
-        String(users[id].firstName || '').trim() || String(users[id].lastName || '').trim()
-    );
-    users[id].profileComplete = hasName;
-    saveData();
-    res.json({ message: 'اطلاعات با موفقیت ذخیره شد.', user: publicUser(users[id]) });
+    const nextFirst = patch.firstName !== undefined ? patch.firstName : current.firstName;
+    const nextLast = patch.lastName !== undefined ? patch.lastName : current.lastName;
+    patch.profileComplete = Boolean(String(nextFirst || '').trim() || String(nextLast || '').trim());
+    const updated = await store.users.update(id, patch);
+    res.json({ message: 'اطلاعات با موفقیت ذخیره شد.', user: publicUser(updated) });
 });
 
-app.put('/api/users/:id/password', (req, res) => {
+app.put('/api/users/:id/password', async (req, res) => {
     const { id } = req.params;
     const { currentPassword, newPassword } = req.body;
-    const user = users[id];
+    const user = await store.users.getById(id);
 
     if (!user || user.password !== currentPassword) {
         return res.status(401).json({ message: 'رمز عبور فعلی اشتباه است' });
@@ -639,137 +582,104 @@ app.put('/api/users/:id/password', (req, res) => {
         return res.status(400).json({ message: 'رمز عبور جدید باید حداقل ۴ کاراکتر باشد' });
     }
 
-    users[id].password = newPassword;
-    saveData();
+    await store.users.update(id, { password: newPassword });
     res.status(200).json({ message: 'رمز عبور با موفقیت تغییر کرد' });
 });
 
 // --- Children Routes ---
-app.get('/api/children', (req, res) => {
+app.get('/api/children', async (req, res) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ message: 'User ID is required' });
-    const userChildren = children
-        .filter(c => c.userId === parseInt(userId))
+    const userChildren = (await store.children.listByUserId(userId))
         .map(c => ({ ...c, name: getChildDisplayName(c) }));
     res.json(userChildren);
 });
 
-app.post('/api/children', (req, res) => {
+app.post('/api/children', async (req, res) => {
     const childData = req.body;
     if (!childData || !childData.userId) {
         return res.status(400).json({ message: 'Child data and userId are required' });
     }
     normalizeChildName(childData);
-    const newChild = {
+    const newChild = await store.children.create({
         ...childData,
-        id: childIdCounter++,
         userId: parseInt(childData.userId, 10),
         vaccinationRecords: childData.vaccinationRecords || {}
-    };
-    children.push(newChild);
+    });
 
-    // Seed growth data from birth measurements when available
     const birthHeight = parseFloat(childData.height || childData.birthHeight);
     const birthWeight = parseFloat(childData.weight || childData.birthWeight);
     const birthHead = parseFloat(childData.birthHeadCircumference);
     if (childData.birthDate && (birthHeight || birthWeight || birthHead)) {
-        growthData[String(newChild.id)] = [{
+        await store.growth.upsert(newChild.id, {
             date: String(childData.birthDate).replace(/\//g, '-'),
-            ...(birthHeight ? { height: birthHeight } : {}),
-            ...(birthWeight ? { weight: birthWeight > 100 ? birthWeight / 1000 : birthWeight } : {}),
-            ...(birthHead ? { headCircumference: birthHead } : {}),
-        }];
+            height: birthHeight || null,
+            weight: birthWeight ? (birthWeight > 100 ? birthWeight / 1000 : birthWeight) : null,
+            headCircumference: birthHead || null
+        });
     }
 
-    medicalVisits[String(newChild.id)] = medicalVisits[String(newChild.id)] || [];
-    medicalDocuments[String(newChild.id)] = medicalDocuments[String(newChild.id)] || [];
-    checkups[String(newChild.id)] = checkups[String(newChild.id)] || [];
-    reminders[String(newChild.id)] = reminders[String(newChild.id)] || [];
-
-    saveData();
-    res.status(201).json({ ...newChild, growthData: growthData[String(newChild.id)] || [] });
+    res.status(201).json({ ...newChild, growthData: await store.growth.list(newChild.id) });
 });
 
-app.get('/api/children/:childId', (req, res) => {
+app.get('/api/children/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = children.find(c => c.id === parseInt(childId));
+    const child = await store.children.getById(childId);
     if (child) {
         res.json({
             ...child,
             name: getChildDisplayName(child),
-            growthData: growthData[childId] || growthData[String(childId)] || []
+            growthData: await store.growth.list(childId)
         });
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
 });
 
-app.put('/api/children/:childId', (req, res) => {
+app.put('/api/children/:childId', async (req, res) => {
     const { childId } = req.params;
     const updatedData = { ...req.body };
-    const childIndex = children.findIndex(c => c.id === parseInt(childId));
-
-    if (childIndex !== -1) {
-        normalizeChildName(updatedData);
-        // Never let clients overwrite the id via body
-        delete updatedData.id;
-        delete updatedData.growthData;
-        children[childIndex] = { ...children[childIndex], ...updatedData };
-        saveData();
+    normalizeChildName(updatedData);
+    delete updatedData.id;
+    delete updatedData.growthData;
+    const updated = await store.children.update(childId, updatedData);
+    if (updated) {
         res.status(200).json({
-            ...children[childIndex],
-            name: getChildDisplayName(children[childIndex]),
-            growthData: growthData[childId] || growthData[String(childId)] || []
+            ...updated,
+            name: getChildDisplayName(updated),
+            growthData: await store.growth.list(childId)
         });
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
 });
 
-app.delete('/api/children/:childId', (req, res) => {
+app.delete('/api/children/:childId', async (req, res) => {
     const { childId } = req.params;
-    const idKey = String(childId);
-    const initialLength = children.length;
-    children = children.filter(c => c.id !== parseInt(childId));
-    if (children.length < initialLength) {
-        // Also delete associated data
-        delete growthData[childId];
-        delete growthData[idKey];
-        delete medicalVisits[childId];
-        delete medicalVisits[idKey];
-        delete medicalDocuments[childId];
-        delete medicalDocuments[idKey];
-        delete checkups[childId];
-        delete checkups[idKey];
-        delete reminders[childId];
-        delete reminders[idKey];
-        saveData();
+    if (await store.children.remove(childId)) {
         res.status(200).json({ message: 'کودک و تمام اطلاعات مربوطه با موفقیت حذف شدند' });
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
 });
 
-app.put('/api/children/:childId/vaccination-records', (req, res) => {
+app.put('/api/children/:childId/vaccination-records', async (req, res) => {
     const { childId } = req.params;
     const { vaccinationRecords } = req.body;
-    const childIndex = children.findIndex(c => c.id === parseInt(childId));
-    if (childIndex !== -1) {
-        children[childIndex].vaccinationRecords = vaccinationRecords;
-        saveData();
-        res.status(200).json(children[childIndex]);
-    } else res.status(404).json({ message: 'کودک یافت نشد' });
+    const updated = await store.children.update(childId, { vaccinationRecords });
+    if (updated) res.status(200).json(updated);
+    else res.status(404).json({ message: 'کودک یافت نشد' });
 });
 
-app.post('/api/children/:childId/avatar', upload.single('avatar'), (req, res) => {
+app.post('/api/children/:childId/avatar', upload.single('avatar'), async (req, res) => {
     const { childId } = req.params;
     const userId = req.headers['x-user-id'];
-    const childIndex = children.findIndex(c => c.id === parseInt(childId));
+    const child = await store.children.getById(childId);
 
-    if (childIndex === -1) {
+    if (!child) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
-    if (!userId || children[childIndex].userId !== Number(userId)) {
+    if (!userId || child.userId !== Number(userId)) {
         return res.status(403).json({ message: 'دسترسی غیرمجاز برای تغییر عکس این کودک' });
     }
     if (!req.file) {
@@ -777,8 +687,7 @@ app.post('/api/children/:childId/avatar', upload.single('avatar'), (req, res) =>
     }
 
     const avatarPath = `/uploads/${req.file.filename}`;
-    children[childIndex].avatar = avatarPath;
-    saveData();
+    await store.children.update(childId, { avatar: avatarPath });
     res.status(200).json({ message: 'عکس با موفقیت آپلود شد', filePath: avatarPath });
 });
 
@@ -805,40 +714,16 @@ const compareGrowthDates = (a, b) => {
     return da.localeCompare(db);
 };
 
-const ensureGrowthRecordIds = (records) => {
-    let changed = false;
-    const next = (records || []).map((record, index) => {
-        if (record && record.id) return record;
-        changed = true;
-        return {
-            ...record,
-            id: `g-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-            date: normalizeGrowthDate(record?.date) || record?.date
-        };
-    });
-    return { records: next, changed };
-};
-
-const getGrowthList = (childId) => {
-    const key = String(childId);
-    const ensured = ensureGrowthRecordIds(growthData[key] || growthData[childId] || []);
-    if (ensured.changed) {
-        growthData[key] = ensured.records;
-        saveData();
-    }
-    return growthData[key] || [];
-};
-
-app.get('/api/growth/:childId', (req, res) => {
+app.get('/api/growth/:childId', async (req, res) => {
     const { childId } = req.params;
-    if (!children.find(c => c.id === parseInt(childId, 10))) {
+    if (!await store.children.getById(childId)) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
-    const list = getGrowthList(childId).slice().sort((a, b) => compareGrowthDates(a.date, b.date));
+    const list = (await store.growth.list(childId)).slice().sort((a, b) => compareGrowthDates(a.date, b.date));
     res.json(list);
 });
 
-app.post('/api/growth/:childId', (req, res) => {
+app.post('/api/growth/:childId', async (req, res) => {
     const { childId } = req.params;
     const date = normalizeGrowthDate(req.body?.date);
     const height = parseOptionalNumber(req.body?.height);
@@ -851,53 +736,32 @@ app.post('/api/growth/:childId', (req, res) => {
     if (height == null && weight == null && headCircumference == null) {
         return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
     }
-    if (!children.find(c => c.id === parseInt(childId, 10))) {
+    if (!await store.children.getById(childId)) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
 
-    const key = String(childId);
-    const list = getGrowthList(childId);
-    const existingIndex = list.findIndex((r) => normalizeGrowthDate(r.date) === date);
-
-    const record = {
-        id: existingIndex >= 0 ? list[existingIndex].id : `g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        date,
-        height,
-        weight,
-        headCircumference
-    };
-
-    if (existingIndex >= 0) {
-        list[existingIndex] = record;
-    } else {
-        list.push(record);
-    }
-
-    list.sort((a, b) => compareGrowthDates(a.date, b.date));
-    growthData[key] = list;
-    saveData();
-    res.status(existingIndex >= 0 ? 200 : 201).json(record);
+    const result = await store.growth.upsert(childId, { date, height, weight, headCircumference });
+    res.status(result.created ? 201 : 200).json(result.record);
 });
 
-app.put('/api/growth/:childId/record/:recordId', (req, res) => {
+app.put('/api/growth/:childId/record/:recordId', async (req, res) => {
     const { childId, recordId } = req.params;
-    if (!children.find(c => c.id === parseInt(childId, 10))) {
+    if (!await store.children.getById(childId)) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
 
-    const key = String(childId);
-    const list = getGrowthList(childId);
-    const index = list.findIndex((r) => String(r.id) === String(recordId));
-    if (index < 0) {
+    const list = await store.growth.list(childId);
+    const current = list.find((r) => String(r.id) === String(recordId));
+    if (!current) {
         return res.status(404).json({ message: 'رکورد یافت نشد' });
     }
 
-    const date = normalizeGrowthDate(req.body?.date) || normalizeGrowthDate(list[index].date);
-    const height = req.body?.height !== undefined ? parseOptionalNumber(req.body.height) : list[index].height;
-    const weight = req.body?.weight !== undefined ? parseOptionalNumber(req.body.weight) : list[index].weight;
+    const date = normalizeGrowthDate(req.body?.date) || normalizeGrowthDate(current.date);
+    const height = req.body?.height !== undefined ? parseOptionalNumber(req.body.height) : current.height;
+    const weight = req.body?.weight !== undefined ? parseOptionalNumber(req.body.weight) : current.weight;
     const headCircumference = req.body?.headCircumference !== undefined
         ? parseOptionalNumber(req.body.headCircumference)
-        : list[index].headCircumference;
+        : current.headCircumference;
 
     if (!date) {
         return res.status(400).json({ message: 'تاریخ معتبر الزامی است.' });
@@ -906,55 +770,35 @@ app.put('/api/growth/:childId/record/:recordId', (req, res) => {
         return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
     }
 
-    const duplicate = list.findIndex((r, i) => i !== index && normalizeGrowthDate(r.date) === date);
-    if (duplicate >= 0) {
+    const result = await store.growth.update(childId, recordId, { date, height, weight, headCircumference });
+    if (!result) return res.status(404).json({ message: 'رکورد یافت نشد' });
+    if (result.error === 'duplicate-date') {
         return res.status(400).json({ message: 'برای این تاریخ قبلاً رکورد دیگری ثبت شده است.' });
     }
-
-    list[index] = {
-        id: list[index].id,
-        date,
-        height,
-        weight,
-        headCircumference
-    };
-    list.sort((a, b) => compareGrowthDates(a.date, b.date));
-    growthData[key] = list;
-    saveData();
-    res.json(list[index]);
+    res.json(result.record);
 });
 
-app.delete('/api/growth/:childId/record/:recordId', (req, res) => {
+app.delete('/api/growth/:childId/record/:recordId', async (req, res) => {
     const { childId, recordId } = req.params;
-    const key = String(childId);
-    const list = getGrowthList(childId);
-    const next = list.filter((record) => String(record.id) !== String(recordId));
-    if (next.length === list.length) {
+    if (!await store.growth.removeById(childId, recordId)) {
         return res.status(404).json({ message: 'رکورد یافت نشد' });
     }
-    growthData[key] = next;
-    saveData();
     res.json({ message: 'رکورد حذف شد' });
 });
 
-app.delete('/api/growth/:childId/:date', (req, res) => {
+app.delete('/api/growth/:childId/:date', async (req, res) => {
     const { childId, date } = req.params;
-    const key = String(childId);
     const normalized = normalizeGrowthDate(decodeURIComponent(date));
-    const list = getGrowthList(childId);
-    const next = list.filter((record) => normalizeGrowthDate(record.date) !== normalized && record.date !== date);
-    if (next.length === list.length) {
+    if (!await store.growth.removeByDate(childId, normalized) && !await store.growth.removeByDate(childId, date)) {
         return res.status(404).json({ message: 'رکورد یافت نشد' });
     }
-    growthData[key] = next;
-    saveData();
     res.status(200).json({ message: 'رکورد حذف شد' });
 });
 
 // --- Vaccination Status Routes ---
-app.get('/api/vaccination-status/:childId', (req, res) => {
+app.get('/api/vaccination-status/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = children.find(c => c.id === parseInt(childId));
+    const child = await store.children.getById(childId);
     if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
 
     const ageInMonths = calculateAgeInMonths(child.birthDate);
@@ -988,18 +832,14 @@ app.get('/api/vaccination-status/:childId', (req, res) => {
     res.json(status);
 });
 
-app.post('/api/vaccinate/:childId', (req, res) => {
+app.post('/api/vaccinate/:childId', async (req, res) => {
     const { childId } = req.params;
     const { vaccineName, dose, date, age } = req.body;
-    const childIndex = children.findIndex(c => c.id === parseInt(childId));
-    if (childIndex === -1) return res.status(404).json({ message: 'کودک یافت نشد' });
-
-    const child = children[childIndex];
-    if (!child.vaccinationRecords) child.vaccinationRecords = {};
+    const child = await store.children.getById(childId);
+    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
 
     let targetAge = age !== undefined ? Number(age) : null;
     if (targetAge === null || Number.isNaN(targetAge)) {
-        // Resolve age group from schedule using vaccine name (+ optional dose/details)
         const match = vaccinationSchedule.find(group =>
             group.vaccines.some(v => v.name === vaccineName && (!dose || v.details === dose || String(v.details) === String(dose)))
         ) || vaccinationSchedule.find(group => group.vaccines.some(v => v.name === vaccineName));
@@ -1007,54 +847,42 @@ app.post('/api/vaccinate/:childId', (req, res) => {
         targetAge = match.age;
     }
 
-    if (!child.vaccinationRecords[targetAge]) child.vaccinationRecords[targetAge] = {};
-    child.vaccinationRecords[targetAge][vaccineName] = date || true;
-    saveData();
-    res.status(200).json({ message: 'وضعیت واکسن به‌روز شد', vaccinationRecords: child.vaccinationRecords });
+    const updated = await store.children.setVaccinationValue(childId, targetAge, vaccineName, date || true);
+    res.status(200).json({ message: 'وضعیت واکسن به‌روز شد', vaccinationRecords: updated.vaccinationRecords });
 });
 
 // --- Medical Data Routes ---
-app.get('/api/visits/:childId', (req, res) => {
-    const { childId } = req.params;
-    res.json(medicalVisits[childId] || medicalVisits[String(childId)] || []);
+app.get('/api/visits/:childId', async (req, res) => {
+    res.json(await store.visits.list(req.params.childId));
 });
 
-app.post('/api/visits/:childId', (req, res) => {
+app.post('/api/visits/:childId', async (req, res) => {
     const { childId } = req.params;
     const { date, doctorName, reason, summary } = req.body;
     if (!date || !doctorName || !reason) {
         return res.status(400).json({ message: 'تاریخ، نام پزشک و علت مراجعه الزامی است' });
     }
-    if (!children.find(c => c.id === parseInt(childId))) {
+    if (!await store.children.getById(childId)) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
-    const key = String(childId);
-    if (!medicalVisits[key]) medicalVisits[key] = [];
-    const newVisit = { id: Date.now(), date, doctorName, reason, summary };
-    medicalVisits[key].push(newVisit);
-    medicalVisits[key].sort((a, b) => new Date(String(b.date).replace(/\//g, '-')) - new Date(String(a.date).replace(/\//g, '-')));
-    saveData();
+    const newVisit = await store.visits.create(childId, { date, doctorName, reason, summary });
     res.status(201).json(newVisit);
 });
 
-app.get('/api/checkups/:childId', (req, res) => {
-    const { childId } = req.params;
-    res.json(checkups[childId] || checkups[String(childId)] || []);
+app.get('/api/checkups/:childId', async (req, res) => {
+    res.json(await store.checkups.list(req.params.childId));
 });
 
-app.post('/api/checkups/:childId', upload.single('checkupFile'), (req, res) => {
+app.post('/api/checkups/:childId', upload.single('checkupFile'), async (req, res) => {
     const { childId } = req.params;
     const { title, date, parameters } = req.body;
 
     if (!title || !date || !parameters) {
         return res.status(400).json({ message: 'عنوان، تاریخ و پارامترها الزامی هستند.' });
     }
-    if (!children.find(c => c.id === parseInt(childId))) {
+    if (!await store.children.getById(childId)) {
         return res.status(404).json({ message: 'کودک یافت نشد' });
     }
-
-    const key = String(childId);
-    if (!checkups[key]) checkups[key] = [];
 
     let parsedParameters;
     try {
@@ -1063,50 +891,37 @@ app.post('/api/checkups/:childId', upload.single('checkupFile'), (req, res) => {
         return res.status(400).json({ message: 'فرمت پارامترها نامعتبر است.' });
     }
 
-    const newCheckup = {
-        id: Date.now(),
+    const newCheckup = await store.checkups.create(childId, {
         title,
         date,
         parameters: parsedParameters,
         fileUrl: req.file ? `/uploads/${req.file.filename}` : null,
-    };
-
-    checkups[key].push(newCheckup);
-    checkups[key].sort((a, b) => new Date(b.date) - new Date(a.date));
-    saveData();
+    });
     res.status(201).json(newCheckup);
 });
 
-app.get('/api/documents/:childId', (req, res) => {
-    const { childId } = req.params;
-    res.json(medicalDocuments[childId] || medicalDocuments[String(childId)] || []);
+app.get('/api/documents/:childId', async (req, res) => {
+    res.json(await store.documents.list(req.params.childId));
 });
 
-app.post('/api/documents/:childId', upload.single('document'), (req, res) => {
+app.post('/api/documents/:childId', upload.single('document'), async (req, res) => {
     const { childId } = req.params;
     if (!req.file) {
         return res.status(400).json({ message: 'فایل مدرک الزامی است' });
     }
-    const key = String(childId);
-    if (!medicalDocuments[key]) {
-        medicalDocuments[key] = [];
-    }
     const filePath = `/uploads/${req.file.filename}`;
-    const newDocument = {
-        id: Date.now(),
+    const newDocument = await store.documents.create(childId, {
         title: req.body.title || req.file.originalname,
         url: filePath,
-        filePath, // backward-compatible with EditChildPage
+        filePath,
         uploadedAt: new Date().toISOString()
-    };
-    medicalDocuments[key].push(newDocument);
-    saveData();
+    });
     res.status(201).json(newDocument);
 });
 
-app.get('/api/recommended-tests/:childId', (req, res) => {
+app.get('/api/recommended-tests/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = children.find(c => c.id === parseInt(childId));
+    const child = await store.children.getById(childId);
     if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
 
     const ageInMonths = calculateAgeInMonths(child.birthDate);
@@ -1119,84 +934,80 @@ app.get('/api/recommended-tests/:childId', (req, res) => {
 });
 
 // --- Admin Middleware ---
-const isAdmin = (req, res, next) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'دسترسی غیرمجاز: شناسه کاربری ارائه نشده است' });
-    const user = users[userId];
-    if (user && user.isAdmin) next();
-    else res.status(403).json({ message: 'دسترسی غیرمجاز: شما مدیر نیستید' });
+const isAdmin = async (req, res, next) => {
+    try {
+        const userId = req.headers['x-user-id'];
+        if (!userId) return res.status(401).json({ message: 'دسترسی غیرمجاز: شناسه کاربری ارائه نشده است' });
+        const user = await store.users.getById(userId);
+        if (user && user.isAdmin) next();
+        else res.status(403).json({ message: 'دسترسی غیرمجاز: شما مدیر نیستید' });
+    } catch (err) {
+        next(err);
+    }
 };
 
 // --- Admin Routes ---
-app.get('/api/admin/users', isAdmin, (req, res) => {
-    const usersWithoutPasswords = Object.values(users).map(u => {
-        const { password, ...user } = u;
-        return user;
-    });
-    res.json(usersWithoutPasswords);
+app.get('/api/admin/users', isAdmin, async (req, res) => {
+    res.json((await store.users.list()).map((u) => publicUser(u)));
 });
 
-app.put('/api/admin/users/:id', isAdmin, (req, res) => {
+app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
-    const userData = req.body;
-    if (!users[id]) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    const userData = { ...req.body };
+    const current = await store.users.getById(id);
+    if (!current) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
     delete userData.password;
     const requestingUserId = req.headers['x-user-id'];
-    if (id === requestingUserId && users[id].isAdmin && !userData.isAdmin) return res.status(400).json({ message: 'شما نمی‌توانید دسترسی ادمین خود را لغو کنید.' });
+    if (id === requestingUserId && current.isAdmin && !userData.isAdmin) {
+        return res.status(400).json({ message: 'شما نمی‌توانید دسترسی ادمین خود را لغو کنید.' });
+    }
 
-    users[id] = { ...users[id], ...userData };
-    saveData();
-    const { password, ...updatedUser } = users[id];
-    res.json(updatedUser);
+    const updated = await store.users.update(id, userData);
+    res.json(publicUser(updated));
 });
 
-app.delete('/api/admin/users/:id', isAdmin, (req, res) => {
+app.delete('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
-    if (!users[id]) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    if (!await store.users.getById(id)) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
     const requestingUserId = req.headers['x-user-id'];
     if (id === requestingUserId) return res.status(400).json({ message: 'شما نمی‌توانید حساب کاربری خود را حذف کنید.' });
 
-    delete users[id];
-    saveData();
+    await store.users.remove(id);
     res.status(200).json({ message: 'کاربر با موفقیت حذف شد' });
 });
 
-app.get('/api/admin/users/:userId/children', isAdmin, (req, res) => {
-    const { userId } = req.params;
-    const userChildren = children.filter(c => c.userId === parseInt(userId));
-    res.json(userChildren);
+app.get('/api/admin/users/:userId/children', isAdmin, async (req, res) => {
+    res.json(await store.children.listByUserId(req.params.userId));
 });
 
-app.put('/api/admin/users/:id/set-password', isAdmin, (req, res) => {
+app.put('/api/admin/users/:id/set-password', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;
-    if (!users[id]) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    if (!await store.users.getById(id)) return res.status(404).json({ message: 'کاربر یافت نشد' });
     if (!newPassword || newPassword.length < 4) return res.status(400).json({ message: 'رمز عبور جدید باید حداقل ۴ کاراکتر باشد' });
 
-    users[id].password = newPassword;
-    saveData();
+    await store.users.update(id, { password: newPassword });
     res.status(200).json({ message: 'رمز عبور کاربر با موفقیت تغییر کرد' });
 });
 
-app.get('/api/admin/tickets', isAdmin, (req, res) => {
-    res.json(tickets);
+app.get('/api/admin/tickets', isAdmin, async (req, res) => {
+    res.json(await store.tickets.list());
 });
 
-app.get('/api/admin/tickets/:id', isAdmin, (req, res) => {
-    const ticket = tickets.find(t => t.id === parseInt(req.params.id));
+app.get('/api/admin/tickets/:id', isAdmin, async (req, res) => {
+    const ticket = await store.tickets.getById(req.params.id);
     if (ticket) res.json(ticket);
     else res.status(404).json({ message: 'تیکت یافت نشد' });
 });
 
-app.put('/api/admin/tickets/:id', isAdmin, (req, res) => {
+app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { status, reply } = req.body;
-    const ticketIndex = tickets.findIndex(t => t.id === parseInt(id));
-    if (ticketIndex === -1) return res.status(404).json({ message: 'تیکت یافت نشد' });
+    const ticket = await store.tickets.getById(id);
+    if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
 
-    const ticket = tickets[ticketIndex];
     if (status) ticket.status = status;
     if (reply) {
         ticket.replies = ticket.replies || [];
@@ -1208,109 +1019,91 @@ app.put('/api/admin/tickets/:id', isAdmin, (req, res) => {
         ticket.status = 'answered';
     }
     ticket.updatedAt = new Date().toISOString();
-    tickets[ticketIndex] = ticket;
-    saveData();
-    res.json(ticket);
+    res.json(await store.tickets.update(id, ticket));
 });
 
-app.get('/api/admin/stats', isAdmin, (req, res) => {
-    res.json({
-        totalUsers: Object.keys(users).length,
-        totalChildren: children.length,
-        totalBanners: banners.length,
-        totalArticles: news.length,
-        totalTickets: tickets.length,
-        openTickets: tickets.filter(t => t.status === 'open').length,
-        totalProducts: products.length,
-        totalOrders: orders.length,
-        pendingOrders: orders.filter(o => o.status === 'pending').length
-    });
+app.get('/api/admin/stats', isAdmin, async (req, res) => {
+    res.json(await store.stats());
 });
 
 // --- Banner, News, Video, Podcast Routes (Content Management) ---
-app.get('/api/banners', (req, res) => res.set('Cache-Control', 'no-store').json(banners));
-app.post('/api/admin/banners', isAdmin, upload.single('image'), (req, res) => {
+app.get('/api/banners', async (req, res) => res.set('Cache-Control', 'no-store').json(await store.banners.list()));
+app.post('/api/admin/banners', isAdmin, upload.single('image'), async (req, res) => {
     const { title, link } = req.body;
     if (!req.file) return res.status(400).json({ message: 'تصویر بنر الزامی است' });
-    const newBanner = { id: Date.now(), title, link, imageUrl: `/uploads/${req.file.filename}` };
-    banners.push(newBanner);
-    saveData();
+    const newBanner = await store.banners.create({ title, link, imageUrl: `/uploads/${req.file.filename}` });
     res.status(201).json(newBanner);
 });
-app.delete('/api/admin/banners/:id', isAdmin, (req, res) => {
-    const { id } = req.params;
-    const initialLength = banners.length;
-    banners = banners.filter(b => b.id !== parseInt(id));
-    if (banners.length < initialLength) { saveData(); res.status(200).json({ message: 'بنر با موفقیت حذف شد' }); }
+app.delete('/api/admin/banners/:id', isAdmin, async (req, res) => {
+    if (await store.banners.remove(req.params.id)) res.status(200).json({ message: 'بنر با موفقیت حذف شد' });
     else res.status(404).json({ message: 'بنر یافت نشد' });
 });
 
-app.get('/api/news', (req, res) => res.json(news));
-app.get('/api/news/:id', (req, res) => {
-    const article = news.find(n => n.id === parseInt(req.params.id));
+app.get('/api/news', async (req, res) => res.json(await store.news.list()));
+app.get('/api/news/:id', async (req, res) => {
+    const article = await store.news.getById(req.params.id);
     if (article) res.json(article);
     else res.status(404).json({ message: 'مقاله یافت نشد' });
 });
-app.post('/api/admin/news', isAdmin, upload.single('image'), (req, res) => {
+app.post('/api/admin/news', isAdmin, upload.single('image'), async (req, res) => {
     const { title, content, summary, category } = req.body;
-    const newArticle = { id: Date.now(), title, summary, content, category: category || 'عمومی', imageUrl: req.file ? `/uploads/${req.file.filename}` : null, createdAt: new Date().toISOString() };
-    news.unshift(newArticle);
-    saveData();
+    const newArticle = await store.news.create({
+        title,
+        summary,
+        content,
+        category: category || 'عمومی',
+        imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        createdAt: new Date().toISOString()
+    });
     res.status(201).json(newArticle);
 });
-app.put('/api/admin/news/:id', isAdmin, upload.single('image'), (req, res) => {
+app.put('/api/admin/news/:id', isAdmin, upload.single('image'), async (req, res) => {
     const { id } = req.params;
     const { title, content, summary, category } = req.body;
-    const articleIndex = news.findIndex(n => n.id === parseInt(id));
-    if (articleIndex === -1) return res.status(404).json({ message: 'مقاله یافت نشد' });
+    const current = await store.news.getById(id);
+    if (!current) return res.status(404).json({ message: 'مقاله یافت نشد' });
 
-    const updatedArticle = { ...news[articleIndex], title, summary, content, category: category || news[articleIndex].category, updatedAt: new Date().toISOString() };
-    if (req.file) updatedArticle.imageUrl = `/uploads/${req.file.filename}`;
-    news[articleIndex] = updatedArticle;
-    saveData();
+    const updatedArticle = await store.news.update(id, {
+        title,
+        summary,
+        content,
+        category: category || current.category,
+        updatedAt: new Date().toISOString(),
+        ...(req.file ? { imageUrl: `/uploads/${req.file.filename}` } : {})
+    });
     res.json(updatedArticle);
 });
-app.delete('/api/admin/news/:id', isAdmin, (req, res) => {
-    const { id } = req.params;
-    const initialLength = news.length;
-    news = news.filter(n => n.id !== parseInt(id));
-    if (news.length < initialLength) { saveData(); res.status(200).json({ message: 'مقاله با موفقیت حذف شد' }); }
+app.delete('/api/admin/news/:id', isAdmin, async (req, res) => {
+    if (await store.news.remove(req.params.id)) res.status(200).json({ message: 'مقاله با موفقیت حذف شد' });
     else res.status(404).json({ message: 'مقاله یافت نشد' });
 });
 
-app.get('/api/videos', (req, res) => res.json(videos));
-app.post('/api/admin/videos', isAdmin, upload.single('thumbnail'), (req, res) => {
+app.get('/api/videos', async (req, res) => res.json(await store.videos.list()));
+app.post('/api/admin/videos', isAdmin, upload.single('thumbnail'), async (req, res) => {
     const { title, url, summary } = req.body;
     if (!title || !url) return res.status(400).json({ message: 'Title and URL are required' });
     if (!req.file) return res.status(400).json({ message: 'تصویر کاور ویدیو الزامی است' });
-    const newVideo = {
-        id: Date.now(),
+    const newVideo = await store.videos.create({
         title,
         url,
         summary: summary || '',
         thumbnailUrl: `/uploads/${req.file.filename}`,
         createdAt: new Date().toISOString(),
-    };
-    videos.unshift(newVideo);
-    saveData();
+    });
     res.status(201).json(newVideo);
 });
-app.delete('/api/admin/videos/:id', isAdmin, (req, res) => {
-    const { id } = req.params;
-    const initialLength = videos.length;
-    const removed = videos.find(v => v.id === parseInt(id));
-    videos = videos.filter(v => v.id !== parseInt(id));
-    if (videos.length < initialLength) {
-        if (removed?.thumbnailUrl && removed.thumbnailUrl.startsWith('/uploads/')) {
+app.delete('/api/admin/videos/:id', isAdmin, async (req, res) => {
+    const removed = await store.videos.remove(req.params.id);
+    if (removed) {
+        if (removed.thumbnailUrl && removed.thumbnailUrl.startsWith('/uploads/')) {
             const filePath = path.join(uploadsDir, path.basename(removed.thumbnailUrl));
             fs.unlink(filePath, () => {});
         }
-        saveData();
         res.status(200).json({ message: 'ویدیو با موفقیت حذف شد' });
     } else res.status(404).json({ message: 'ویدیو یافت نشد' });
 });
 
-app.get('/api/podcasts', (req, res) => res.json(podcasts));
+app.get('/api/podcasts', async (req, res) => res.json(await store.podcasts.list()));
 
 // --- Shop / Products / Orders ---
 const SHOP_CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
@@ -1321,39 +1114,27 @@ const parsePrice = (value) => {
     return Number.isFinite(n) && n >= 0 ? n : null;
 };
 
-app.get('/api/shop/categories', (req, res) => {
+app.get('/api/shop/categories', async (req, res) => {
     res.json(SHOP_CATEGORIES);
 });
 
-app.get('/api/shop/products', (req, res) => {
-    const { category, q } = req.query;
-    let list = products.filter(p => p.active !== false);
-    if (category && category !== 'همه') {
-        list = list.filter(p => p.category === category);
-    }
-    if (q && String(q).trim()) {
-        const term = String(q).trim().toLowerCase();
-        list = list.filter(p =>
-            (p.name && p.name.toLowerCase().includes(term)) ||
-            (p.description && p.description.toLowerCase().includes(term))
-        );
-    }
-    res.json(list);
+app.get('/api/shop/products', async (req, res) => {
+    res.json(await store.products.listActive({ category: req.query.category, q: req.query.q }));
 });
 
-app.get('/api/shop/products/:id', (req, res) => {
-    const product = products.find(p => p.id === parseInt(req.params.id, 10));
+app.get('/api/shop/products/:id', async (req, res) => {
+    const product = await store.products.getById(req.params.id);
     if (!product || product.active === false) {
         return res.status(404).json({ message: 'محصول یافت نشد' });
     }
     res.json(product);
 });
 
-app.get('/api/admin/products', isAdmin, (req, res) => {
-    res.json(products);
+app.get('/api/admin/products', isAdmin, async (req, res) => {
+    res.json(await store.products.listAll());
 });
 
-app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
+app.post('/api/admin/products', isAdmin, upload.single('image'), async (req, res) => {
     const { name, description, category, price, stock } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -1367,8 +1148,7 @@ app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
         return res.status(400).json({ message: 'موجودی معتبر نیست' });
     }
 
-    const newProduct = {
-        id: productIdCounter++,
+    const newProduct = await store.products.create({
         name: String(name).trim(),
         description: description ? String(description).trim() : '',
         category: SHOP_CATEGORIES.includes(category) ? category : 'تغذیه',
@@ -1377,19 +1157,17 @@ app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
         imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
         active: true,
         createdAt: new Date().toISOString()
-    };
-    products.unshift(newProduct);
-    saveData();
+    });
     res.status(201).json(newProduct);
 });
 
-app.put('/api/admin/products/:id', isAdmin, upload.single('image'), (req, res) => {
+app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, res) => {
     const id = parseInt(req.params.id, 10);
-    const index = products.findIndex(p => p.id === id);
-    if (index === -1) return res.status(404).json({ message: 'محصول یافت نشد' });
+    const current = await store.products.getById(id);
+    if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
 
     const { name, description, category, price, stock, active } = req.body;
-    const updated = { ...products[index], updatedAt: new Date().toISOString() };
+    const updated = { ...current, updatedAt: new Date().toISOString() };
 
     if (name !== undefined) {
         if (!String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -1416,49 +1194,41 @@ app.put('/api/admin/products/:id', isAdmin, upload.single('image'), (req, res) =
     }
     if (req.file) updated.imageUrl = `/uploads/${req.file.filename}`;
 
-    products[index] = updated;
-    saveData();
-    res.json(updated);
+    res.json(await store.products.update(id, updated));
 });
 
-app.delete('/api/admin/products/:id', isAdmin, (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    const initialLength = products.length;
-    products = products.filter(p => p.id !== id);
-    if (products.length < initialLength) {
-        saveData();
+app.delete('/api/admin/products/:id', isAdmin, async (req, res) => {
+    if (await store.products.remove(req.params.id)) {
         return res.status(200).json({ message: 'محصول حذف شد' });
     }
     res.status(404).json({ message: 'محصول یافت نشد' });
 });
 
-app.get('/api/shop/orders', (req, res) => {
+app.get('/api/shop/orders', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId || !users[userId]) {
+    if (!userId || !await store.users.getById(userId)) {
         return res.status(401).json({ message: 'لطفا وارد شوید' });
     }
-    const userOrders = orders
-        .filter(o => o.userId === userId)
-        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(userOrders);
+    res.json(await store.orders.listByUser(userId));
 });
 
-app.get('/api/shop/orders/:id', (req, res) => {
+app.get('/api/shop/orders/:id', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId || !users[userId]) {
+    if (!userId || !await store.users.getById(userId)) {
         return res.status(401).json({ message: 'لطفا وارد شوید' });
     }
-    const order = orders.find(o => o.id === parseInt(req.params.id, 10));
+    const order = await store.orders.getById(req.params.id);
     if (!order) return res.status(404).json({ message: 'سفارش یافت نشد' });
-    if (order.userId !== userId && !(users[userId] && users[userId].isAdmin)) {
+    const user = await store.users.getById(userId);
+    if (order.userId !== userId && !(user && user.isAdmin)) {
         return res.status(403).json({ message: 'دسترسی غیرمجاز' });
     }
     res.json(order);
 });
 
-app.post('/api/shop/orders', (req, res) => {
+app.post('/api/shop/orders', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId || !users[userId]) {
+    if (!userId || !await store.users.getById(userId)) {
         return res.status(401).json({ message: 'لطفا وارد شوید' });
     }
 
@@ -1482,8 +1252,8 @@ app.post('/api/shop/orders', (req, res) => {
         if (!productId || !Number.isFinite(quantity) || quantity < 1) {
             return res.status(400).json({ message: 'آیتم سفارش نامعتبر است' });
         }
-        const product = products.find(p => p.id === productId && p.active !== false);
-        if (!product) {
+        const product = await store.products.getById(productId);
+        if (!product || product.active === false) {
             return res.status(400).json({ message: `محصول با شناسه ${productId} یافت نشد` });
         }
         if (product.stock < quantity) {
@@ -1500,58 +1270,40 @@ app.post('/api/shop/orders', (req, res) => {
         });
     }
 
-    for (const item of orderItems) {
-        const product = products.find(p => p.id === item.productId);
-        product.stock -= item.quantity;
+    try {
+        const newOrder = await store.orders.create({
+            userId,
+            items: orderItems,
+            total,
+            shippingAddress: String(shippingAddress).trim(),
+            phone: String(phone).trim(),
+            notes: notes ? String(notes).trim() : ''
+        });
+        res.status(201).json(newOrder);
+    } catch (err) {
+        if (err.code === 'OUT_OF_STOCK') {
+            return res.status(400).json({ message: `موجودی «${err.message}» کافی نیست` });
+        }
+        if (err.code === 'PRODUCT_MISSING') {
+            return res.status(400).json({ message: 'محصول یافت نشد' });
+        }
+        throw err;
     }
-
-    const newOrder = {
-        id: orderIdCounter++,
-        userId,
-        items: orderItems,
-        total,
-        shippingAddress: String(shippingAddress).trim(),
-        phone: String(phone).trim(),
-        notes: notes ? String(notes).trim() : '',
-        status: 'pending',
-        createdAt: new Date().toISOString()
-    };
-    orders.unshift(newOrder);
-    saveData();
-    res.status(201).json(newOrder);
 });
 
-app.get('/api/admin/orders', isAdmin, (req, res) => {
-    const sorted = [...orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(sorted);
+app.get('/api/admin/orders', isAdmin, async (req, res) => {
+    res.json(await store.orders.listAll());
 });
 
-app.put('/api/admin/orders/:id', isAdmin, (req, res) => {
+app.put('/api/admin/orders/:id', isAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
-    const index = orders.findIndex(o => o.id === id);
-    if (index === -1) return res.status(404).json({ message: 'سفارش یافت نشد' });
-
     const { status } = req.body;
     if (!ORDER_STATUSES.includes(status)) {
         return res.status(400).json({ message: 'وضعیت سفارش نامعتبر است' });
     }
-
-    const previousStatus = orders[index].status;
-    // Restock if cancelling a non-cancelled order
-    if (status === 'cancelled' && previousStatus !== 'cancelled') {
-        for (const item of orders[index].items || []) {
-            const product = products.find(p => p.id === item.productId);
-            if (product) product.stock += item.quantity;
-        }
-    }
-
-    orders[index] = {
-        ...orders[index],
-        status,
-        updatedAt: new Date().toISOString()
-    };
-    saveData();
-    res.json(orders[index]);
+    const updated = await store.orders.updateStatus(id, status);
+    if (!updated) return res.status(404).json({ message: 'سفارش یافت نشد' });
+    res.json(updated);
 });
 
 // --- Reminder / Vaccination ---
@@ -1566,7 +1318,6 @@ const childHasOverdueVaccination = (child) => {
     });
 };
 
-// One consolidated message per child for vaccine injection delay
 const getOverdueVaccinationReminders = (child) => {
     if (!childHasOverdueVaccination(child)) return [];
     return [{
@@ -1580,8 +1331,8 @@ const getOverdueVaccinationReminders = (child) => {
     }];
 };
 
-const getVaccineDelayMessagesForUser = (userId) => {
-    const userChildren = children.filter(c => c.userId === parseInt(userId, 10));
+const getVaccineDelayMessagesForUser = async (userId) => {
+    const userChildren = await store.children.listByUserId(userId);
     return userChildren
         .filter(childHasOverdueVaccination)
         .map(child => ({
@@ -1599,21 +1350,20 @@ const getVaccineDelayMessagesForUser = (userId) => {
         }));
 };
 
-app.get('/api/vaccination-schedule', (req, res) => res.json(vaccinationSchedule));
+app.get('/api/vaccination-schedule', async (req, res) => res.json(vaccinationSchedule));
 
-app.post('/api/generate-reminders/:userId', (req, res) => {
+app.post('/api/generate-reminders/:userId', async (req, res) => {
     const { userId } = req.params;
-    const userChildren = children.filter(c => c.userId === parseInt(userId));
+    const userChildren = await store.children.listByUserId(userId);
     let created = 0;
 
-    userChildren.forEach(child => {
-        const childKey = String(child.id);
-        if (!reminders[childKey]) reminders[childKey] = [];
+    for (const child of userChildren) {
+        const existing = await store.reminders.list(child.id);
         const reminderId = `generated-vaccine-delay-${child.id}`;
-        const alreadyExists = reminders[childKey].some(r => r.id === reminderId || r.id === `vaccine-delay-${child.id}`);
+        const alreadyExists = existing.some(r => r.id === reminderId || r.id === `vaccine-delay-${child.id}`);
 
         if (!alreadyExists && childHasOverdueVaccination(child)) {
-            reminders[childKey].push({
+            await store.reminders.create(child.id, {
                 id: reminderId,
                 title: 'تاخیر در تزریق واکس',
                 date: new Date().toISOString().split('T')[0],
@@ -1625,18 +1375,17 @@ app.post('/api/generate-reminders/:userId', (req, res) => {
             });
             created++;
         }
-    });
+    }
 
-    saveData();
     res.status(201).json({ message: 'یادآورها با موفقیت تولید شدند', created });
 });
 
-app.get('/api/reminders/all/:childId', (req, res) => {
+app.get('/api/reminders/all/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = children.find(c => c.id === parseInt(childId));
+    const child = await store.children.getById(childId);
     if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
 
-    const manualReminders = (reminders[childId] || []).filter(r => {
+    const manualReminders = (await store.reminders.list(childId)).filter(r => {
         if (r.category === 'vaccine_delay') return false;
         if (r.id && String(r.id).startsWith('generated-vaccine')) return false;
         if (r.title && (r.title.includes('تأخیر در واکسن') || r.title.includes('تاخیر در تزریق'))) return false;
@@ -1646,12 +1395,12 @@ app.get('/api/reminders/all/:childId', (req, res) => {
     res.json([...autoReminders, ...manualReminders]);
 });
 
-app.post('/api/reminders/manual/:childId', (req, res) => {
+app.post('/api/reminders/manual/:childId', async (req, res) => {
     const { childId } = req.params;
     const { title, date, description, alarmAt } = req.body;
     if (!title || !date) return res.status(400).json({ message: 'عنوان و تاریخ الزامی است' });
+    if (!await store.children.getById(childId)) return res.status(404).json({ message: 'کودک یافت نشد' });
 
-    if (!reminders[childId]) reminders[childId] = [];
     const newReminder = {
         id: `manual-${Date.now()}`,
         title,
@@ -1662,33 +1411,30 @@ app.post('/api/reminders/manual/:childId', (req, res) => {
         type: 'info',
         source: 'manual'
     };
-    reminders[childId].push(newReminder);
-    saveData();
+    await store.reminders.create(childId, newReminder);
     res.status(201).json(newReminder);
 });
 
-app.delete('/api/reminders/manual/:childId/:reminderId', (req, res) => {
+app.delete('/api/reminders/manual/:childId/:reminderId', async (req, res) => {
     const { childId, reminderId } = req.params;
-    if (!reminders[childId]) return res.status(404).json({ message: 'هیچ یادآوری برای این کودک یافت نشد' });
-
-    const initialLength = reminders[childId].length;
-    reminders[childId] = reminders[childId].filter(r => r.id !== reminderId);
-    if (reminders[childId].length < initialLength) { saveData(); res.status(200).json({ message: 'یادآوری با موفقیت حذف شد' }); }
-    else res.status(404).json({ message: 'یادآوری مشخص شده یافت نشد' });
+    if (await store.reminders.remove(childId, reminderId)) {
+        res.status(200).json({ message: 'یادآوری با موفقیت حذف شد' });
+    } else {
+        res.status(404).json({ message: 'یادآوری مشخص شده یافت نشد' });
+    }
 });
 
 // --- User personal reminders / alarms ---
-app.get('/api/user-reminders', (req, res) => {
+app.get('/api/user-reminders', async (req, res) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    const list = userReminders[String(userId)] || [];
-    res.json(list);
+    res.json(await store.userReminders.list(userId));
 });
 
-app.post('/api/user-reminders', (req, res) => {
+app.post('/api/user-reminders', async (req, res) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    if (!users[userId]) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    if (!await store.users.getById(userId)) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
     const { title, description, alarmAt } = req.body;
     if (!title || !alarmAt) {
@@ -1698,8 +1444,6 @@ app.post('/api/user-reminders', (req, res) => {
         return res.status(400).json({ message: 'زمان آلارم نامعتبر است' });
     }
 
-    const key = String(userId);
-    if (!userReminders[key]) userReminders[key] = [];
     const newReminder = {
         id: `user-reminder-${Date.now()}`,
         title,
@@ -1710,89 +1454,58 @@ app.post('/api/user-reminders', (req, res) => {
         type: 'info',
         source: 'user'
     };
-    userReminders[key].push(newReminder);
-    saveData();
+    await store.userReminders.create(userId, newReminder);
     res.status(201).json(newReminder);
 });
 
-app.put('/api/user-reminders/:id', (req, res) => {
+app.put('/api/user-reminders/:id', async (req, res) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    const key = String(userId);
-    const list = userReminders[key] || [];
-    const index = list.findIndex(r => r.id === req.params.id);
-    if (index === -1) return res.status(404).json({ message: 'یادآوری یافت نشد' });
-
     const { title, description, alarmAt, notified } = req.body;
-    if (title !== undefined) list[index].title = title;
-    if (description !== undefined) list[index].description = description;
-    if (alarmAt !== undefined) {
-        if (Number.isNaN(new Date(alarmAt).getTime())) {
-            return res.status(400).json({ message: 'زمان آلارم نامعتبر است' });
-        }
-        list[index].alarmAt = new Date(alarmAt).toISOString();
+    if (alarmAt !== undefined && Number.isNaN(new Date(alarmAt).getTime())) {
+        return res.status(400).json({ message: 'زمان آلارم نامعتبر است' });
     }
-    if (notified !== undefined) list[index].notified = !!notified;
-    userReminders[key] = list;
-    saveData();
-    res.json(list[index]);
+    const patch = {};
+    if (title !== undefined) patch.title = title;
+    if (description !== undefined) patch.description = description;
+    if (alarmAt !== undefined) patch.alarmAt = new Date(alarmAt).toISOString();
+    if (notified !== undefined) patch.notified = !!notified;
+    const updated = await store.userReminders.update(userId, req.params.id, patch);
+    if (!updated) return res.status(404).json({ message: 'یادآوری یافت نشد' });
+    res.json(updated);
 });
 
-app.delete('/api/user-reminders/:id', (req, res) => {
+app.delete('/api/user-reminders/:id', async (req, res) => {
     const userId = req.headers['x-user-id'];
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    const key = String(userId);
-    const list = userReminders[key] || [];
-    const initialLength = list.length;
-    userReminders[key] = list.filter(r => r.id !== req.params.id);
-    if (userReminders[key].length < initialLength) {
-        saveData();
+    if (await store.userReminders.remove(userId, req.params.id)) {
         return res.status(200).json({ message: 'یادآوری حذف شد' });
     }
     res.status(404).json({ message: 'یادآوری یافت نشد' });
 });
 
 // --- Messages (inbox) ---
-app.get('/api/messages', (req, res) => {
+app.get('/api/messages', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
-    const inbox = messages
-        .filter(m => Array.isArray(m.recipientIds) && m.recipientIds.includes(userId))
-        .map(m => ({
-            id: m.id,
-            title: m.title,
-            body: m.body,
-            link: m.link || null,
-            imageUrl: m.imageUrl || null,
-            type: m.type || 'admin',
-            source: 'admin',
-            isBulk: !!m.isBulk,
-            createdAt: m.createdAt,
-            isRead: Array.isArray(m.readBy) && m.readBy.includes(userId)
-        }));
-
-    const vaccineMessages = getVaccineDelayMessagesForUser(userId);
+    const inbox = await store.messages.listForUser(userId);
+    const vaccineMessages = await getVaccineDelayMessagesForUser(userId);
     const combined = [...vaccineMessages, ...inbox].sort((a, b) =>
         new Date(b.createdAt) - new Date(a.createdAt)
     );
     res.json(combined);
 });
 
-app.get('/api/messages/unread-count', (req, res) => {
+app.get('/api/messages/unread-count', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-
-    const unreadAdmin = messages.filter(m =>
-        Array.isArray(m.recipientIds) &&
-        m.recipientIds.includes(userId) &&
-        !(Array.isArray(m.readBy) && m.readBy.includes(userId))
-    ).length;
-    const unreadVaccine = getVaccineDelayMessagesForUser(userId).length;
+    const unreadAdmin = await store.messages.unreadCount(userId);
+    const unreadVaccine = (await getVaccineDelayMessagesForUser(userId)).length;
     res.json({ count: unreadAdmin + unreadVaccine });
 });
 
-app.put('/api/messages/:id/read', (req, res) => {
+app.put('/api/messages/:id/read', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
@@ -1801,40 +1514,32 @@ app.put('/api/messages/:id/read', (req, res) => {
         return res.json({ message: 'پیام واکسن به‌عنوان خوانده‌شده در نظر گرفته شد' });
     }
 
-    const msg = messages.find(m => m.id === parseInt(messageId, 10));
+    const msg = await store.messages.getById(messageId);
     if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
         return res.status(404).json({ message: 'پیام یافت نشد' });
     }
-    msg.readBy = msg.readBy || [];
-    if (!msg.readBy.includes(userId)) msg.readBy.push(userId);
-    saveData();
+    await store.messages.markRead(messageId, userId);
     res.json({ message: 'پیام خوانده شد', id: msg.id });
 });
 
-app.delete('/api/messages/:id', (req, res) => {
+app.delete('/api/messages/:id', async (req, res) => {
     const userId = parseInt(req.headers['x-user-id'], 10);
     if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
 
     const messageId = parseInt(req.params.id, 10);
-    const msg = messages.find(m => m.id === messageId);
+    const msg = await store.messages.getById(messageId);
     if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
         return res.status(404).json({ message: 'پیام یافت نشد' });
     }
-    msg.recipientIds = msg.recipientIds.filter(id => id !== userId);
-    msg.readBy = (msg.readBy || []).filter(id => id !== userId);
-    if (msg.recipientIds.length === 0) {
-        messages = messages.filter(m => m.id !== messageId);
-    }
-    saveData();
+    await store.messages.removeRecipient(messageId, userId);
     res.json({ message: 'پیام حذف شد' });
 });
 
-app.get('/api/admin/messages', isAdmin, (req, res) => {
-    const sorted = [...messages].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    res.json(sorted);
+app.get('/api/admin/messages', isAdmin, async (req, res) => {
+    res.json(await store.messages.listAll());
 });
 
-app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
+app.post('/api/admin/messages', isAdmin, upload.single('image'), async (req, res) => {
     const { title, body, link, mode, userId, userIds } = req.body;
     if (!title || !String(title).trim()) {
         return res.status(400).json({ message: 'عنوان پیام الزامی است' });
@@ -1847,22 +1552,26 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         if (userIds) {
             try {
                 const parsed = typeof userIds === 'string' ? JSON.parse(userIds) : userIds;
-                recipientIds = (Array.isArray(parsed) ? parsed : [])
+                const ids = (Array.isArray(parsed) ? parsed : [])
                     .map(id => parseInt(id, 10))
-                    .filter(id => !Number.isNaN(id) && users[id]);
+                    .filter(id => !Number.isNaN(id));
+                recipientIds = [];
+                for (const id of ids) {
+                    if (await store.users.getById(id)) recipientIds.push(id);
+                }
             } catch (e) {
                 return res.status(400).json({ message: 'لیست کاربران نامعتبر است' });
             }
         }
         if (recipientIds.length === 0) {
-            recipientIds = Object.keys(users).map(Number).filter(id => users[id] && !users[id].isAdmin);
+            recipientIds = await store.users.listNonAdminIds();
             if (recipientIds.length === 0) {
-                recipientIds = Object.keys(users).map(Number).filter(id => users[id]);
+                recipientIds = await store.users.listAllIds();
             }
         }
     } else {
         const targetId = parseInt(userId, 10);
-        if (!targetId || !users[targetId]) {
+        if (!targetId || !await store.users.getById(targetId)) {
             return res.status(400).json({ message: 'کاربر گیرنده معتبر نیست' });
         }
         recipientIds = [targetId];
@@ -1872,8 +1581,7 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         return res.status(400).json({ message: 'هیچ گیرنده‌ای یافت نشد' });
     }
 
-    const newMessage = {
-        id: messageIdCounter++,
+    const newMessage = await store.messages.create({
         title: String(title).trim(),
         body: body ? String(body).trim() : '',
         link: link ? String(link).trim() : null,
@@ -1881,35 +1589,32 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         type: 'admin',
         isBulk: sendMode === 'bulk',
         recipientIds,
-        readBy: [],
         createdAt: new Date().toISOString(),
         createdBy: parseInt(req.headers['x-user-id'], 10)
-    };
-    messages.push(newMessage);
-    saveData();
+    });
     res.status(201).json(newMessage);
 });
 
-app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    const initialLength = messages.length;
-    messages = messages.filter(m => m.id !== id);
-    if (messages.length < initialLength) {
-        saveData();
+app.delete('/api/admin/messages/:id', isAdmin, async (req, res) => {
+    if (await store.messages.remove(req.params.id)) {
         return res.status(200).json({ message: 'پیام حذف شد' });
     }
     res.status(404).json({ message: 'پیام یافت نشد' });
 });
 
+app.use((err, req, res, next) => {
+    console.error(err);
+    if (res.headersSent) return next(err);
+    res.status(500).json({ message: 'خطای سرور' });
+});
+
 async function startServer() {
     try {
-        connect();
-        const state = loadState();
-        applyState(state);
-        ensureDefaultAdmin();
+        await store.connect();
+        await ensureDefaultAdmin();
         app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));
     } catch (err) {
-        console.error('Failed to start server with SQLite:', err);
+        console.error('Failed to start server with PostgreSQL:', err);
         process.exit(1);
     }
 }
