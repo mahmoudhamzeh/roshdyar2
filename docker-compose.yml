@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: roshdyar
+      POSTGRES_USER: roshdyar
+      POSTGRES_PASSWORD: roshdyar
+    ports:
+      - "5432:5432"
+    volumes:
+      - roshdyar_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roshdyar -d roshdyar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  roshdyar_pgdata:

@@ -1,10 +1,13 @@
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const { Pool, types } = require('pg');
 
-const SCHEMA_VERSION = 2;
-const DB_FILE = process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
+types.setTypeParser(20, (val) => Number(val));
+types.setTypeParser(1700, (val) => Number(val));
+
+const SCHEMA_VERSION = 3;
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+const DEFAULT_DATABASE_URL = 'postgres://roshdyar:roshdyar@127.0.0.1:5432/roshdyar';
 
 const emptyState = () => ({
     users: {},
@@ -16,9 +19,6 @@ const emptyState = () => ({
     reminders: {},
     userReminders: {},
     messages: [],
-    childIdCounter: 1,
-    userIdCounter: 1,
-    messageIdCounter: 1,
     banners: [],
     articles: [],
     news: [],
@@ -26,15 +26,17 @@ const emptyState = () => ({
     videos: [],
     podcasts: [],
     products: [],
-    orders: [],
-    productIdCounter: 1,
-    orderIdCounter: 1
+    orders: []
 });
 
-let db = null;
-let stmts = null;
+let pool = null;
+let connecting = null;
 const publicCache = new Map();
 const PUBLIC_CACHE_TTL_MS = 15 * 1000;
+
+function databaseUrl() {
+    return process.env.DATABASE_URL || DEFAULT_DATABASE_URL;
+}
 
 function parseJson(value, fallback) {
     if (value == null || value === '') return fallback;
@@ -57,7 +59,7 @@ function asBoolInt(value) {
 }
 
 function asBool(value) {
-    return value === 1 || value === true || value === '1';
+    return value === 1 || value === true || value === '1' || value === 't';
 }
 
 function toEnglishDigits(value) {
@@ -95,7 +97,7 @@ function rowToUser(row) {
     if (!row) return null;
     const extra = parseJson(row.extra, {});
     return {
-        id: row.id,
+        id: Number(row.id),
         username: row.username || '',
         email: row.email || '',
         mobile: row.mobile || extra.mobile || '',
@@ -115,8 +117,8 @@ function rowToUser(row) {
 function rowToChildBase(row) {
     const extra = parseJson(row.extra, {});
     return {
-        id: row.id,
-        userId: row.user_id,
+        id: Number(row.id),
+        userId: Number(row.user_id),
         firstName: row.first_name || extra.firstName || '',
         lastName: row.last_name || extra.lastName || '',
         name: row.name || extra.name || '',
@@ -155,7 +157,7 @@ function rowToGrowth(row) {
 
 function rowToVisit(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         date: row.date,
         doctorName: row.doctor_name,
         reason: row.reason,
@@ -167,7 +169,7 @@ function rowToVisit(row) {
 function rowToDocument(row) {
     const url = row.url;
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         date: row.date,
         url,
@@ -178,7 +180,7 @@ function rowToDocument(row) {
 
 function rowToCheckup(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         date: row.date,
         parameters: parseJson(row.parameters, {}),
@@ -220,7 +222,7 @@ function rowToUserReminder(row) {
 
 function rowToProduct(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         name: row.name,
         description: row.description || '',
         category: row.category,
@@ -235,8 +237,8 @@ function rowToProduct(row) {
 
 function rowToOrder(row, items) {
     return {
-        id: row.id,
-        userId: row.user_id,
+        id: Number(row.id),
+        userId: Number(row.user_id),
         items: items || [],
         total: row.total,
         shippingAddress: row.shipping_address,
@@ -250,7 +252,7 @@ function rowToOrder(row, items) {
 
 function rowToNews(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         summary: row.summary,
         content: row.content,
@@ -263,7 +265,7 @@ function rowToNews(row) {
 
 function rowToVideo(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         summary: row.summary,
         url: row.url,
@@ -274,7 +276,7 @@ function rowToVideo(row) {
 
 function rowToPodcast(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         summary: row.summary,
         url: row.url,
@@ -286,218 +288,45 @@ function rowToPodcast(row) {
 
 function rowToBanner(row) {
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         link: row.link,
         imageUrl: row.image_url
     };
 }
 
-function getSchemaVersion() {
+async function q(text, params = [], client) {
+    await connect();
+    return (client || pool).query(text, params);
+}
+
+async function one(text, params, client) {
+    const { rows } = await q(text, params, client);
+    return rows[0] || null;
+}
+
+async function many(text, params, client) {
+    const { rows } = await q(text, params, client);
+    return rows;
+}
+
+async function withTx(fn) {
+    await connect();
+    const client = await pool.connect();
     try {
-        const row = db.prepare('SELECT value FROM schema_meta WHERE key = ?').get('version');
-        return row ? Number(row.value) : 0;
-    } catch (_) {
-        return 0;
+        await client.query('BEGIN');
+        const result = await fn(client);
+        await client.query('COMMIT');
+        return result;
+    } catch (err) {
+        try { await client.query('ROLLBACK'); } catch (_) { /* ignore */ }
+        throw err;
+    } finally {
+        client.release();
     }
 }
 
-function setSchemaVersion(version) {
-    db.prepare(`
-        INSERT INTO schema_meta (key, value) VALUES ('version', ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).run(String(version));
-}
-
-function applyPragmas() {
-    db.pragma('journal_mode = WAL');
-    db.pragma('busy_timeout = 5000');
-    db.pragma('foreign_keys = ON');
-    db.pragma('synchronous = NORMAL');
-    db.pragma('temp_store = MEMORY');
-    db.pragma('cache_size = -64000');
-}
-
-function prepareStatements() {
-    stmts = {
-        getUserById: db.prepare('SELECT * FROM users WHERE id = ?'),
-        insertUser: db.prepare(`
-            INSERT INTO users (
-                id, username, email, mobile, password, first_name, last_name,
-                birth_date, province, city, is_admin, profile_complete, created_at, extra
-            ) VALUES (
-                @id, @username, @email, @mobile, @password, @first_name, @last_name,
-                @birth_date, @province, @city, @is_admin, @profile_complete, @created_at, @extra
-            )
-        `),
-        insertUserAuto: db.prepare(`
-            INSERT INTO users (
-                username, email, mobile, password, first_name, last_name,
-                birth_date, province, city, is_admin, profile_complete, created_at, extra
-            ) VALUES (
-                @username, @email, @mobile, @password, @first_name, @last_name,
-                @birth_date, @province, @city, @is_admin, @profile_complete, @created_at, @extra
-            )
-        `),
-        updateUser: db.prepare(`
-            UPDATE users SET
-                username = @username,
-                email = @email,
-                mobile = @mobile,
-                password = @password,
-                first_name = @first_name,
-                last_name = @last_name,
-                birth_date = @birth_date,
-                province = @province,
-                city = @city,
-                is_admin = @is_admin,
-                profile_complete = @profile_complete,
-                created_at = @created_at,
-                extra = @extra
-            WHERE id = @id
-        `),
-        deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
-        countUsers: db.prepare('SELECT COUNT(*) AS n FROM users'),
-        listUsers: db.prepare('SELECT * FROM users ORDER BY id'),
-        getChildById: db.prepare('SELECT * FROM children WHERE id = ?'),
-        listChildrenByUser: db.prepare('SELECT * FROM children WHERE user_id = ? ORDER BY id'),
-        countChildren: db.prepare('SELECT COUNT(*) AS n FROM children'),
-        deleteChild: db.prepare('DELETE FROM children WHERE id = ?'),
-        listVaccinationsForChild: db.prepare(
-            'SELECT age_group, vaccine_name, value FROM vaccination_records WHERE child_id = ?'
-        ),
-        deleteVaccinationsForChild: db.prepare('DELETE FROM vaccination_records WHERE child_id = ?'),
-        upsertVaccination: db.prepare(`
-            INSERT INTO vaccination_records (child_id, age_group, vaccine_name, value)
-            VALUES (@child_id, @age_group, @vaccine_name, @value)
-            ON CONFLICT(child_id, age_group, vaccine_name)
-            DO UPDATE SET value = excluded.value
-        `),
-        listGrowth: db.prepare('SELECT * FROM growth_records WHERE child_id = ? ORDER BY date'),
-        getGrowthByPublicId: db.prepare(
-            'SELECT * FROM growth_records WHERE child_id = ? AND public_id = ?'
-        ),
-        getGrowthByDate: db.prepare('SELECT * FROM growth_records WHERE child_id = ? AND date = ?'),
-        insertGrowth: db.prepare(`
-            INSERT INTO growth_records (public_id, child_id, date, height, weight, head_circumference)
-            VALUES (@public_id, @child_id, @date, @height, @weight, @head_circumference)
-        `),
-        updateGrowth: db.prepare(`
-            UPDATE growth_records SET
-                date = @date, height = @height, weight = @weight, head_circumference = @head_circumference
-            WHERE child_id = @child_id AND public_id = @public_id
-        `),
-        deleteGrowthByPublicId: db.prepare(
-            'DELETE FROM growth_records WHERE child_id = ? AND public_id = ?'
-        ),
-        deleteGrowthByDate: db.prepare('DELETE FROM growth_records WHERE child_id = ? AND date = ?'),
-        listVisits: db.prepare('SELECT * FROM medical_visits WHERE child_id = ? ORDER BY date DESC'),
-        insertVisit: db.prepare(`
-            INSERT INTO medical_visits (id, child_id, date, doctor_name, reason, summary, description)
-            VALUES (@id, @child_id, @date, @doctor_name, @reason, @summary, @description)
-        `),
-        listDocuments: db.prepare('SELECT * FROM medical_documents WHERE child_id = ? ORDER BY id DESC'),
-        insertDocument: db.prepare(`
-            INSERT INTO medical_documents (id, child_id, title, date, url, uploaded_at)
-            VALUES (@id, @child_id, @title, @date, @url, @uploaded_at)
-        `),
-        listCheckups: db.prepare('SELECT * FROM checkups WHERE child_id = ? ORDER BY date DESC'),
-        insertCheckup: db.prepare(`
-            INSERT INTO checkups (id, child_id, title, date, parameters, file_url)
-            VALUES (@id, @child_id, @title, @date, @parameters, @file_url)
-        `),
-        listReminders: db.prepare('SELECT * FROM reminders WHERE child_id = ?'),
-        insertReminder: db.prepare(`
-            INSERT INTO reminders (
-                id, child_id, title, message, description, date, alarm_at, type, source, category, link, extra
-            ) VALUES (
-                @id, @child_id, @title, @message, @description, @date, @alarm_at, @type, @source, @category, @link, @extra
-            )
-        `),
-        deleteReminder: db.prepare('DELETE FROM reminders WHERE child_id = ? AND id = ?'),
-        listUserReminders: db.prepare('SELECT * FROM user_reminders WHERE user_id = ? ORDER BY alarm_at'),
-        insertUserReminder: db.prepare(`
-            INSERT INTO user_reminders (
-                id, user_id, title, description, alarm_at, created_at, notified, type, source, extra
-            ) VALUES (
-                @id, @user_id, @title, @description, @alarm_at, @created_at, @notified, @type, @source, @extra
-            )
-        `),
-        deleteUserReminder: db.prepare('DELETE FROM user_reminders WHERE user_id = ? AND id = ?'),
-        getUserReminder: db.prepare('SELECT * FROM user_reminders WHERE user_id = ? AND id = ?'),
-        listBanners: db.prepare('SELECT * FROM banners ORDER BY id'),
-        insertBanner: db.prepare(
-            'INSERT INTO banners (id, title, link, image_url) VALUES (@id, @title, @link, @image_url)'
-        ),
-        deleteBanner: db.prepare('DELETE FROM banners WHERE id = ?'),
-        countBanners: db.prepare('SELECT COUNT(*) AS n FROM banners'),
-        listNews: db.prepare('SELECT * FROM news ORDER BY created_at DESC, id DESC'),
-        getNews: db.prepare('SELECT * FROM news WHERE id = ?'),
-        insertNews: db.prepare(`
-            INSERT INTO news (id, title, summary, content, category, image_url, created_at, updated_at)
-            VALUES (@id, @title, @summary, @content, @category, @image_url, @created_at, @updated_at)
-        `),
-        deleteNews: db.prepare('DELETE FROM news WHERE id = ?'),
-        countNews: db.prepare('SELECT COUNT(*) AS n FROM news'),
-        listVideos: db.prepare('SELECT * FROM videos ORDER BY created_at DESC, id DESC'),
-        insertVideo: db.prepare(`
-            INSERT INTO videos (id, title, summary, url, thumbnail_url, created_at)
-            VALUES (@id, @title, @summary, @url, @thumbnail_url, @created_at)
-        `),
-        getVideo: db.prepare('SELECT * FROM videos WHERE id = ?'),
-        deleteVideo: db.prepare('DELETE FROM videos WHERE id = ?'),
-        listPodcasts: db.prepare('SELECT * FROM podcasts ORDER BY created_at DESC, id DESC'),
-        listTickets: db.prepare('SELECT * FROM tickets ORDER BY id DESC'),
-        getTicket: db.prepare('SELECT * FROM tickets WHERE id = ?'),
-        countTickets: db.prepare('SELECT COUNT(*) AS n FROM tickets'),
-        countOpenTickets: db.prepare("SELECT COUNT(*) AS n FROM tickets WHERE status = 'open'"),
-        getProduct: db.prepare('SELECT * FROM products WHERE id = ?'),
-        listAllProducts: db.prepare('SELECT * FROM products ORDER BY id DESC'),
-        countProducts: db.prepare('SELECT COUNT(*) AS n FROM products'),
-        deleteProduct: db.prepare('DELETE FROM products WHERE id = ?'),
-        insertProduct: db.prepare(`
-            INSERT INTO products (id, name, description, category, price, stock, image_url, active, created_at, updated_at)
-            VALUES (@id, @name, @description, @category, @price, @stock, @image_url, @active, @created_at, @updated_at)
-        `),
-        insertProductAuto: db.prepare(`
-            INSERT INTO products (name, description, category, price, stock, image_url, active, created_at, updated_at)
-            VALUES (@name, @description, @category, @price, @stock, @image_url, @active, @created_at, @updated_at)
-        `),
-        getOrder: db.prepare('SELECT * FROM orders WHERE id = ?'),
-        listOrdersByUser: db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC, id DESC'),
-        listAllOrders: db.prepare('SELECT * FROM orders ORDER BY created_at DESC, id DESC'),
-        listOrderItems: db.prepare('SELECT * FROM order_items WHERE order_id = ?'),
-        countOrders: db.prepare('SELECT COUNT(*) AS n FROM orders'),
-        countPendingOrders: db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'"),
-        insertOrder: db.prepare(`
-            INSERT INTO orders (user_id, total, shipping_address, phone, notes, status, created_at, updated_at)
-            VALUES (@user_id, @total, @shipping_address, @phone, @notes, @status, @created_at, @updated_at)
-        `),
-        insertOrderItem: db.prepare(`
-            INSERT INTO order_items (order_id, product_id, name, price, quantity, line_total)
-            VALUES (@order_id, @product_id, @name, @price, @quantity, @line_total)
-        `),
-        updateOrderStatus: db.prepare(
-            'UPDATE orders SET status = @status, updated_at = @updated_at WHERE id = @id'
-        ),
-        adjustStock: db.prepare('UPDATE products SET stock = stock + ? WHERE id = ?'),
-        getOtp: db.prepare('SELECT * FROM otp_codes WHERE phone = ?'),
-        upsertOtp: db.prepare(`
-            INSERT INTO otp_codes (phone, code, purpose, expires_at, sent_at, attempts)
-            VALUES (@phone, @code, @purpose, @expires_at, @sent_at, @attempts)
-            ON CONFLICT(phone) DO UPDATE SET
-                code = excluded.code,
-                purpose = excluded.purpose,
-                expires_at = excluded.expires_at,
-                sent_at = excluded.sent_at,
-                attempts = excluded.attempts
-        `),
-        deleteOtp: db.prepare('DELETE FROM otp_codes WHERE phone = ?'),
-        purgeOtp: db.prepare('DELETE FROM otp_codes WHERE expires_at < ?')
-    };
-}
-
-function userToRow(user, { includeId } = {}) {
+function userToParams(user) {
     const known = new Set([
         'id', 'username', 'email', 'mobile', 'password', 'firstName', 'lastName',
         'birthDate', 'province', 'city', 'isAdmin', 'profileComplete', 'createdAt'
@@ -506,736 +335,841 @@ function userToRow(user, { includeId } = {}) {
     for (const [key, value] of Object.entries(user)) {
         if (!known.has(key) && value !== undefined) extra[key] = value;
     }
-    const row = {
-        username: user.username || null,
-        email: user.email || null,
-        mobile: user.mobile || null,
-        password: user.password == null ? null : String(user.password),
-        first_name: user.firstName || null,
-        last_name: user.lastName || null,
-        birth_date: user.birthDate || null,
-        province: user.province || null,
-        city: user.city || null,
-        is_admin: asBoolInt(user.isAdmin),
-        profile_complete: asBoolInt(user.profileComplete),
-        created_at: user.createdAt || null,
-        extra: Object.keys(extra).length ? JSON.stringify(extra) : null
-    };
-    if (includeId) row.id = user.id;
-    return row;
+    return [
+        user.username || null,
+        user.email || null,
+        user.mobile || null,
+        user.password == null ? null : String(user.password),
+        user.firstName || null,
+        user.lastName || null,
+        user.birthDate || null,
+        user.province || null,
+        user.city || null,
+        asBoolInt(user.isAdmin),
+        asBoolInt(user.profileComplete),
+        user.createdAt || null,
+        Object.keys(extra).length ? JSON.stringify(extra) : null
+    ];
 }
 
-function insertChildRow(child) {
-    const extra = {};
-    const known = new Set([
-        'id', 'userId', 'firstName', 'lastName', 'name', 'gender', 'birthDate', 'avatar',
-        'height', 'weight', 'bloodType', 'allergies', 'special_illnesses', 'nationalId',
-        'fatherName', 'birthWeight', 'birthHeight', 'birthHeadCircumference', 'birthType',
-        'gestationalAge', 'birthPlace', 'apgar1', 'apgar5', 'vaccinationRecords', 'vaccineReminder'
-    ]);
-    for (const [key, value] of Object.entries(child)) {
-        if (!known.has(key) && value !== undefined) extra[key] = value;
-    }
-    const info = db.prepare(`
-        INSERT INTO children (
-            id, user_id, first_name, last_name, name, gender, birth_date, avatar,
-            height, weight, blood_type, allergies, special_illnesses, national_id,
-            father_name, birth_weight, birth_height, birth_head_circumference,
-            birth_type, gestational_age, birth_place, apgar1, apgar5, vaccine_reminder, extra
-        ) VALUES (
-            @id, @user_id, @first_name, @last_name, @name, @gender, @birth_date, @avatar,
-            @height, @weight, @blood_type, @allergies, @special_illnesses, @national_id,
-            @father_name, @birth_weight, @birth_height, @birth_head_circumference,
-            @birth_type, @gestational_age, @birth_place, @apgar1, @apgar5, @vaccine_reminder, @extra
-        )
-    `).run({
-        id: child.id,
-        user_id: child.userId,
-        first_name: child.firstName || null,
-        last_name: child.lastName || null,
-        name: child.name || null,
-        gender: child.gender || null,
-        birth_date: child.birthDate || null,
-        avatar: child.avatar || null,
-        height: child.height == null ? null : String(child.height),
-        weight: child.weight == null ? null : String(child.weight),
-        blood_type: child.bloodType || null,
-        allergies: toJson(child.allergies),
-        special_illnesses: toJson(child.special_illnesses),
-        national_id: child.nationalId || null,
-        father_name: child.fatherName || null,
-        birth_weight: child.birthWeight == null ? null : Number(child.birthWeight),
-        birth_height: child.birthHeight == null ? null : Number(child.birthHeight),
-        birth_head_circumference:
-            child.birthHeadCircumference == null ? null : Number(child.birthHeadCircumference),
-        birth_type: child.birthType || null,
-        gestational_age: child.gestationalAge == null ? null : Number(child.gestationalAge),
-        birth_place: child.birthPlace || null,
-        apgar1: child.apgar1 == null ? null : Number(child.apgar1),
-        apgar5: child.apgar5 == null ? null : Number(child.apgar5),
-        vaccine_reminder: toJson(child.vaccineReminder),
-        extra: Object.keys(extra).length ? JSON.stringify(extra) : null
-    });
-    return child.id || Number(info.lastInsertRowid);
-}
-
-function attachVaccinations(childrenRows) {
-    if (!childrenRows.length) return [];
-    const ids = childrenRows.map((c) => c.id);
-    const placeholders = ids.map(() => '?').join(',');
-    const rows = db.prepare(
-        `SELECT child_id, age_group, vaccine_name, value FROM vaccination_records WHERE child_id IN (${placeholders})`
-    ).all(...ids);
-    const map = {};
-    for (const row of rows) {
-        if (!map[row.child_id]) map[row.child_id] = {};
-        if (!map[row.child_id][row.age_group]) map[row.child_id][row.age_group] = {};
-        map[row.child_id][row.age_group][row.vaccine_name] =
-            row.value === 'true' ? true : row.value;
-    }
-    return childrenRows.map((row) => {
-        const child = rowToChildBase(row);
-        child.vaccinationRecords = map[row.id] || {};
-        return child;
-    });
-}
-
-function replaceVaccinationRecords(childId, records) {
-    stmts.deleteVaccinationsForChild.run(childId);
+async function replaceVaccinationRecords(childId, records, client) {
+    await q('DELETE FROM vaccination_records WHERE child_id = $1', [childId], client);
     if (!records || typeof records !== 'object') return;
     for (const [ageGroup, vaccines] of Object.entries(records)) {
         if (!vaccines || typeof vaccines !== 'object') continue;
         for (const [vaccineName, value] of Object.entries(vaccines)) {
             if (value === false || value == null) continue;
-            stmts.upsertVaccination.run({
-                child_id: childId,
-                age_group: Number(ageGroup),
-                vaccine_name: vaccineName,
-                value: value === true ? 'true' : String(value)
-            });
+            await q(
+                `INSERT INTO vaccination_records (child_id, age_group, vaccine_name, value)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (child_id, age_group, vaccine_name)
+                 DO UPDATE SET value = EXCLUDED.value`,
+                [childId, Number(ageGroup), vaccineName, value === true ? 'true' : String(value)],
+                client
+            );
         }
     }
 }
 
-function hydrateOrders(orderRows) {
-    return orderRows.map((row) => {
-        const items = stmts.listOrderItems.all(row.id).map((item) => ({
-            productId: item.product_id,
+async function attachVaccinations(childrenRows, client) {
+    if (!childrenRows.length) return [];
+    const ids = childrenRows.map((c) => Number(c.id));
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',');
+    const rows = await many(
+        `SELECT child_id, age_group, vaccine_name, value FROM vaccination_records WHERE child_id IN (${placeholders})`,
+        ids,
+        client
+    );
+    const map = {};
+    for (const row of rows) {
+        const childId = Number(row.child_id);
+        if (!map[childId]) map[childId] = {};
+        if (!map[childId][row.age_group]) map[childId][row.age_group] = {};
+        map[childId][row.age_group][row.vaccine_name] = row.value === 'true' ? true : row.value;
+    }
+    return childrenRows.map((row) => {
+        const child = rowToChildBase(row);
+        child.vaccinationRecords = map[child.id] || {};
+        return child;
+    });
+}
+
+async function hydrateOrders(orderRows, client) {
+    const result = [];
+    for (const row of orderRows) {
+        const items = (await many(
+            'SELECT * FROM order_items WHERE order_id = $1',
+            [row.id],
+            client
+        )).map((item) => ({
+            productId: Number(item.product_id),
             name: item.name,
             price: item.price,
             quantity: item.quantity,
             lineTotal: item.line_total
         }));
-        return rowToOrder(row, items);
-    });
+        result.push(rowToOrder(row, items));
+    }
+    return result;
 }
 
-function importState(raw) {
+async function resetIdentity(table, client) {
+    await q(
+        `SELECT setval(pg_get_serial_sequence($1, 'id'), COALESCE((SELECT MAX(id) FROM ${table}), 1), true)`,
+        [table],
+        client
+    );
+}
+
+async function importState(raw, client) {
     const state = normalizeState(raw);
-    const tx = db.transaction(() => {
-        for (const user of Object.values(state.users || {})) {
-            stmts.insertUser.run(userToRow(user, { includeId: true }));
-        }
 
-        for (const child of state.children || []) {
-            insertChildRow(child);
-            replaceVaccinationRecords(child.id, child.vaccinationRecords);
-        }
+    for (const user of Object.values(state.users || {})) {
+        await q(
+            `INSERT INTO users (
+                id, username, email, mobile, password, first_name, last_name,
+                birth_date, province, city, is_admin, profile_complete, created_at, extra
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            [user.id, ...userToParams(user)],
+            client
+        );
+    }
 
-        for (const [childId, records] of Object.entries(state.growthData || {})) {
-            (records || []).forEach((record, index) => {
-                const date = record.date ? String(record.date).replace(/\//g, '-') : '';
-                const publicId = record.id || `g-migrated-${childId}-${index}`;
-                try {
-                    stmts.insertGrowth.run({
-                        public_id: publicId,
-                        child_id: Number(childId),
+    for (const child of state.children || []) {
+        await q(
+            `INSERT INTO children (
+                id, user_id, first_name, last_name, name, gender, birth_date, avatar,
+                height, weight, blood_type, allergies, special_illnesses, national_id,
+                father_name, birth_weight, birth_height, birth_head_circumference,
+                birth_type, gestational_age, birth_place, apgar1, apgar5, vaccine_reminder, extra
+            ) VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
+            )`,
+            [
+                child.id,
+                child.userId,
+                child.firstName || null,
+                child.lastName || null,
+                child.name || null,
+                child.gender || null,
+                child.birthDate || null,
+                child.avatar || null,
+                child.height == null ? null : String(child.height),
+                child.weight == null ? null : String(child.weight),
+                child.bloodType || null,
+                toJson(child.allergies),
+                toJson(child.special_illnesses),
+                child.nationalId || null,
+                child.fatherName || null,
+                child.birthWeight == null ? null : Number(child.birthWeight),
+                child.birthHeight == null ? null : Number(child.birthHeight),
+                child.birthHeadCircumference == null ? null : Number(child.birthHeadCircumference),
+                child.birthType || null,
+                child.gestationalAge == null ? null : Number(child.gestationalAge),
+                child.birthPlace || null,
+                child.apgar1 == null ? null : Number(child.apgar1),
+                child.apgar5 == null ? null : Number(child.apgar5),
+                toJson(child.vaccineReminder),
+                null
+            ],
+            client
+        );
+        await replaceVaccinationRecords(child.id, child.vaccinationRecords, client);
+    }
+
+    for (const [childId, records] of Object.entries(state.growthData || {})) {
+        (records || []).forEach(() => {});
+        for (let index = 0; index < (records || []).length; index += 1) {
+            const record = records[index];
+            const date = record.date ? String(record.date).replace(/\//g, '-') : '';
+            const publicId = record.id || `g-migrated-${childId}-${index}`;
+            try {
+                await q(
+                    `INSERT INTO growth_records (public_id, child_id, date, height, weight, head_circumference)
+                     VALUES ($1,$2,$3,$4,$5,$6)`,
+                    [
+                        publicId,
+                        Number(childId),
                         date,
-                        height: record.height == null ? null : Number(record.height),
-                        weight: record.weight == null ? null : Number(record.weight),
-                        head_circumference:
-                            record.headCircumference == null ? null : Number(record.headCircumference)
-                    });
-                } catch (err) {
-                    if (!String(err.message || '').includes('UNIQUE')) throw err;
-                }
-            });
-        }
-
-        for (const [childId, visits] of Object.entries(state.medicalVisits || {})) {
-            for (const visit of visits || []) {
-                stmts.insertVisit.run({
-                    id: visit.id || Date.now() + Number(childId),
-                    child_id: Number(childId),
-                    date: visit.date || null,
-                    doctor_name: visit.doctorName || null,
-                    reason: visit.reason || null,
-                    summary: visit.summary || null,
-                    description: visit.description || null
-                });
+                        record.height == null ? null : Number(record.height),
+                        record.weight == null ? null : Number(record.weight),
+                        record.headCircumference == null ? null : Number(record.headCircumference)
+                    ],
+                    client
+                );
+            } catch (err) {
+                if (!String(err.message || '').includes('duplicate key')) throw err;
             }
         }
+    }
 
-        for (const [childId, docs] of Object.entries(state.medicalDocuments || {})) {
-            for (const doc of docs || []) {
-                stmts.insertDocument.run({
-                    id: doc.id || Date.now() + Number(childId),
-                    child_id: Number(childId),
-                    title: doc.title || null,
-                    date: doc.date || null,
-                    url: doc.url || doc.filePath || null,
-                    uploaded_at: doc.uploadedAt || null
-                });
-            }
+    for (const [childId, visits] of Object.entries(state.medicalVisits || {})) {
+        for (const visit of visits || []) {
+            await q(
+                `INSERT INTO medical_visits (id, child_id, date, doctor_name, reason, summary, description)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                [
+                    visit.id || Date.now() + Number(childId),
+                    Number(childId),
+                    visit.date || null,
+                    visit.doctorName || null,
+                    visit.reason || null,
+                    visit.summary || null,
+                    visit.description || null
+                ],
+                client
+            );
         }
+    }
 
-        for (const [childId, items] of Object.entries(state.checkups || {})) {
-            for (const item of items || []) {
-                stmts.insertCheckup.run({
-                    id: item.id || Date.now() + Number(childId),
-                    child_id: Number(childId),
-                    title: item.title || null,
-                    date: item.date || null,
-                    parameters: toJson(item.parameters),
-                    file_url: item.fileUrl || null
-                });
-            }
+    for (const [childId, docs] of Object.entries(state.medicalDocuments || {})) {
+        for (const doc of docs || []) {
+            await q(
+                `INSERT INTO medical_documents (id, child_id, title, date, url, uploaded_at)
+                 VALUES ($1,$2,$3,$4,$5,$6)`,
+                [
+                    doc.id || Date.now() + Number(childId),
+                    Number(childId),
+                    doc.title || null,
+                    doc.date || null,
+                    doc.url || doc.filePath || null,
+                    doc.uploadedAt || null
+                ],
+                client
+            );
         }
+    }
 
-        for (const [childId, items] of Object.entries(state.reminders || {})) {
-            for (const item of items || []) {
-                stmts.insertReminder.run({
-                    id: String(item.id),
-                    child_id: Number(childId),
-                    title: item.title || null,
-                    message: item.message || null,
-                    description: item.description || null,
-                    date: item.date || null,
-                    alarm_at: item.alarmAt || null,
-                    type: item.type || null,
-                    source: item.source || null,
-                    category: item.category || null,
-                    link: item.link || null,
-                    extra: null
-                });
-            }
+    for (const [childId, items] of Object.entries(state.checkups || {})) {
+        for (const item of items || []) {
+            await q(
+                `INSERT INTO checkups (id, child_id, title, date, parameters, file_url)
+                 VALUES ($1,$2,$3,$4,$5,$6)`,
+                [
+                    item.id || Date.now() + Number(childId),
+                    Number(childId),
+                    item.title || null,
+                    item.date || null,
+                    toJson(item.parameters),
+                    item.fileUrl || null
+                ],
+                client
+            );
         }
+    }
 
-        for (const [userId, items] of Object.entries(state.userReminders || {})) {
-            for (const item of items || []) {
-                stmts.insertUserReminder.run({
-                    id: String(item.id),
-                    user_id: Number(userId),
-                    title: item.title || null,
-                    description: item.description || null,
-                    alarm_at: item.alarmAt || null,
-                    created_at: item.createdAt || null,
-                    notified: asBoolInt(item.notified),
-                    type: item.type || null,
-                    source: item.source || null,
-                    extra: null
-                });
-            }
+    for (const [childId, items] of Object.entries(state.reminders || {})) {
+        for (const item of items || []) {
+            await q(
+                `INSERT INTO reminders (
+                    id, child_id, title, message, description, date, alarm_at, type, source, category, link, extra
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                [
+                    String(item.id),
+                    Number(childId),
+                    item.title || null,
+                    item.message || null,
+                    item.description || null,
+                    item.date || null,
+                    item.alarmAt || null,
+                    item.type || null,
+                    item.source || null,
+                    item.category || null,
+                    item.link || null,
+                    null
+                ],
+                client
+            );
         }
+    }
 
-        for (const message of state.messages || []) {
-            const info = db.prepare(`
-                INSERT INTO messages (id, title, body, link, image_url, type, is_bulk, created_at, created_by)
-                VALUES (@id, @title, @body, @link, @image_url, @type, @is_bulk, @created_at, @created_by)
-            `).run({
-                id: message.id,
-                title: message.title,
-                body: message.body || '',
-                link: message.link || null,
-                image_url: message.imageUrl || null,
-                type: message.type || 'admin',
-                is_bulk: asBoolInt(message.isBulk),
-                created_at: message.createdAt || null,
-                created_by: message.createdBy || null
-            });
-            const messageId = message.id || Number(info.lastInsertRowid);
-            const insertRecipient = db.prepare(`
-                INSERT OR IGNORE INTO message_recipients (message_id, user_id, is_read)
-                VALUES (?, ?, ?)
-            `);
-            for (const userId of message.recipientIds || []) {
-                const isRead = Array.isArray(message.readBy) && message.readBy.includes(userId) ? 1 : 0;
-                insertRecipient.run(messageId, userId, isRead);
-            }
+    for (const [userId, items] of Object.entries(state.userReminders || {})) {
+        for (const item of items || []) {
+            await q(
+                `INSERT INTO user_reminders (
+                    id, user_id, title, description, alarm_at, created_at, notified, type, source, extra
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                [
+                    String(item.id),
+                    Number(userId),
+                    item.title || null,
+                    item.description || null,
+                    item.alarmAt || null,
+                    item.createdAt || null,
+                    asBoolInt(item.notified),
+                    item.type || null,
+                    item.source || null,
+                    null
+                ],
+                client
+            );
         }
+    }
 
-        for (const banner of state.banners || []) {
-            stmts.insertBanner.run({
-                id: banner.id,
-                title: banner.title || null,
-                link: banner.link || null,
-                image_url: banner.imageUrl || null
-            });
+    for (const message of state.messages || []) {
+        const inserted = await one(
+            `INSERT INTO messages (id, title, body, link, image_url, type, is_bulk, created_at, created_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+            [
+                message.id,
+                message.title,
+                message.body || '',
+                message.link || null,
+                message.imageUrl || null,
+                message.type || 'admin',
+                asBoolInt(message.isBulk),
+                message.createdAt || null,
+                message.createdBy || null
+            ],
+            client
+        );
+        const messageId = message.id || inserted.id;
+        for (const userId of message.recipientIds || []) {
+            const isRead = Array.isArray(message.readBy) && message.readBy.includes(userId) ? 1 : 0;
+            await q(
+                `INSERT INTO message_recipients (message_id, user_id, is_read)
+                 VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+                [messageId, userId, isRead],
+                client
+            );
         }
+    }
 
-        const newsItems = (state.news || []).length ? state.news : (state.articles || []);
-        for (const item of newsItems) {
-            stmts.insertNews.run({
-                id: item.id,
-                title: item.title || null,
-                summary: item.summary || null,
-                content: item.content || null,
-                category: item.category || null,
-                image_url: item.imageUrl || null,
-                created_at: item.createdAt || null,
-                updated_at: item.updatedAt || null
-            });
-        }
+    for (const banner of state.banners || []) {
+        await q(
+            'INSERT INTO banners (id, title, link, image_url) VALUES ($1,$2,$3,$4)',
+            [banner.id, banner.title || null, banner.link || null, banner.imageUrl || null],
+            client
+        );
+    }
 
-        for (const video of state.videos || []) {
-            stmts.insertVideo.run({
-                id: video.id,
-                title: video.title || null,
-                summary: video.summary || null,
-                url: video.url || null,
-                thumbnail_url: video.thumbnailUrl || null,
-                created_at: video.createdAt || null
-            });
-        }
+    const newsItems = (state.news || []).length ? state.news : (state.articles || []);
+    for (const item of newsItems) {
+        await q(
+            `INSERT INTO news (id, title, summary, content, category, image_url, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [
+                item.id,
+                item.title || null,
+                item.summary || null,
+                item.content || null,
+                item.category || null,
+                item.imageUrl || null,
+                item.createdAt || null,
+                item.updatedAt || null
+            ],
+            client
+        );
+    }
 
-        for (const podcast of state.podcasts || []) {
-            db.prepare(`
-                INSERT INTO podcasts (id, title, summary, url, thumbnail_url, duration, created_at)
-                VALUES (@id, @title, @summary, @url, @thumbnail_url, @duration, @created_at)
-            `).run({
-                id: podcast.id,
-                title: podcast.title || null,
-                summary: podcast.summary || null,
-                url: podcast.url || null,
-                thumbnail_url: podcast.thumbnailUrl || null,
-                duration: podcast.duration || null,
-                created_at: podcast.createdAt || null
-            });
-        }
+    for (const video of state.videos || []) {
+        await q(
+            `INSERT INTO videos (id, title, summary, url, thumbnail_url, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+                video.id,
+                video.title || null,
+                video.summary || null,
+                video.url || null,
+                video.thumbnailUrl || null,
+                video.createdAt || null
+            ],
+            client
+        );
+    }
 
-        for (const ticket of state.tickets || []) {
-            db.prepare(`
-                INSERT INTO tickets (id, user_id, status, created_at, updated_at, payload)
-                VALUES (@id, @user_id, @status, @created_at, @updated_at, @payload)
-            `).run({
-                id: ticket.id,
-                user_id: ticket.userId || null,
-                status: ticket.status || 'open',
-                created_at: ticket.createdAt || null,
-                updated_at: ticket.updatedAt || null,
-                payload: JSON.stringify(ticket)
-            });
-        }
+    for (const podcast of state.podcasts || []) {
+        await q(
+            `INSERT INTO podcasts (id, title, summary, url, thumbnail_url, duration, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [
+                podcast.id,
+                podcast.title || null,
+                podcast.summary || null,
+                podcast.url || null,
+                podcast.thumbnailUrl || null,
+                podcast.duration || null,
+                podcast.createdAt || null
+            ],
+            client
+        );
+    }
 
-        for (const product of state.products || []) {
-            stmts.insertProduct.run({
-                id: product.id,
-                name: product.name,
-                description: product.description || '',
-                category: product.category || null,
-                price: product.price || 0,
-                stock: product.stock || 0,
-                image_url: product.imageUrl || null,
-                active: asBoolInt(product.active !== false),
-                created_at: product.createdAt || null,
-                updated_at: product.updatedAt || null
-            });
-        }
+    for (const ticket of state.tickets || []) {
+        await q(
+            `INSERT INTO tickets (id, user_id, status, created_at, updated_at, payload)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [
+                ticket.id,
+                ticket.userId || null,
+                ticket.status || 'open',
+                ticket.createdAt || null,
+                ticket.updatedAt || null,
+                JSON.stringify(ticket)
+            ],
+            client
+        );
+    }
 
-        for (const order of state.orders || []) {
-            const info = db.prepare(`
-                INSERT INTO orders (id, user_id, total, shipping_address, phone, notes, status, created_at, updated_at)
-                VALUES (@id, @user_id, @total, @shipping_address, @phone, @notes, @status, @created_at, @updated_at)
-            `).run({
-                id: order.id,
-                user_id: order.userId,
-                total: order.total || 0,
-                shipping_address: order.shippingAddress || null,
-                phone: order.phone || null,
-                notes: order.notes || '',
-                status: order.status || 'pending',
-                created_at: order.createdAt || null,
-                updated_at: order.updatedAt || null
-            });
-            const orderId = order.id || Number(info.lastInsertRowid);
-            for (const item of order.items || []) {
-                stmts.insertOrderItem.run({
-                    order_id: orderId,
-                    product_id: item.productId,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    line_total: item.lineTotal
-                });
-            }
+    for (const product of state.products || []) {
+        await q(
+            `INSERT INTO products (id, name, description, category, price, stock, image_url, active, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [
+                product.id,
+                product.name,
+                product.description || '',
+                product.category || null,
+                product.price || 0,
+                product.stock || 0,
+                product.imageUrl || null,
+                asBoolInt(product.active !== false),
+                product.createdAt || null,
+                product.updatedAt || null
+            ],
+            client
+        );
+    }
+
+    for (const order of state.orders || []) {
+        const inserted = await one(
+            `INSERT INTO orders (id, user_id, total, shipping_address, phone, notes, status, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+            [
+                order.id,
+                order.userId,
+                order.total || 0,
+                order.shippingAddress || null,
+                order.phone || null,
+                order.notes || '',
+                order.status || 'pending',
+                order.createdAt || null,
+                order.updatedAt || null
+            ],
+            client
+        );
+        const orderId = order.id || inserted.id;
+        for (const item of order.items || []) {
+            await q(
+                `INSERT INTO order_items (order_id, product_id, name, price, quantity, line_total)
+                 VALUES ($1,$2,$3,$4,$5,$6)`,
+                [orderId, item.productId, item.name, item.price, item.quantity, item.lineTotal],
+                client
+            );
         }
-    });
-    tx();
+    }
+
+    for (const table of [
+        'users', 'children', 'vaccination_records', 'growth_records', 'medical_visits',
+        'medical_documents', 'checkups', 'messages', 'banners', 'news', 'videos',
+        'podcasts', 'tickets', 'products', 'orders', 'order_items'
+    ]) {
+        await resetIdentity(table, client);
+    }
 }
 
-function maybeMigrateLegacyBlob() {
-    const hasAppState = db.prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'app_state'"
-    ).get();
-    if (!hasAppState) return false;
-    const row = db.prepare('SELECT data FROM app_state WHERE id = ?').get('main');
-    if (!row) return false;
-    const raw = JSON.parse(row.data);
-    importState(raw);
-    db.exec('ALTER TABLE app_state RENAME TO app_state_legacy');
-    console.log('Migrated legacy app_state JSON blob into relational tables');
-    return true;
+async function getSchemaVersion() {
+    try {
+        const row = await one('SELECT value FROM schema_meta WHERE key = $1', ['version']);
+        return row ? Number(row.value) : 0;
+    } catch (_) {
+        return 0;
+    }
 }
 
-function seedFromJsonIfEmpty() {
-    const userCount = stmts.countUsers.get().n;
-    if (userCount > 0) return false;
+async function setSchemaVersion(version, client) {
+    await q(
+        `INSERT INTO schema_meta (key, value) VALUES ('version', $1)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+        [String(version)],
+        client
+    );
+}
+
+async function seedFromJsonIfEmpty() {
+    const count = await one('SELECT COUNT(*)::int AS n FROM users');
+    if (count.n > 0) return false;
     const jsonPath = path.join(__dirname, 'db.json');
     if (!fs.existsSync(jsonPath)) return false;
     const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    importState(raw);
-    console.log(`Seeded relational SQLite from ${jsonPath}`);
+    await withTx((client) => importState(raw, client));
+    console.log(`Seeded PostgreSQL from ${jsonPath}`);
     return true;
 }
 
-function connect() {
-    if (db) return db;
-    const dir = path.dirname(DB_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    db = new Database(DB_FILE);
-    applyPragmas();
-    db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
-    prepareStatements();
-
-    const version = getSchemaVersion();
-    if (version < SCHEMA_VERSION) {
-        const migrated = maybeMigrateLegacyBlob();
-        if (!migrated) seedFromJsonIfEmpty();
-        setSchemaVersion(SCHEMA_VERSION);
+async function maybeImportFromSqlite() {
+    const sqlitePath = process.env.SQLITE_PATH;
+    if (!sqlitePath || !fs.existsSync(sqlitePath)) return false;
+    const count = await one('SELECT COUNT(*)::int AS n FROM users');
+    if (count.n > 0) return false;
+    let Database;
+    try {
+        Database = require('better-sqlite3');
+    } catch (_) {
+        console.warn('better-sqlite3 is not available; skip SQLite import');
+        return false;
     }
-
-    stmts.purgeOtp.run(Date.now());
-    console.log(`Connected to relational SQLite (${DB_FILE}) schema v${SCHEMA_VERSION}`);
-    return db;
+    const sqlite = new Database(sqlitePath, { readonly: true });
+    try {
+        const blob = sqlite.prepare('SELECT data FROM app_state WHERE id = ?').get('main')
+            || sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_state_legacy'").get();
+        let raw = null;
+        if (blob && blob.data) {
+            raw = JSON.parse(blob.data);
+        } else {
+            const legacy = sqlite.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('app_state','app_state_legacy')"
+            ).all();
+            if (legacy.length) {
+                const table = legacy[0].name;
+                const row = sqlite.prepare(`SELECT data FROM ${table} WHERE id = ?`).get('main');
+                if (row) raw = JSON.parse(row.data);
+            }
+        }
+        if (!raw) return false;
+        await withTx((client) => importState(raw, client));
+        console.log(`Imported legacy SQLite blob from ${sqlitePath}`);
+        return true;
+    } finally {
+        sqlite.close();
+    }
 }
 
-function close() {
-    if (db) {
-        db.close();
-        db = null;
-        stmts = null;
+async function connect() {
+    if (pool) return pool;
+    if (connecting) return connecting;
+    connecting = (async () => {
+        const next = new Pool({
+            connectionString: databaseUrl(),
+            max: Number(process.env.PG_POOL_SIZE || 20),
+            idleTimeoutMillis: 30000
+        });
+        try {
+            await next.query('SELECT 1');
+            pool = next;
+            const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');
+            await pool.query(schemaSql);
+            const version = await getSchemaVersion();
+            if (version < SCHEMA_VERSION) {
+                const importedSqlite = await maybeImportFromSqlite();
+                if (!importedSqlite) await seedFromJsonIfEmpty();
+                await setSchemaVersion(SCHEMA_VERSION);
+            }
+            await pool.query('DELETE FROM otp_codes WHERE expires_at < $1', [Date.now()]);
+            console.log(`Connected to PostgreSQL schema v${SCHEMA_VERSION}`);
+            return pool;
+        } catch (err) {
+            try { await next.end(); } catch (_) { /* ignore */ }
+            pool = null;
+            throw err;
+        }
+    })();
+    try {
+        return await connecting;
+    } finally {
+        connecting = null;
+    }
+}
+
+async function close() {
+    if (pool) {
+        await pool.end();
+        pool = null;
         publicCache.clear();
     }
 }
 
-function ping() {
-    connect();
-    const row = db.prepare('SELECT 1 AS ok').get();
-    return row && row.ok === 1;
+async function ping() {
+    const row = await one('SELECT 1 AS ok');
+    return row && Number(row.ok) === 1;
 }
 
-function health() {
-    connect();
-    const wal = String(db.pragma('journal_mode', { simple: true }) || '').toLowerCase() === 'wal';
+async function health() {
+    await connect();
+    const row = await one('SELECT current_database() AS db, current_user AS db_user');
+    const counts = await one(`
+        SELECT
+            (SELECT COUNT(*)::int FROM users) AS users,
+            (SELECT COUNT(*)::int FROM children) AS children,
+            (SELECT COUNT(*)::int FROM products) AS products,
+            (SELECT COUNT(*)::int FROM orders) AS orders
+    `);
     return {
-        ok: ping(),
-        db: 'sqlite',
-        file: DB_FILE,
-        schemaVersion: getSchemaVersion(),
-        wal,
-        counts: {
-            users: stmts.countUsers.get().n,
-            children: stmts.countChildren.get().n,
-            products: stmts.countProducts.get().n,
-            orders: stmts.countOrders.get().n
-        }
+        ok: await ping(),
+        db: 'postgresql',
+        database: row.db,
+        schemaVersion: await getSchemaVersion(),
+        poolMax: Number(process.env.PG_POOL_SIZE || 20),
+        counts
     };
 }
 
 const users = {
-    getById(id) {
-        connect();
-        return rowToUser(stmts.getUserById.get(Number(id)));
+    async getById(id) {
+        return rowToUser(await one('SELECT * FROM users WHERE id = $1', [Number(id)]));
     },
-    list() {
-        connect();
-        return stmts.listUsers.all().map(rowToUser);
+    async list() {
+        return (await many('SELECT * FROM users ORDER BY id')).map(rowToUser);
     },
-    count() {
-        connect();
-        return stmts.countUsers.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM users')).n;
     },
-    exists(id) {
-        return !!users.getById(id);
+    async exists(id) {
+        return !!(await users.getById(id));
     },
-    findByPhone(phone) {
-        connect();
+    async findByPhone(phone) {
         const normalized = normalizePhone(phone);
-        const row = db.prepare(`
-            SELECT * FROM users
-            WHERE mobile = ? OR username = ?
-            LIMIT 1
-        `).get(normalized, normalized);
-        return rowToUser(row);
+        return rowToUser(await one(
+            'SELECT * FROM users WHERE mobile = $1 OR username = $1 LIMIT 1',
+            [normalized]
+        ));
     },
-    findByUsernameOrEmail(login) {
-        connect();
+    async findByUsernameOrEmail(login) {
         const value = String(login || '').trim();
-        const row = db.prepare(`
-            SELECT * FROM users
-            WHERE username = ? OR email = ?
-            LIMIT 1
-        `).get(value, value);
-        return rowToUser(row);
+        return rowToUser(await one(
+            'SELECT * FROM users WHERE username = $1 OR email = $1 LIMIT 1',
+            [value]
+        ));
     },
-    findCandidatesForLogin(login) {
-        connect();
+    async findCandidatesForLogin(login) {
         const loginRaw = String(login || '').trim();
         if (!loginRaw) return [];
         const loginLower = loginRaw.toLowerCase();
         const phone = normalizePhone(loginRaw);
         const adminAlias = loginLower === 'amin' || loginLower === 'admin';
-        const rows = db.prepare(`
-            SELECT * FROM users
-            WHERE lower(username) = @loginLower
-               OR lower(email) = @loginLower
-               OR (@phone != '' AND (mobile = @phone OR username = @phone))
-               OR (@adminAlias = 1 AND is_admin = 1)
-        `).all({
-            loginLower,
-            phone,
-            adminAlias: adminAlias ? 1 : 0
-        });
+        const rows = await many(
+            `SELECT * FROM users
+             WHERE lower(username) = $1
+                OR lower(email) = $1
+                OR ($2 <> '' AND (mobile = $2 OR username = $2))
+                OR ($3 AND is_admin = 1)`,
+            [loginLower, phone, adminAlias]
+        );
         return rows.map(rowToUser);
     },
-    listNonAdminIds() {
-        connect();
-        return db.prepare('SELECT id FROM users WHERE is_admin = 0').all().map((r) => r.id);
+    async listNonAdminIds() {
+        return (await many('SELECT id FROM users WHERE is_admin = 0')).map((r) => Number(r.id));
     },
-    listAllIds() {
-        connect();
-        return db.prepare('SELECT id FROM users').all().map((r) => r.id);
+    async listAllIds() {
+        return (await many('SELECT id FROM users')).map((r) => Number(r.id));
     },
-    create(user) {
-        connect();
-        const row = userToRow(user);
-        const info = stmts.insertUserAuto.run(row);
-        return users.getById(Number(info.lastInsertRowid));
+    async create(user) {
+        const row = await one(
+            `INSERT INTO users (
+                username, email, mobile, password, first_name, last_name,
+                birth_date, province, city, is_admin, profile_complete, created_at, extra
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            RETURNING *`,
+            userToParams(user)
+        );
+        return rowToUser(row);
     },
-    update(id, patch) {
-        connect();
-        const current = users.getById(id);
+    async update(id, patch) {
+        const current = await users.getById(id);
         if (!current) return null;
         const next = { ...current, ...patch, id: Number(id) };
-        stmts.updateUser.run(userToRow(next, { includeId: true }));
+        await q(
+            `UPDATE users SET
+                username=$1, email=$2, mobile=$3, password=$4, first_name=$5, last_name=$6,
+                birth_date=$7, province=$8, city=$9, is_admin=$10, profile_complete=$11,
+                created_at=$12, extra=$13
+             WHERE id=$14`,
+            [...userToParams(next), Number(id)]
+        );
         return users.getById(id);
     },
-    remove(id) {
-        connect();
-        const info = stmts.deleteUser.run(Number(id));
-        return info.changes > 0;
+    async remove(id) {
+        const result = await q('DELETE FROM users WHERE id = $1', [Number(id)]);
+        return result.rowCount > 0;
     }
 };
 
 const children = {
-    getById(id) {
-        connect();
-        const row = stmts.getChildById.get(Number(id));
+    async getById(id) {
+        const row = await one('SELECT * FROM children WHERE id = $1', [Number(id)]);
         if (!row) return null;
-        return attachVaccinations([row])[0];
+        return (await attachVaccinations([row]))[0];
     },
-    listByUserId(userId) {
-        connect();
-        return attachVaccinations(stmts.listChildrenByUser.all(Number(userId)));
+    async listByUserId(userId) {
+        return attachVaccinations(await many(
+            'SELECT * FROM children WHERE user_id = $1 ORDER BY id',
+            [Number(userId)]
+        ));
     },
-    count() {
-        connect();
-        return stmts.countChildren.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM children')).n;
     },
-    create(child) {
-        connect();
-        const created = db.transaction(() => {
-            const info = db.prepare(`
-                INSERT INTO children (
+    async create(child) {
+        return withTx(async (client) => {
+            const row = await one(
+                `INSERT INTO children (
                     user_id, first_name, last_name, name, gender, birth_date, avatar,
                     height, weight, blood_type, allergies, special_illnesses, national_id,
                     father_name, birth_weight, birth_height, birth_head_circumference,
                     birth_type, gestational_age, birth_place, apgar1, apgar5, vaccine_reminder, extra
                 ) VALUES (
-                    @user_id, @first_name, @last_name, @name, @gender, @birth_date, @avatar,
-                    @height, @weight, @blood_type, @allergies, @special_illnesses, @national_id,
-                    @father_name, @birth_weight, @birth_height, @birth_head_circumference,
-                    @birth_type, @gestational_age, @birth_place, @apgar1, @apgar5, @vaccine_reminder, @extra
-                )
-            `).run({
-                user_id: child.userId,
-                first_name: child.firstName || null,
-                last_name: child.lastName || null,
-                name: child.name || null,
-                gender: child.gender || null,
-                birth_date: child.birthDate || null,
-                avatar: child.avatar || null,
-                height: child.height == null ? null : String(child.height),
-                weight: child.weight == null ? null : String(child.weight),
-                blood_type: child.bloodType || null,
-                allergies: toJson(child.allergies),
-                special_illnesses: toJson(child.special_illnesses),
-                national_id: child.nationalId || null,
-                father_name: child.fatherName || null,
-                birth_weight: child.birthWeight == null ? null : Number(child.birthWeight),
-                birth_height: child.birthHeight == null ? null : Number(child.birthHeight),
-                birth_head_circumference:
+                    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24
+                ) RETURNING *`,
+                [
+                    child.userId,
+                    child.firstName || null,
+                    child.lastName || null,
+                    child.name || null,
+                    child.gender || null,
+                    child.birthDate || null,
+                    child.avatar || null,
+                    child.height == null ? null : String(child.height),
+                    child.weight == null ? null : String(child.weight),
+                    child.bloodType || null,
+                    toJson(child.allergies),
+                    toJson(child.special_illnesses),
+                    child.nationalId || null,
+                    child.fatherName || null,
+                    child.birthWeight == null ? null : Number(child.birthWeight),
+                    child.birthHeight == null ? null : Number(child.birthHeight),
                     child.birthHeadCircumference == null ? null : Number(child.birthHeadCircumference),
-                birth_type: child.birthType || null,
-                gestational_age: child.gestationalAge == null ? null : Number(child.gestationalAge),
-                birth_place: child.birthPlace || null,
-                apgar1: child.apgar1 == null ? null : Number(child.apgar1),
-                apgar5: child.apgar5 == null ? null : Number(child.apgar5),
-                vaccine_reminder: toJson(child.vaccineReminder),
-                extra: null
-            });
-            const id = Number(info.lastInsertRowid);
-            replaceVaccinationRecords(id, child.vaccinationRecords || {});
-            return id;
-        })();
-        return children.getById(created);
+                    child.birthType || null,
+                    child.gestationalAge == null ? null : Number(child.gestationalAge),
+                    child.birthPlace || null,
+                    child.apgar1 == null ? null : Number(child.apgar1),
+                    child.apgar5 == null ? null : Number(child.apgar5),
+                    toJson(child.vaccineReminder),
+                    null
+                ],
+                client
+            );
+            await replaceVaccinationRecords(row.id, child.vaccinationRecords || {}, client);
+            return (await attachVaccinations([row], client))[0];
+        });
     },
-    update(id, patch) {
-        connect();
-        const current = children.getById(id);
+    async update(id, patch) {
+        const current = await children.getById(id);
         if (!current) return null;
         const next = { ...current, ...patch, id: Number(id) };
-        db.transaction(() => {
-            db.prepare(`
-                UPDATE children SET
-                    user_id = @user_id,
-                    first_name = @first_name,
-                    last_name = @last_name,
-                    name = @name,
-                    gender = @gender,
-                    birth_date = @birth_date,
-                    avatar = @avatar,
-                    height = @height,
-                    weight = @weight,
-                    blood_type = @blood_type,
-                    allergies = @allergies,
-                    special_illnesses = @special_illnesses,
-                    national_id = @national_id,
-                    father_name = @father_name,
-                    birth_weight = @birth_weight,
-                    birth_height = @birth_height,
-                    birth_head_circumference = @birth_head_circumference,
-                    birth_type = @birth_type,
-                    gestational_age = @gestational_age,
-                    birth_place = @birth_place,
-                    apgar1 = @apgar1,
-                    apgar5 = @apgar5,
-                    vaccine_reminder = @vaccine_reminder
-                WHERE id = @id
-            `).run({
-                id: Number(id),
-                user_id: next.userId,
-                first_name: next.firstName || null,
-                last_name: next.lastName || null,
-                name: next.name || null,
-                gender: next.gender || null,
-                birth_date: next.birthDate || null,
-                avatar: next.avatar || null,
-                height: next.height == null ? null : String(next.height),
-                weight: next.weight == null ? null : String(next.weight),
-                blood_type: next.bloodType || null,
-                allergies: toJson(next.allergies),
-                special_illnesses: toJson(next.special_illnesses),
-                national_id: next.nationalId || null,
-                father_name: next.fatherName || null,
-                birth_weight: next.birthWeight == null ? null : Number(next.birthWeight),
-                birth_height: next.birthHeight == null ? null : Number(next.birthHeight),
-                birth_head_circumference:
+        return withTx(async (client) => {
+            await q(
+                `UPDATE children SET
+                    user_id=$1, first_name=$2, last_name=$3, name=$4, gender=$5, birth_date=$6,
+                    avatar=$7, height=$8, weight=$9, blood_type=$10, allergies=$11, special_illnesses=$12,
+                    national_id=$13, father_name=$14, birth_weight=$15, birth_height=$16,
+                    birth_head_circumference=$17, birth_type=$18, gestational_age=$19, birth_place=$20,
+                    apgar1=$21, apgar5=$22, vaccine_reminder=$23
+                 WHERE id=$24`,
+                [
+                    next.userId,
+                    next.firstName || null,
+                    next.lastName || null,
+                    next.name || null,
+                    next.gender || null,
+                    next.birthDate || null,
+                    next.avatar || null,
+                    next.height == null ? null : String(next.height),
+                    next.weight == null ? null : String(next.weight),
+                    next.bloodType || null,
+                    toJson(next.allergies),
+                    toJson(next.special_illnesses),
+                    next.nationalId || null,
+                    next.fatherName || null,
+                    next.birthWeight == null ? null : Number(next.birthWeight),
+                    next.birthHeight == null ? null : Number(next.birthHeight),
                     next.birthHeadCircumference == null ? null : Number(next.birthHeadCircumference),
-                birth_type: next.birthType || null,
-                gestational_age: next.gestationalAge == null ? null : Number(next.gestationalAge),
-                birth_place: next.birthPlace || null,
-                apgar1: next.apgar1 == null ? null : Number(next.apgar1),
-                apgar5: next.apgar5 == null ? null : Number(next.apgar5),
-                vaccine_reminder: toJson(next.vaccineReminder)
-            });
+                    next.birthType || null,
+                    next.gestationalAge == null ? null : Number(next.gestationalAge),
+                    next.birthPlace || null,
+                    next.apgar1 == null ? null : Number(next.apgar1),
+                    next.apgar5 == null ? null : Number(next.apgar5),
+                    toJson(next.vaccineReminder),
+                    Number(id)
+                ],
+                client
+            );
             if (patch.vaccinationRecords) {
-                replaceVaccinationRecords(Number(id), patch.vaccinationRecords);
+                await replaceVaccinationRecords(Number(id), patch.vaccinationRecords, client);
             }
-        })();
-        return children.getById(id);
-    },
-    remove(id) {
-        connect();
-        const info = stmts.deleteChild.run(Number(id));
-        return info.changes > 0;
-    },
-    setVaccinationValue(childId, ageGroup, vaccineName, value) {
-        connect();
-        stmts.upsertVaccination.run({
-            child_id: Number(childId),
-            age_group: Number(ageGroup),
-            vaccine_name: vaccineName,
-            value: value === true ? 'true' : String(value)
+            const row = await one('SELECT * FROM children WHERE id = $1', [Number(id)], client);
+            return (await attachVaccinations([row], client))[0];
         });
+    },
+    async remove(id) {
+        const result = await q('DELETE FROM children WHERE id = $1', [Number(id)]);
+        return result.rowCount > 0;
+    },
+    async setVaccinationValue(childId, ageGroup, vaccineName, value) {
+        await q(
+            `INSERT INTO vaccination_records (child_id, age_group, vaccine_name, value)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (child_id, age_group, vaccine_name)
+             DO UPDATE SET value = EXCLUDED.value`,
+            [Number(childId), Number(ageGroup), vaccineName, value === true ? 'true' : String(value)]
+        );
         return children.getById(childId);
     }
 };
 
 const growth = {
-    list(childId) {
-        connect();
-        return stmts.listGrowth.all(Number(childId)).map(rowToGrowth);
+    async list(childId) {
+        return (await many(
+            'SELECT * FROM growth_records WHERE child_id = $1 ORDER BY date',
+            [Number(childId)]
+        )).map(rowToGrowth);
     },
-    upsert(childId, record) {
-        connect();
-        const existing = stmts.getGrowthByDate.get(Number(childId), record.date);
+    async upsert(childId, record) {
+        const existing = await one(
+            'SELECT * FROM growth_records WHERE child_id = $1 AND date = $2',
+            [Number(childId), record.date]
+        );
         if (existing) {
-            stmts.updateGrowth.run({
-                child_id: Number(childId),
-                public_id: existing.public_id,
-                date: record.date,
-                height: record.height,
-                weight: record.weight,
-                head_circumference: record.headCircumference
-            });
-            return { record: rowToGrowth({ ...existing, ...{
-                date: record.date,
-                height: record.height,
-                weight: record.weight,
-                head_circumference: record.headCircumference
-            }}), created: false };
+            await q(
+                `UPDATE growth_records SET height=$1, weight=$2, head_circumference=$3
+                 WHERE child_id=$4 AND public_id=$5`,
+                [record.height, record.weight, record.headCircumference, Number(childId), existing.public_id]
+            );
+            return {
+                record: rowToGrowth({
+                    ...existing,
+                    date: record.date,
+                    height: record.height,
+                    weight: record.weight,
+                    head_circumference: record.headCircumference
+                }),
+                created: false
+            };
         }
         const publicId = record.id || `g-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        stmts.insertGrowth.run({
-            public_id: publicId,
-            child_id: Number(childId),
-            date: record.date,
-            height: record.height,
-            weight: record.weight,
-            head_circumference: record.headCircumference
-        });
+        await q(
+            `INSERT INTO growth_records (public_id, child_id, date, height, weight, head_circumference)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [publicId, Number(childId), record.date, record.height, record.weight, record.headCircumference]
+        );
         return {
-            record: { id: publicId, date: record.date, height: record.height, weight: record.weight, headCircumference: record.headCircumference },
+            record: {
+                id: publicId,
+                date: record.date,
+                height: record.height,
+                weight: record.weight,
+                headCircumference: record.headCircumference
+            },
             created: true
         };
     },
-    update(childId, recordId, record) {
-        connect();
-        const existing = stmts.getGrowthByPublicId.get(Number(childId), String(recordId));
+    async update(childId, recordId, record) {
+        const existing = await one(
+            'SELECT * FROM growth_records WHERE child_id = $1 AND public_id = $2',
+            [Number(childId), String(recordId)]
+        );
         if (!existing) return null;
-        const dateOwner = stmts.getGrowthByDate.get(Number(childId), record.date);
+        const dateOwner = await one(
+            'SELECT * FROM growth_records WHERE child_id = $1 AND date = $2',
+            [Number(childId), record.date]
+        );
         if (dateOwner && dateOwner.public_id !== String(recordId)) {
             return { error: 'duplicate-date' };
         }
-        stmts.updateGrowth.run({
-            child_id: Number(childId),
-            public_id: String(recordId),
-            date: record.date,
-            height: record.height,
-            weight: record.weight,
-            head_circumference: record.headCircumference
-        });
+        await q(
+            `UPDATE growth_records SET date=$1, height=$2, weight=$3, head_circumference=$4
+             WHERE child_id=$5 AND public_id=$6`,
+            [record.date, record.height, record.weight, record.headCircumference, Number(childId), String(recordId)]
+        );
         return {
             record: {
                 id: String(recordId),
@@ -1246,162 +1180,161 @@ const growth = {
             }
         };
     },
-    removeById(childId, recordId) {
-        connect();
-        const info = stmts.deleteGrowthByPublicId.run(Number(childId), String(recordId));
-        return info.changes > 0;
+    async removeById(childId, recordId) {
+        const result = await q(
+            'DELETE FROM growth_records WHERE child_id = $1 AND public_id = $2',
+            [Number(childId), String(recordId)]
+        );
+        return result.rowCount > 0;
     },
-    removeByDate(childId, date) {
-        connect();
-        const info = stmts.deleteGrowthByDate.run(Number(childId), date);
-        return info.changes > 0;
+    async removeByDate(childId, date) {
+        const result = await q(
+            'DELETE FROM growth_records WHERE child_id = $1 AND date = $2',
+            [Number(childId), date]
+        );
+        return result.rowCount > 0;
     }
 };
 
 const visits = {
-    list(childId) {
-        connect();
-        return stmts.listVisits.all(Number(childId)).map(rowToVisit);
+    async list(childId) {
+        return (await many(
+            'SELECT * FROM medical_visits WHERE child_id = $1 ORDER BY date DESC',
+            [Number(childId)]
+        )).map(rowToVisit);
     },
-    create(childId, visit) {
-        connect();
-        const id = visit.id || Date.now();
-        stmts.insertVisit.run({
-            id,
-            child_id: Number(childId),
-            date: visit.date || null,
-            doctor_name: visit.doctorName || null,
-            reason: visit.reason || null,
-            summary: visit.summary || null,
-            description: visit.description || null
-        });
-        return { ...visit, id };
+    async create(childId, visit) {
+        const row = await one(
+            `INSERT INTO medical_visits (child_id, date, doctor_name, reason, summary, description)
+             VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+            [Number(childId), visit.date || null, visit.doctorName || null, visit.reason || null, visit.summary || null, visit.description || null]
+        );
+        return rowToVisit(row);
     }
 };
 
 const documents = {
-    list(childId) {
-        connect();
-        return stmts.listDocuments.all(Number(childId)).map(rowToDocument);
+    async list(childId) {
+        return (await many(
+            'SELECT * FROM medical_documents WHERE child_id = $1 ORDER BY id DESC',
+            [Number(childId)]
+        )).map(rowToDocument);
     },
-    create(childId, doc) {
-        connect();
-        const id = doc.id || Date.now();
-        stmts.insertDocument.run({
-            id,
-            child_id: Number(childId),
-            title: doc.title || null,
-            date: doc.date || null,
-            url: doc.url || doc.filePath || null,
-            uploaded_at: doc.uploadedAt || null
-        });
-        return { ...doc, id, filePath: doc.url || doc.filePath };
+    async create(childId, doc) {
+        const row = await one(
+            `INSERT INTO medical_documents (child_id, title, date, url, uploaded_at)
+             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+            [Number(childId), doc.title || null, doc.date || null, doc.url || doc.filePath || null, doc.uploadedAt || null]
+        );
+        return rowToDocument(row);
     }
 };
 
 const checkups = {
-    list(childId) {
-        connect();
-        return stmts.listCheckups.all(Number(childId)).map(rowToCheckup);
+    async list(childId) {
+        return (await many(
+            'SELECT * FROM checkups WHERE child_id = $1 ORDER BY date DESC',
+            [Number(childId)]
+        )).map(rowToCheckup);
     },
-    create(childId, checkup) {
-        connect();
-        const id = checkup.id || Date.now();
-        stmts.insertCheckup.run({
-            id,
-            child_id: Number(childId),
-            title: checkup.title || null,
-            date: checkup.date || null,
-            parameters: toJson(checkup.parameters),
-            file_url: checkup.fileUrl || null
-        });
-        return { ...checkup, id };
+    async create(childId, checkup) {
+        const row = await one(
+            `INSERT INTO checkups (child_id, title, date, parameters, file_url)
+             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+            [Number(childId), checkup.title || null, checkup.date || null, toJson(checkup.parameters), checkup.fileUrl || null]
+        );
+        return rowToCheckup(row);
     }
 };
 
 const reminders = {
-    list(childId) {
-        connect();
-        return stmts.listReminders.all(Number(childId)).map(rowToReminder);
+    async list(childId) {
+        return (await many('SELECT * FROM reminders WHERE child_id = $1', [Number(childId)])).map(rowToReminder);
     },
-    create(childId, reminder) {
-        connect();
-        stmts.insertReminder.run({
-            id: String(reminder.id),
-            child_id: Number(childId),
-            title: reminder.title || null,
-            message: reminder.message || null,
-            description: reminder.description || null,
-            date: reminder.date || null,
-            alarm_at: reminder.alarmAt || null,
-            type: reminder.type || null,
-            source: reminder.source || null,
-            category: reminder.category || null,
-            link: reminder.link || null,
-            extra: null
-        });
+    async create(childId, reminder) {
+        await q(
+            `INSERT INTO reminders (
+                id, child_id, title, message, description, date, alarm_at, type, source, category, link, extra
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [
+                String(reminder.id),
+                Number(childId),
+                reminder.title || null,
+                reminder.message || null,
+                reminder.description || null,
+                reminder.date || null,
+                reminder.alarmAt || null,
+                reminder.type || null,
+                reminder.source || null,
+                reminder.category || null,
+                reminder.link || null,
+                null
+            ]
+        );
         return reminder;
     },
-    remove(childId, reminderId) {
-        connect();
-        const info = stmts.deleteReminder.run(Number(childId), String(reminderId));
-        return info.changes > 0;
+    async remove(childId, reminderId) {
+        const result = await q(
+            'DELETE FROM reminders WHERE child_id = $1 AND id = $2',
+            [Number(childId), String(reminderId)]
+        );
+        return result.rowCount > 0;
     }
 };
 
 const userReminders = {
-    list(userId) {
-        connect();
-        return stmts.listUserReminders.all(Number(userId)).map(rowToUserReminder);
+    async list(userId) {
+        return (await many(
+            'SELECT * FROM user_reminders WHERE user_id = $1 ORDER BY alarm_at',
+            [Number(userId)]
+        )).map(rowToUserReminder);
     },
-    create(userId, reminder) {
-        connect();
-        stmts.insertUserReminder.run({
-            id: String(reminder.id),
-            user_id: Number(userId),
-            title: reminder.title || null,
-            description: reminder.description || null,
-            alarm_at: reminder.alarmAt || null,
-            created_at: reminder.createdAt || null,
-            notified: asBoolInt(reminder.notified),
-            type: reminder.type || null,
-            source: reminder.source || null,
-            extra: null
-        });
+    async create(userId, reminder) {
+        await q(
+            `INSERT INTO user_reminders (
+                id, user_id, title, description, alarm_at, created_at, notified, type, source, extra
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [
+                String(reminder.id),
+                Number(userId),
+                reminder.title || null,
+                reminder.description || null,
+                reminder.alarmAt || null,
+                reminder.createdAt || null,
+                asBoolInt(reminder.notified),
+                reminder.type || null,
+                reminder.source || null,
+                null
+            ]
+        );
         return reminder;
     },
-    update(userId, reminderId, patch) {
-        connect();
-        const current = stmts.getUserReminder.get(Number(userId), String(reminderId));
+    async update(userId, reminderId, patch) {
+        const current = await one(
+            'SELECT * FROM user_reminders WHERE user_id = $1 AND id = $2',
+            [Number(userId), String(reminderId)]
+        );
         if (!current) return null;
         const next = { ...rowToUserReminder(current), ...patch };
-        db.prepare(`
-            UPDATE user_reminders SET
-                title = @title,
-                description = @description,
-                alarm_at = @alarm_at,
-                notified = @notified
-            WHERE user_id = @user_id AND id = @id
-        `).run({
-            user_id: Number(userId),
-            id: String(reminderId),
-            title: next.title || null,
-            description: next.description || null,
-            alarm_at: next.alarmAt || null,
-            notified: asBoolInt(next.notified)
-        });
+        await q(
+            `UPDATE user_reminders SET title=$1, description=$2, alarm_at=$3, notified=$4
+             WHERE user_id=$5 AND id=$6`,
+            [next.title || null, next.description || null, next.alarmAt || null, asBoolInt(next.notified), Number(userId), String(reminderId)]
+        );
         return next;
     },
-    remove(userId, reminderId) {
-        connect();
-        const info = stmts.deleteUserReminder.run(Number(userId), String(reminderId));
-        return info.changes > 0;
+    async remove(userId, reminderId) {
+        const result = await q(
+            'DELETE FROM user_reminders WHERE user_id = $1 AND id = $2',
+            [Number(userId), String(reminderId)]
+        );
+        return result.rowCount > 0;
     }
 };
 
 function messageFromRows(row, recipients) {
     return {
-        id: row.id,
+        id: Number(row.id),
         title: row.title,
         body: row.body,
         link: row.link,
@@ -1409,43 +1342,45 @@ function messageFromRows(row, recipients) {
         type: row.type || 'admin',
         isBulk: asBool(row.is_bulk),
         createdAt: row.created_at,
-        createdBy: row.created_by,
-        recipientIds: recipients.map((r) => r.user_id),
-        readBy: recipients.filter((r) => r.is_read).map((r) => r.user_id)
+        createdBy: row.created_by == null ? null : Number(row.created_by),
+        recipientIds: recipients.map((r) => Number(r.user_id)),
+        readBy: recipients.filter((r) => r.is_read).map((r) => Number(r.user_id))
     };
 }
 
 const messages = {
-    getById(id) {
-        connect();
-        const row = db.prepare('SELECT * FROM messages WHERE id = ?').get(Number(id));
+    async getById(id) {
+        const row = await one('SELECT * FROM messages WHERE id = $1', [Number(id)]);
         if (!row) return null;
-        const recipients = db.prepare(
-            'SELECT user_id, is_read FROM message_recipients WHERE message_id = ?'
-        ).all(Number(id));
+        const recipients = await many(
+            'SELECT user_id, is_read FROM message_recipients WHERE message_id = $1',
+            [Number(id)]
+        );
         return messageFromRows(row, recipients);
     },
-    listAll() {
-        connect();
-        const rows = db.prepare('SELECT * FROM messages ORDER BY created_at DESC, id DESC').all();
-        return rows.map((row) => {
-            const recipients = db.prepare(
-                'SELECT user_id, is_read FROM message_recipients WHERE message_id = ?'
-            ).all(row.id);
-            return messageFromRows(row, recipients);
-        });
+    async listAll() {
+        const rows = await many('SELECT * FROM messages ORDER BY created_at DESC, id DESC');
+        const result = [];
+        for (const row of rows) {
+            const recipients = await many(
+                'SELECT user_id, is_read FROM message_recipients WHERE message_id = $1',
+                [row.id]
+            );
+            result.push(messageFromRows(row, recipients));
+        }
+        return result;
     },
-    listForUser(userId) {
-        connect();
-        const rows = db.prepare(`
-            SELECT m.*, r.is_read
-            FROM messages m
-            JOIN message_recipients r ON r.message_id = m.id
-            WHERE r.user_id = ?
-            ORDER BY m.created_at DESC, m.id DESC
-        `).all(Number(userId));
+    async listForUser(userId) {
+        const rows = await many(
+            `SELECT m.*, r.is_read
+             FROM messages m
+             JOIN message_recipients r ON r.message_id = m.id
+             WHERE r.user_id = $1
+             ORDER BY m.created_at DESC, m.id DESC`,
+            [Number(userId)]
+        );
         return rows.map((row) => ({
-            id: row.id,
+            id: Number(row.id),
             title: row.title,
             body: row.body,
             link: row.link || null,
@@ -1457,369 +1392,329 @@ const messages = {
             isRead: asBool(row.is_read)
         }));
     },
-    unreadCount(userId) {
-        connect();
-        return db.prepare(
-            'SELECT COUNT(*) AS n FROM message_recipients WHERE user_id = ? AND is_read = 0'
-        ).get(Number(userId)).n;
+    async unreadCount(userId) {
+        return (await one(
+            'SELECT COUNT(*)::int AS n FROM message_recipients WHERE user_id = $1 AND is_read = 0',
+            [Number(userId)]
+        )).n;
     },
-    markRead(id, userId) {
-        connect();
-        const info = db.prepare(`
-            UPDATE message_recipients SET is_read = 1
-            WHERE message_id = ? AND user_id = ?
-        `).run(Number(id), Number(userId));
-        return info.changes > 0;
+    async markRead(id, userId) {
+        const result = await q(
+            'UPDATE message_recipients SET is_read = 1 WHERE message_id = $1 AND user_id = $2',
+            [Number(id), Number(userId)]
+        );
+        return result.rowCount > 0;
     },
-    removeRecipient(id, userId) {
-        connect();
-        const info = db.prepare(
-            'DELETE FROM message_recipients WHERE message_id = ? AND user_id = ?'
-        ).run(Number(id), Number(userId));
-        if (info.changes === 0) return false;
-        const remaining = db.prepare(
-            'SELECT COUNT(*) AS n FROM message_recipients WHERE message_id = ?'
-        ).get(Number(id)).n;
-        if (remaining === 0) {
-            db.prepare('DELETE FROM messages WHERE id = ?').run(Number(id));
+    async removeRecipient(id, userId) {
+        const result = await q(
+            'DELETE FROM message_recipients WHERE message_id = $1 AND user_id = $2',
+            [Number(id), Number(userId)]
+        );
+        if (result.rowCount === 0) return false;
+        const remaining = await one(
+            'SELECT COUNT(*)::int AS n FROM message_recipients WHERE message_id = $1',
+            [Number(id)]
+        );
+        if (remaining.n === 0) {
+            await q('DELETE FROM messages WHERE id = $1', [Number(id)]);
         }
         return true;
     },
-    create(message) {
-        connect();
-        const created = db.transaction(() => {
-            const info = db.prepare(`
-                INSERT INTO messages (title, body, link, image_url, type, is_bulk, created_at, created_by)
-                VALUES (@title, @body, @link, @image_url, @type, @is_bulk, @created_at, @created_by)
-            `).run({
-                title: message.title,
-                body: message.body || '',
-                link: message.link || null,
-                image_url: message.imageUrl || null,
-                type: message.type || 'admin',
-                is_bulk: asBoolInt(message.isBulk),
-                created_at: message.createdAt || new Date().toISOString(),
-                created_by: message.createdBy || null
-            });
-            const id = Number(info.lastInsertRowid);
-            const insertRecipient = db.prepare(`
-                INSERT INTO message_recipients (message_id, user_id, is_read) VALUES (?, ?, 0)
-            `);
+    async create(message) {
+        return withTx(async (client) => {
+            const row = await one(
+                `INSERT INTO messages (title, body, link, image_url, type, is_bulk, created_at, created_by)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+                [
+                    message.title,
+                    message.body || '',
+                    message.link || null,
+                    message.imageUrl || null,
+                    message.type || 'admin',
+                    asBoolInt(message.isBulk),
+                    message.createdAt || new Date().toISOString(),
+                    message.createdBy || null
+                ],
+                client
+            );
             for (const userId of message.recipientIds || []) {
-                insertRecipient.run(id, Number(userId));
+                await q(
+                    'INSERT INTO message_recipients (message_id, user_id, is_read) VALUES ($1,$2,0)',
+                    [row.id, Number(userId)],
+                    client
+                );
             }
-            return id;
-        })();
-        return messages.getById(created);
+            const recipients = await many(
+                'SELECT user_id, is_read FROM message_recipients WHERE message_id = $1',
+                [row.id],
+                client
+            );
+            return messageFromRows(row, recipients);
+        });
     },
-    remove(id) {
-        connect();
-        const info = db.prepare('DELETE FROM messages WHERE id = ?').run(Number(id));
-        return info.changes > 0;
+    async remove(id) {
+        const result = await q('DELETE FROM messages WHERE id = $1', [Number(id)]);
+        return result.rowCount > 0;
     }
 };
 
 const banners = {
-    list() {
-        connect();
+    async list() {
         const cached = cacheGet('banners');
         if (cached) return cached;
-        return cacheSet('banners', stmts.listBanners.all().map(rowToBanner));
+        return cacheSet('banners', (await many('SELECT * FROM banners ORDER BY id')).map(rowToBanner));
     },
-    count() {
-        connect();
-        return stmts.countBanners.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM banners')).n;
     },
-    create(banner) {
-        connect();
-        const id = banner.id || Date.now();
-        stmts.insertBanner.run({
-            id,
-            title: banner.title || null,
-            link: banner.link || null,
-            image_url: banner.imageUrl || null
-        });
+    async create(banner) {
+        const row = await one(
+            'INSERT INTO banners (title, link, image_url) VALUES ($1,$2,$3) RETURNING *',
+            [banner.title || null, banner.link || null, banner.imageUrl || null]
+        );
         cacheInvalidate('banners');
-        return { ...banner, id };
+        return rowToBanner(row);
     },
-    remove(id) {
-        connect();
-        const info = stmts.deleteBanner.run(Number(id));
+    async remove(id) {
+        const result = await q('DELETE FROM banners WHERE id = $1', [Number(id)]);
         cacheInvalidate('banners');
-        return info.changes > 0;
+        return result.rowCount > 0;
     }
 };
 
 const news = {
-    list() {
-        connect();
+    async list() {
         const cached = cacheGet('news');
         if (cached) return cached;
-        return cacheSet('news', stmts.listNews.all().map(rowToNews));
+        return cacheSet('news', (await many('SELECT * FROM news ORDER BY created_at DESC, id DESC')).map(rowToNews));
     },
-    getById(id) {
-        connect();
-        const row = stmts.getNews.get(Number(id));
+    async getById(id) {
+        const row = await one('SELECT * FROM news WHERE id = $1', [Number(id)]);
         return row ? rowToNews(row) : null;
     },
-    count() {
-        connect();
-        return stmts.countNews.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM news')).n;
     },
-    create(item) {
-        connect();
-        const id = item.id || Date.now();
-        stmts.insertNews.run({
-            id,
-            title: item.title || null,
-            summary: item.summary || null,
-            content: item.content || null,
-            category: item.category || null,
-            image_url: item.imageUrl || null,
-            created_at: item.createdAt || new Date().toISOString(),
-            updated_at: item.updatedAt || null
-        });
+    async create(item) {
+        const row = await one(
+            `INSERT INTO news (title, summary, content, category, image_url, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            [
+                item.title || null,
+                item.summary || null,
+                item.content || null,
+                item.category || null,
+                item.imageUrl || null,
+                item.createdAt || new Date().toISOString(),
+                item.updatedAt || null
+            ]
+        );
         cacheInvalidate('news');
-        return { ...item, id };
+        return rowToNews(row);
     },
-    update(id, item) {
-        connect();
-        const current = news.getById(id);
+    async update(id, item) {
+        const current = await news.getById(id);
         if (!current) return null;
         const next = { ...current, ...item, id: Number(id) };
-        db.prepare(`
-            UPDATE news SET
-                title = @title,
-                summary = @summary,
-                content = @content,
-                category = @category,
-                image_url = @image_url,
-                updated_at = @updated_at
-            WHERE id = @id
-        `).run({
-            id: Number(id),
-            title: next.title || null,
-            summary: next.summary || null,
-            content: next.content || null,
-            category: next.category || null,
-            image_url: next.imageUrl || null,
-            updated_at: next.updatedAt || new Date().toISOString()
-        });
+        await q(
+            `UPDATE news SET title=$1, summary=$2, content=$3, category=$4, image_url=$5, updated_at=$6
+             WHERE id=$7`,
+            [
+                next.title || null,
+                next.summary || null,
+                next.content || null,
+                next.category || null,
+                next.imageUrl || null,
+                next.updatedAt || new Date().toISOString(),
+                Number(id)
+            ]
+        );
         cacheInvalidate('news');
         return news.getById(id);
     },
-    remove(id) {
-        connect();
-        const info = stmts.deleteNews.run(Number(id));
+    async remove(id) {
+        const result = await q('DELETE FROM news WHERE id = $1', [Number(id)]);
         cacheInvalidate('news');
-        return info.changes > 0;
+        return result.rowCount > 0;
     }
 };
 
 const videos = {
-    list() {
-        connect();
+    async list() {
         const cached = cacheGet('videos');
         if (cached) return cached;
-        return cacheSet('videos', stmts.listVideos.all().map(rowToVideo));
+        return cacheSet('videos', (await many('SELECT * FROM videos ORDER BY created_at DESC, id DESC')).map(rowToVideo));
     },
-    create(item) {
-        connect();
-        const id = item.id || Date.now();
-        stmts.insertVideo.run({
-            id,
-            title: item.title || null,
-            summary: item.summary || null,
-            url: item.url || null,
-            thumbnail_url: item.thumbnailUrl || null,
-            created_at: item.createdAt || new Date().toISOString()
-        });
+    async create(item) {
+        const row = await one(
+            `INSERT INTO videos (title, summary, url, thumbnail_url, created_at)
+             VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+            [item.title || null, item.summary || null, item.url || null, item.thumbnailUrl || null, item.createdAt || new Date().toISOString()]
+        );
         cacheInvalidate('videos');
-        return { ...item, id };
+        return rowToVideo(row);
     },
-    remove(id) {
-        connect();
-        const row = stmts.getVideo.get(Number(id));
+    async remove(id) {
+        const row = await one('SELECT * FROM videos WHERE id = $1', [Number(id)]);
         if (!row) return null;
-        stmts.deleteVideo.run(Number(id));
+        await q('DELETE FROM videos WHERE id = $1', [Number(id)]);
         cacheInvalidate('videos');
         return rowToVideo(row);
     }
 };
 
 const podcasts = {
-    list() {
-        connect();
+    async list() {
         const cached = cacheGet('podcasts');
         if (cached) return cached;
-        return cacheSet('podcasts', stmts.listPodcasts.all().map(rowToPodcast));
+        return cacheSet('podcasts', (await many(
+            'SELECT * FROM podcasts ORDER BY created_at DESC, id DESC'
+        )).map(rowToPodcast));
     }
 };
 
 const tickets = {
-    list() {
-        connect();
-        return stmts.listTickets.all().map((row) => {
+    async list() {
+        return (await many('SELECT * FROM tickets ORDER BY id DESC')).map((row) => {
             const payload = parseJson(row.payload, {});
             return {
                 ...payload,
-                id: row.id,
-                userId: row.user_id,
+                id: Number(row.id),
+                userId: row.user_id == null ? null : Number(row.user_id),
                 status: row.status,
                 createdAt: row.created_at,
                 updatedAt: row.updated_at
             };
         });
     },
-    getById(id) {
-        connect();
-        const row = stmts.getTicket.get(Number(id));
+    async getById(id) {
+        const row = await one('SELECT * FROM tickets WHERE id = $1', [Number(id)]);
         if (!row) return null;
         const payload = parseJson(row.payload, {});
         return {
             ...payload,
-            id: row.id,
-            userId: row.user_id,
+            id: Number(row.id),
+            userId: row.user_id == null ? null : Number(row.user_id),
             status: row.status,
             createdAt: row.created_at,
             updatedAt: row.updated_at
         };
     },
-    count() {
-        connect();
-        return stmts.countTickets.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM tickets')).n;
     },
-    countOpen() {
-        connect();
-        return stmts.countOpenTickets.get().n;
+    async countOpen() {
+        return (await one("SELECT COUNT(*)::int AS n FROM tickets WHERE status = 'open'")).n;
     },
-    update(id, ticket) {
-        connect();
-        const info = db.prepare(`
-            UPDATE tickets SET status = @status, updated_at = @updated_at, payload = @payload
-            WHERE id = @id
-        `).run({
-            id: Number(id),
-            status: ticket.status || 'open',
-            updated_at: ticket.updatedAt || new Date().toISOString(),
-            payload: JSON.stringify(ticket)
-        });
-        return info.changes > 0 ? tickets.getById(id) : null;
+    async update(id, ticket) {
+        const result = await q(
+            'UPDATE tickets SET status=$1, updated_at=$2, payload=$3 WHERE id=$4',
+            [ticket.status || 'open', ticket.updatedAt || new Date().toISOString(), JSON.stringify(ticket), Number(id)]
+        );
+        return result.rowCount > 0 ? tickets.getById(id) : null;
     }
 };
 
 const products = {
-    getById(id) {
-        connect();
-        const row = stmts.getProduct.get(Number(id));
+    async getById(id) {
+        const row = await one('SELECT * FROM products WHERE id = $1', [Number(id)]);
         return row ? rowToProduct(row) : null;
     },
-    listAll() {
-        connect();
-        return stmts.listAllProducts.all().map(rowToProduct);
+    async listAll() {
+        return (await many('SELECT * FROM products ORDER BY id DESC')).map(rowToProduct);
     },
-    listActive({ category, q } = {}) {
-        connect();
-        let sql = 'SELECT * FROM products WHERE active = 1';
+    async listActive({ category, q: search } = {}) {
         const params = [];
+        let sql = 'SELECT * FROM products WHERE active = 1';
         if (category && category !== 'همه') {
-            sql += ' AND category = ?';
             params.push(category);
+            sql += ` AND category = $${params.length}`;
         }
-        if (q && String(q).trim()) {
-            sql += ' AND (lower(name) LIKE ? OR lower(description) LIKE ?)';
-            const term = `%${String(q).trim().toLowerCase()}%`;
+        if (search && String(search).trim()) {
+            const term = `%${String(search).trim().toLowerCase()}%`;
             params.push(term, term);
+            sql += ` AND (lower(name) LIKE $${params.length - 1} OR lower(description) LIKE $${params.length})`;
         }
         sql += ' ORDER BY id DESC';
-        return db.prepare(sql).all(...params).map(rowToProduct);
+        return (await many(sql, params)).map(rowToProduct);
     },
-    count() {
-        connect();
-        return stmts.countProducts.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM products')).n;
     },
-    create(product) {
-        connect();
-        const info = stmts.insertProductAuto.run({
-            name: product.name,
-            description: product.description || '',
-            category: product.category || null,
-            price: product.price,
-            stock: product.stock || 0,
-            image_url: product.imageUrl || null,
-            active: asBoolInt(product.active !== false),
-            created_at: product.createdAt || new Date().toISOString(),
-            updated_at: product.updatedAt || null
-        });
+    async create(product) {
+        const row = await one(
+            `INSERT INTO products (name, description, category, price, stock, image_url, active, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            [
+                product.name,
+                product.description || '',
+                product.category || null,
+                product.price,
+                product.stock || 0,
+                product.imageUrl || null,
+                asBoolInt(product.active !== false),
+                product.createdAt || new Date().toISOString(),
+                product.updatedAt || null
+            ]
+        );
         cacheInvalidate('products');
-        return products.getById(Number(info.lastInsertRowid));
+        return rowToProduct(row);
     },
-    update(id, product) {
-        connect();
-        const current = products.getById(id);
+    async update(id, product) {
+        const current = await products.getById(id);
         if (!current) return null;
         const next = { ...current, ...product, id: Number(id) };
-        db.prepare(`
-            UPDATE products SET
-                name = @name,
-                description = @description,
-                category = @category,
-                price = @price,
-                stock = @stock,
-                image_url = @image_url,
-                active = @active,
-                updated_at = @updated_at
-            WHERE id = @id
-        `).run({
-            id: Number(id),
-            name: next.name,
-            description: next.description || '',
-            category: next.category || null,
-            price: next.price,
-            stock: next.stock,
-            image_url: next.imageUrl || null,
-            active: asBoolInt(next.active !== false),
-            updated_at: next.updatedAt || new Date().toISOString()
-        });
+        await q(
+            `UPDATE products SET name=$1, description=$2, category=$3, price=$4, stock=$5,
+                image_url=$6, active=$7, updated_at=$8
+             WHERE id=$9`,
+            [
+                next.name,
+                next.description || '',
+                next.category || null,
+                next.price,
+                next.stock,
+                next.imageUrl || null,
+                asBoolInt(next.active !== false),
+                next.updatedAt || new Date().toISOString(),
+                Number(id)
+            ]
+        );
         cacheInvalidate('products');
         return products.getById(id);
     },
-    remove(id) {
-        connect();
-        const info = stmts.deleteProduct.run(Number(id));
+    async remove(id) {
+        const result = await q('DELETE FROM products WHERE id = $1', [Number(id)]);
         cacheInvalidate('products');
-        return info.changes > 0;
+        return result.rowCount > 0;
     }
 };
 
 const orders = {
-    getById(id) {
-        connect();
-        const row = stmts.getOrder.get(Number(id));
+    async getById(id) {
+        const row = await one('SELECT * FROM orders WHERE id = $1', [Number(id)]);
         if (!row) return null;
-        return hydrateOrders([row])[0];
+        return (await hydrateOrders([row]))[0];
     },
-    listByUser(userId) {
-        connect();
-        return hydrateOrders(stmts.listOrdersByUser.all(Number(userId)));
+    async listByUser(userId) {
+        return hydrateOrders(await many(
+            'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
+            [Number(userId)]
+        ));
     },
-    listAll() {
-        connect();
-        return hydrateOrders(stmts.listAllOrders.all());
+    async listAll() {
+        return hydrateOrders(await many('SELECT * FROM orders ORDER BY created_at DESC, id DESC'));
     },
-    count() {
-        connect();
-        return stmts.countOrders.get().n;
+    async count() {
+        return (await one('SELECT COUNT(*)::int AS n FROM orders')).n;
     },
-    countPending() {
-        connect();
-        return stmts.countPendingOrders.get().n;
+    async countPending() {
+        return (await one("SELECT COUNT(*)::int AS n FROM orders WHERE status = 'pending'")).n;
     },
-    create({ userId, items, total, shippingAddress, phone, notes }) {
-        connect();
-        return db.transaction(() => {
+    async create({ userId, items, total, shippingAddress, phone, notes }) {
+        return withTx(async (client) => {
             for (const item of items) {
-                const product = stmts.getProduct.get(item.productId);
+                const product = await one('SELECT * FROM products WHERE id = $1 FOR UPDATE', [item.productId], client);
                 if (!product || !asBool(product.active)) {
                     const err = new Error(`product-missing:${item.productId}`);
                     err.code = 'PRODUCT_MISSING';
@@ -1832,181 +1727,152 @@ const orders = {
                 }
             }
             for (const item of items) {
-                stmts.adjustStock.run(-item.quantity, item.productId);
+                await q('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.productId], client);
             }
             const createdAt = new Date().toISOString();
-            const info = stmts.insertOrder.run({
-                user_id: Number(userId),
-                total,
-                shipping_address: shippingAddress,
-                phone,
-                notes: notes || '',
-                status: 'pending',
-                created_at: createdAt,
-                updated_at: null
-            });
-            const orderId = Number(info.lastInsertRowid);
+            const orderRow = await one(
+                `INSERT INTO orders (user_id, total, shipping_address, phone, notes, status, created_at)
+                 VALUES ($1,$2,$3,$4,$5,'pending',$6) RETURNING *`,
+                [Number(userId), total, shippingAddress, phone, notes || '', createdAt],
+                client
+            );
             for (const item of items) {
-                stmts.insertOrderItem.run({
-                    order_id: orderId,
-                    product_id: item.productId,
-                    name: item.name,
-                    price: item.price,
-                    quantity: item.quantity,
-                    line_total: item.lineTotal
-                });
+                await q(
+                    `INSERT INTO order_items (order_id, product_id, name, price, quantity, line_total)
+                     VALUES ($1,$2,$3,$4,$5,$6)`,
+                    [orderRow.id, item.productId, item.name, item.price, item.quantity, item.lineTotal],
+                    client
+                );
             }
-            return orders.getById(orderId);
-        })();
+            return (await hydrateOrders([orderRow], client))[0];
+        });
     },
-    updateStatus(id, status) {
-        connect();
-        return db.transaction(() => {
-            const current = orders.getById(id);
+    async updateStatus(id, status) {
+        return withTx(async (client) => {
+            const currentRows = await hydrateOrders(
+                await many('SELECT * FROM orders WHERE id = $1 FOR UPDATE', [Number(id)], client),
+                client
+            );
+            const current = currentRows[0];
             if (!current) return null;
             if (status === 'cancelled' && current.status !== 'cancelled') {
                 for (const item of current.items || []) {
-                    if (item.productId) stmts.adjustStock.run(item.quantity, item.productId);
+                    if (item.productId) {
+                        await q(
+                            'UPDATE products SET stock = stock + $1 WHERE id = $2',
+                            [item.quantity, item.productId],
+                            client
+                        );
+                    }
                 }
             }
-            stmts.updateOrderStatus.run({
-                id: Number(id),
-                status,
-                updated_at: new Date().toISOString()
-            });
-            return orders.getById(id);
-        })();
+            await q(
+                'UPDATE orders SET status = $1, updated_at = $2 WHERE id = $3',
+                [status, new Date().toISOString(), Number(id)],
+                client
+            );
+            const updated = await one('SELECT * FROM orders WHERE id = $1', [Number(id)], client);
+            return (await hydrateOrders([updated], client))[0];
+        });
     }
 };
 
 const otp = {
-    get(phone) {
-        connect();
-        const row = stmts.getOtp.get(phone);
+    async get(phone) {
+        const row = await one('SELECT * FROM otp_codes WHERE phone = $1', [phone]);
         if (!row) return null;
         return {
             code: row.code,
             purpose: row.purpose,
-            expiresAt: row.expires_at,
-            sentAt: row.sent_at,
+            expiresAt: Number(row.expires_at),
+            sentAt: Number(row.sent_at),
             attempts: row.attempts
         };
     },
-    set(phone, entry) {
-        connect();
-        stmts.upsertOtp.run({
-            phone,
-            code: entry.code,
-            purpose: entry.purpose,
-            expires_at: entry.expiresAt,
-            sent_at: entry.sentAt,
-            attempts: entry.attempts || 0
-        });
+    async set(phone, entry) {
+        await q(
+            `INSERT INTO otp_codes (phone, code, purpose, expires_at, sent_at, attempts)
+             VALUES ($1,$2,$3,$4,$5,$6)
+             ON CONFLICT (phone) DO UPDATE SET
+                code = EXCLUDED.code,
+                purpose = EXCLUDED.purpose,
+                expires_at = EXCLUDED.expires_at,
+                sent_at = EXCLUDED.sent_at,
+                attempts = EXCLUDED.attempts`,
+            [phone, entry.code, entry.purpose, entry.expiresAt, entry.sentAt, entry.attempts || 0]
+        );
     },
-    remove(phone) {
-        connect();
-        stmts.deleteOtp.run(phone);
+    async remove(phone) {
+        await q('DELETE FROM otp_codes WHERE phone = $1', [phone]);
     }
 };
 
 function normalizeState(raw = {}) {
     const base = emptyState();
-    const usersMap = raw.users || {};
-    const userKeys = Object.keys(usersMap).map(Number).filter((k) => !Number.isNaN(k));
-    const childrenList = (raw.children || []).map((child) => ({
-        ...child,
-        vaccinationRecords: child.vaccinationRecords || {}
-    }));
-    const messagesList = raw.messages || [];
-    const productsList = raw.products || [];
-    const ordersList = raw.orders || [];
-
     return {
         ...base,
         ...raw,
-        users: usersMap,
-        children: childrenList,
+        users: raw.users || {},
+        children: (raw.children || []).map((child) => ({
+            ...child,
+            vaccinationRecords: child.vaccinationRecords || {}
+        })),
         growthData: raw.growthData || {},
         medicalVisits: raw.medicalVisits || {},
         medicalDocuments: raw.medicalDocuments || {},
         checkups: raw.checkups || {},
         reminders: raw.reminders || {},
         userReminders: raw.userReminders || {},
-        messages: messagesList,
+        messages: raw.messages || [],
         banners: raw.banners || [],
         articles: raw.articles || [],
         news: raw.news || [],
         tickets: raw.tickets || [],
         videos: raw.videos || [],
         podcasts: raw.podcasts || [],
-        products: productsList,
-        orders: ordersList,
-        childIdCounter: raw.childIdCounter || 1,
-        userIdCounter: raw.userIdCounter || (userKeys.length ? Math.max(...userKeys) + 1 : 1),
-        messageIdCounter:
-            raw.messageIdCounter ||
-            (messagesList.length ? Math.max(...messagesList.map((m) => m.id || 0)) + 1 : 1),
-        productIdCounter:
-            raw.productIdCounter ||
-            (productsList.length ? Math.max(...productsList.map((p) => p.id || 0)) + 1 : 1),
-        orderIdCounter:
-            raw.orderIdCounter ||
-            (ordersList.length ? Math.max(...ordersList.map((o) => o.id || 0)) + 1 : 1)
+        products: raw.products || [],
+        orders: raw.orders || []
     };
 }
 
-function migrateFromJson(jsonPath) {
-    connect();
+async function migrateFromJson(jsonPath) {
+    await connect();
     if (!fs.existsSync(jsonPath)) {
         throw new Error(`JSON file not found: ${jsonPath}`);
     }
-    const userCount = stmts.countUsers.get().n;
+    const userCount = (await one('SELECT COUNT(*)::int AS n FROM users')).n;
     if (userCount > 0 && process.env.FORCE_MIGRATE !== '1') {
-        console.log('SQLite already has relational data. Set FORCE_MIGRATE=1 to overwrite from db.json');
+        console.log('PostgreSQL already has data. Set FORCE_MIGRATE=1 to overwrite from db.json');
         return false;
     }
     if (process.env.FORCE_MIGRATE === '1' && userCount > 0) {
-        db.exec(`
-            DELETE FROM order_items;
-            DELETE FROM orders;
-            DELETE FROM products;
-            DELETE FROM message_recipients;
-            DELETE FROM messages;
-            DELETE FROM vaccination_records;
-            DELETE FROM growth_records;
-            DELETE FROM medical_visits;
-            DELETE FROM medical_documents;
-            DELETE FROM checkups;
-            DELETE FROM reminders;
-            DELETE FROM user_reminders;
-            DELETE FROM children;
-            DELETE FROM users;
-            DELETE FROM banners;
-            DELETE FROM news;
-            DELETE FROM videos;
-            DELETE FROM podcasts;
-            DELETE FROM tickets;
+        await q(`
+            TRUNCATE TABLE
+                order_items, orders, products, message_recipients, messages,
+                vaccination_records, growth_records, medical_visits, medical_documents,
+                checkups, reminders, user_reminders, children, users, banners, news,
+                videos, podcasts, tickets, otp_codes
+            RESTART IDENTITY CASCADE
         `);
     }
     const raw = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-    importState(raw);
-    setSchemaVersion(SCHEMA_VERSION);
-    console.log(`Migrated ${jsonPath} -> relational SQLite "${DB_FILE}"`);
+    await withTx((client) => importState(raw, client));
+    await setSchemaVersion(SCHEMA_VERSION);
+    console.log(`Migrated ${jsonPath} -> PostgreSQL`);
     return true;
 }
 
-function stats() {
-    connect();
+async function stats() {
     return {
-        totalUsers: users.count(),
-        totalChildren: children.count(),
-        totalBanners: banners.count(),
-        totalArticles: news.count(),
-        totalTickets: tickets.count(),
-        openTickets: tickets.countOpen(),
-        totalProducts: products.count(),
-        totalOrders: orders.count(),
-        pendingOrders: orders.countPending()
+        totalUsers: await users.count(),
+        totalChildren: await children.count(),
+        totalBanners: await banners.count(),
+        totalArticles: await news.count(),
+        totalTickets: await tickets.count(),
+        openTickets: await tickets.countOpen(),
+        totalProducts: await products.count(),
+        totalOrders: await orders.count(),
+        pendingOrders: await orders.countPending()
     };
 }
 
@@ -2019,8 +1885,8 @@ module.exports = {
     migrateFromJson,
     emptyState,
     normalizeState,
-    DB_FILE,
     SCHEMA_VERSION,
+    databaseUrl,
     users,
     children,
     growth,

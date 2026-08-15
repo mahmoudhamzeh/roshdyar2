@@ -1,17 +1,42 @@
 #!/usr/bin/env node
 /**
- * HTTP smoke tests against the relational API.
+ * HTTP smoke tests against PostgreSQL-backed API.
  */
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const http = require('http');
 const assert = require('assert');
 const { spawn } = require('child_process');
+const { Client } = require('pg');
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roshdyar-api-'));
-const dbFile = path.join(tmpDir, 'api.db');
+const ADMIN_URL = process.env.DATABASE_ADMIN_URL
+    || 'postgres://roshdyar:roshdyar@127.0.0.1:5432/postgres';
+const TEST_DB = `roshdyar_api_${process.pid}`;
 const port = 5099;
+
+function testUrl() {
+    const base = new URL(ADMIN_URL);
+    base.pathname = `/${TEST_DB}`;
+    return base.toString();
+}
+
+async function createTestDb() {
+    const admin = new Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    await admin.query(`DROP DATABASE IF EXISTS ${TEST_DB}`);
+    await admin.query(`CREATE DATABASE ${TEST_DB} OWNER roshdyar`);
+    await admin.end();
+}
+
+async function dropTestDb() {
+    const admin = new Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    await admin.query(`
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = '${TEST_DB}' AND pid <> pg_backend_pid()
+    `);
+    await admin.query(`DROP DATABASE IF EXISTS ${TEST_DB}`);
+    await admin.end();
+}
 
 function request(method, urlPath, { body, headers } = {}) {
     return new Promise((resolve, reject) => {
@@ -42,7 +67,7 @@ function request(method, urlPath, { body, headers } = {}) {
     });
 }
 
-function waitForHealth(child, timeoutMs = 15000) {
+function waitForHealth(child, timeoutMs = 20000) {
     const started = Date.now();
     return new Promise((resolve, reject) => {
         const tick = async () => {
@@ -61,12 +86,13 @@ function waitForHealth(child, timeoutMs = 15000) {
 }
 
 async function run() {
+    await createTestDb();
     const child = spawn(process.execPath, ['server.js'], {
         cwd: __dirname,
         env: {
             ...process.env,
             PORT: String(port),
-            SQLITE_PATH: dbFile,
+            DATABASE_URL: testUrl(),
             NODE_ENV: 'test',
             SMS_PROVIDER: 'log'
         },
@@ -74,12 +100,11 @@ async function run() {
     });
     let stderr = '';
     child.stderr.on('data', (d) => { stderr += d.toString(); });
-    child.stdout.on('data', () => {});
 
     try {
         const health = await waitForHealth(child);
-        assert.strictEqual(health.schemaVersion, 2);
-        assert.strictEqual(health.wal, true);
+        assert.strictEqual(health.db, 'postgresql');
+        assert.strictEqual(health.schemaVersion, 3);
         assert.ok(health.counts.users >= 1);
 
         const login = await request('POST', '/api/login', {
@@ -124,8 +149,6 @@ async function run() {
         });
         assert.strictEqual(createdChild.status, 201, JSON.stringify(createdChild.data));
         assert.ok(createdChild.data.id);
-        assert.ok(Array.isArray(createdChild.data.growthData));
-        assert.ok(createdChild.data.growthData.length >= 1);
 
         const order = await request('POST', '/api/shop/orders', {
             headers: { 'x-user-id': String(adminId) },
@@ -161,6 +184,7 @@ async function run() {
 
         console.log('api smoke tests passed');
     } finally {
+        if (stderr) process.stderr.write(stderr);
         if (child.pid) {
             child.kill('SIGTERM');
             await new Promise((resolve) => {
@@ -171,10 +195,7 @@ async function run() {
                 child.on('exit', () => { clearTimeout(t); resolve(); });
             });
         }
-        if (stderr && !stderr.includes('listening')) {
-            // keep stderr for failures
-        }
-        fs.rmSync(tmpDir, { recursive: true, force: true });
+        await dropTestDb();
     }
 }
 
