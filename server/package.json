@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "migrate": "node migrate-to-postgres.js",
     "migrate:postgres": "node migrate-to-postgres.js",
-    "test": "node test-relational-db.js && node test-api.js"
+    "test": "node run-tests.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
