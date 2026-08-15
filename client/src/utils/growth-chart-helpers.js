@@ -32,6 +32,7 @@ export const getVisibleAgeDomain = ({ childAgeInMonths, points, mode }) => {
         .map((point) => point.month)
         .filter((month) => month != null && !Number.isNaN(month));
     const lastPoint = pointMonths.length ? Math.max(...pointMonths) : 0;
+    const firstPoint = pointMonths.length ? Math.min(...pointMonths) : 0;
     const focusAge = Math.max(age, lastPoint, 0);
 
     if (mode === 'full') {
@@ -39,13 +40,33 @@ export const getVisibleAgeDomain = ({ childAgeInMonths, points, mode }) => {
     }
 
     if (focusAge <= 18) {
-        return [0, Math.min(60, Math.max(12, Math.ceil(focusAge + 6)))];
+        return [0, Math.min(60, Math.max(12, Math.ceil(Math.max(focusAge, lastPoint) + 6)))];
     }
 
-    const start = Math.max(0, Math.floor(focusAge - 12));
-    let end = Math.ceil(focusAge + 6);
+    const start = Math.max(0, Math.floor(Math.min(firstPoint, focusAge) - 1));
+    let end = Math.ceil(Math.max(focusAge, lastPoint) + 6);
     if (end - start < 12) end = start + 12;
     return [start, Math.min(Math.max(end, 12), Math.max(60, Math.ceil(focusAge + 1)))];
+};
+
+export const getYDomain = (visibleRows) => {
+    const whoValues = (visibleRows || [])
+        .flatMap((row) => [row.P3, row.P50, row.P97])
+        .filter((value) => value != null && !Number.isNaN(value));
+    const childValues = (visibleRows || [])
+        .map((row) => row.value)
+        .filter((value) => value != null && !Number.isNaN(value));
+
+    if (!whoValues.length && !childValues.length) return [0, 1];
+
+    const whoMin = whoValues.length ? Math.min(...whoValues) : Math.min(...childValues);
+    const whoMax = whoValues.length ? Math.max(...whoValues) : Math.max(...childValues);
+    const childMin = childValues.length ? Math.min(...childValues) : whoMin;
+    const childMax = childValues.length ? Math.max(...childValues) : whoMax;
+    const whoPad = Math.max((whoMax - whoMin) * 0.08, 1);
+    const minValue = Math.min(whoMin, childMin);
+    const maxValue = Math.max(whoMax, childMax);
+    return [Math.max(0, Math.floor(minValue - whoPad)), Math.ceil(maxValue + whoPad)];
 };
 
 export const buildAgeTicks = (minAge, maxAge) => {

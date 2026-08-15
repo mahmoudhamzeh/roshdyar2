@@ -1,4 +1,4 @@
-import { buildChartData, getVisibleAgeDomain, buildAgeTicks, formatDelta } from './growth-chart-helpers';
+import { buildChartData, getVisibleAgeDomain, buildAgeTicks, formatDelta, getYDomain } from './growth-chart-helpers';
 import { formatAgeLabel } from './growth-dates';
 import { analyzeGrowthMetric, getGrowthInterpretation, getAbsoluteStatus } from './growth-analyzer';
 
@@ -22,15 +22,15 @@ describe('growth chart helpers', () => {
         })).toEqual([0, 12]);
     });
 
-    test('focused domain zooms around older toddlers', () => {
+    test('focused domain keeps every recorded point visible', () => {
         const [start, end] = getVisibleAgeDomain({
             childAgeInMonths: 48,
-            points: [{ month: 36 }, { month: 47 }],
+            points: [{ month: 0 }, { month: 24 }, { month: 36 }],
             mode: 'focus',
         });
-        expect(start).toBeGreaterThanOrEqual(36);
-        expect(end - start).toBeGreaterThanOrEqual(12);
-        expect(end).toBeLessThan(60);
+        expect(start).toBe(0);
+        expect(end).toBeGreaterThanOrEqual(36);
+        expect(end).toBeLessThanOrEqual(60);
     });
 
     test('full domain always includes 0-60', () => {
@@ -53,6 +53,15 @@ describe('growth chart helpers', () => {
         expect(formatDelta(-0.4, 'kg')).toBe('-0.4 kg');
         expect(formatDelta(null, 'cm')).toBeNull();
     });
+
+    test('getYDomain includes WHO band and child points', () => {
+        const [min, max] = getYDomain([
+            { P3: 89, P50: 96, P97: 103, value: null },
+            { P3: null, P50: null, P97: null, value: 110 },
+        ]);
+        expect(min).toBeLessThanOrEqual(89);
+        expect(max).toBeGreaterThanOrEqual(110);
+    });
 });
 
 describe('growth labels and analysis', () => {
@@ -60,6 +69,7 @@ describe('growth labels and analysis', () => {
         expect(formatAgeLabel(8)).toBe('8 ماهگی');
         expect(formatAgeLabel(24)).toBe('2 سالگی');
         expect(formatAgeLabel(30)).toBe('2 سال و 6 ماه');
+        expect(formatAgeLabel(48.7)).toBe('4 سال و 1 ماه');
     });
 
     test('analyzeGrowthMetric returns percentile, delta and count', () => {

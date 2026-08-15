@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useHistory, useParams } from 'react-router-dom';
 import {
-    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
+    ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 import DatePicker from 'react-multi-date-picker';
 import DateObject from 'react-date-object';
@@ -33,7 +33,7 @@ import {
     ageInMonths, formatLocalDate, normalizeDateString,
     parseLocalDate, formatAgeLabel
 } from '../utils/growth-dates';
-import { buildChartData, getVisibleAgeDomain, buildAgeTicks, formatDelta } from '../utils/growth-chart-helpers';
+import { buildChartData, getVisibleAgeDomain, buildAgeTicks, formatDelta, getYDomain } from '../utils/growth-chart-helpers';
 import { toShamsi } from '../utils/dateConverter';
 import { getChildDisplayName } from '../utils/childName';
 import './GrowthChartPage.css';
@@ -144,23 +144,17 @@ const GrowthChart = ({
     });
     const visibleData = chartData.filter((row) => row.month >= minAge - 0.01 && row.month <= maxAge + 0.01);
     const ageMarker = Math.min(Math.max(childAgeInMonths || 0, minAge), maxAge);
-    const values = visibleData
-        .flatMap((row) => [row.P3, row.P50, row.P97, row.value])
-        .filter((value) => value != null && !Number.isNaN(value));
-    const minValue = values.length ? Math.min(...values) : 0;
-    const maxValue = values.length ? Math.max(...values) : 1;
-    const padding = Math.max((maxValue - minValue) * 0.1, 1);
-    const yDomain = [Math.max(0, Math.floor(minValue - padding)), Math.ceil(maxValue + padding)];
+    const yDomain = getYDomain(visibleData);
     const ticks = buildAgeTicks(minAge, maxAge);
     const isNarrow = typeof window !== 'undefined' && window.innerWidth <= 768;
-    const chartHeight = isNarrow ? 240 : 320;
+    const chartHeight = isNarrow ? 300 : 360;
 
     return (
         <div className="gc-chart-wrap">
             <ResponsiveContainer width="100%" height={chartHeight}>
-                <LineChart
+                <ComposedChart
                     data={visibleData}
-                    margin={{ top: 12, right: 8, left: 0, bottom: 4 }}
+                    margin={{ top: 16, right: 10, left: 0, bottom: 8 }}
                     onClick={(state) => {
                         const point = state?.activePayload?.[0]?.payload;
                         if (point?.value != null) onSelectPoint(point);
@@ -174,11 +168,11 @@ const GrowthChart = ({
                         ticks={ticks}
                         allowDecimals
                         tick={{ fontSize: 11, fill: '#5b716e' }}
-                        tickMargin={6}
+                        tickMargin={8}
                     />
                     <YAxis
                         domain={yDomain}
-                        width={isNarrow ? 36 : 44}
+                        width={isNarrow ? 38 : 46}
                         tick={{ fontSize: 11, fill: '#5b716e' }}
                         tickMargin={4}
                     />
@@ -186,19 +180,20 @@ const GrowthChart = ({
                         content={<CustomTooltip childName={childName} />}
                         allowEscapeViewBox={{ x: true, y: true }}
                     />
-                    <Line type="monotone" dataKey="P3" stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
-                    <Line type="monotone" dataKey="P50" stroke="#0f766e" name="صدک ۵۰" dot={false} strokeWidth={2} connectNulls isAnimationActive={false} />
-                    <Line type="monotone" dataKey="P97" stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.5} connectNulls isAnimationActive={false} />
+                    <Area type="monotone" dataKey="P97" stroke="none" fill="#99f6e4" fillOpacity={0.28} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="P3" stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.6} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="P50" stroke="#0f766e" name="صدک ۵۰" dot={false} strokeWidth={2.2} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="P97" stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.6} connectNulls isAnimationActive={false} />
                     <Line
                         type="monotone"
                         dataKey="value"
                         stroke="#dc2626"
                         name={childName}
-                        strokeWidth={2.5}
+                        strokeWidth={2.6}
                         connectNulls
                         isAnimationActive={false}
-                        dot={{ r: isNarrow ? 5 : 4, strokeWidth: 2, fill: '#fff', stroke: '#dc2626' }}
-                        activeDot={{ r: 7 }}
+                        dot={{ r: isNarrow ? 6 : 5, strokeWidth: 2, fill: '#fff', stroke: '#dc2626' }}
+                        activeDot={{ r: 8 }}
                     />
                     {childAgeInMonths > 0 && (
                         <ReferenceLine
@@ -210,7 +205,7 @@ const GrowthChart = ({
                     {selectedMonth != null && (
                         <ReferenceLine x={selectedMonth} stroke="#dc2626" strokeDasharray="2 4" />
                     )}
-                </LineChart>
+                </ComposedChart>
             </ResponsiveContainer>
             <p className="gc-axis-caption">محور افقی: سن (ماه) · محور عمودی: {yAxisLabel}</p>
         </div>
@@ -477,44 +472,6 @@ const GrowthChartPage = () => {
                 })}
             </div>
 
-            <section className={`gc-card gc-metric-card ${statusClass(activeAnalysis.status)}`}>
-                <div className="gc-metric-top">
-                    <div>
-                        <p className="gc-metric-label">آخرین {activeMeta.label}</p>
-                        <p className="gc-metric-value">
-                            {activeAnalysis.value != null ? (
-                                <>
-                                    {activeAnalysis.value}
-                                    <span>{activeMeta.unit}</span>
-                                </>
-                            ) : '—'}
-                        </p>
-                    </div>
-                    <div className="gc-metric-badges">
-                        <span className={`gc-status ${statusClass(activeAnalysis.status)}`}>
-                            {activeAnalysis.status}
-                        </span>
-                        {percentile != null && (
-                            <span className="gc-percentile">صدک {percentile}</span>
-                        )}
-                    </div>
-                </div>
-                <div className="gc-metric-facts">
-                    {activeAnalysis.date ? (
-                        <span>تاریخ: {toShamsi(activeAnalysis.date)}</span>
-                    ) : (
-                        <span>هنوز اندازه‌گیری ثبت نشده</span>
-                    )}
-                    {activeAnalysis.ageInMonths != null && (
-                        <span>سن ثبت: {formatAgeLabel(activeAnalysis.ageInMonths)}</span>
-                    )}
-                    <span>روند: {trend.label}</span>
-                    {deltaLabel && <span>تغییر: {deltaLabel}</span>}
-                    <span>{activeAnalysis.count} نقطه روی نمودار</span>
-                </div>
-                <p className="gc-metric-note">{getGrowthInterpretation(activeMetric, activeAnalysis)}</p>
-            </section>
-
             {beyondWho && (
                 <p className="gc-banner">
                     منحنی استاندارد سازمان بهداشت جهانی تا ۵ سالگی است. برای سن بالاتر، نقاط روی انتهای نمودار نمایش داده می‌شوند.
@@ -568,6 +525,15 @@ const GrowthChartPage = () => {
                     />
                 )}
 
+                <ul className="gc-legend-chips" aria-label="راهنمای رنگ نمودار">
+                    {legendItems.map((item) => (
+                        <li key={item.label}>
+                            <i style={{ background: item.color }} />
+                            {item.label}
+                        </li>
+                    ))}
+                </ul>
+
                 {selectedPoint && (
                     <div className="gc-selected">
                         <strong>نقطه انتخاب‌شده</strong>
@@ -584,7 +550,7 @@ const GrowthChartPage = () => {
                     className={`gc-accordion ${legendOpen ? 'is-open' : ''}`}
                     onClick={() => setLegendOpen((open) => !open)}
                 >
-                    <span>راهنمای خطوط نمودار</span>
+                    <span>توضیح خطوط صدک</span>
                     <FontAwesomeIcon icon={faChevronDown} />
                 </button>
                 {legendOpen && (
@@ -600,6 +566,44 @@ const GrowthChartPage = () => {
                         ))}
                     </ul>
                 )}
+            </section>
+
+            <section className={`gc-card gc-metric-card ${statusClass(activeAnalysis.status)}`}>
+                <div className="gc-metric-top">
+                    <div>
+                        <p className="gc-metric-label">آخرین {activeMeta.label}</p>
+                        <p className="gc-metric-value">
+                            {activeAnalysis.value != null ? (
+                                <>
+                                    {activeAnalysis.value}
+                                    <span>{activeMeta.unit}</span>
+                                </>
+                            ) : '—'}
+                        </p>
+                    </div>
+                    <div className="gc-metric-badges">
+                        <span className={`gc-status ${statusClass(activeAnalysis.status)}`}>
+                            {activeAnalysis.status}
+                        </span>
+                        {percentile != null && (
+                            <span className="gc-percentile">صدک {percentile}</span>
+                        )}
+                    </div>
+                </div>
+                <div className="gc-metric-facts">
+                    {activeAnalysis.date ? (
+                        <span>تاریخ: {toShamsi(activeAnalysis.date)}</span>
+                    ) : (
+                        <span>هنوز اندازه‌گیری ثبت نشده</span>
+                    )}
+                    {activeAnalysis.ageInMonths != null && (
+                        <span>سن ثبت: {formatAgeLabel(activeAnalysis.ageInMonths)}</span>
+                    )}
+                    <span>روند: {trend.label}</span>
+                    {deltaLabel && <span>تغییر: {deltaLabel}</span>}
+                    <span>{activeAnalysis.count} نقطه روی نمودار</span>
+                </div>
+                <p className="gc-metric-note">{getGrowthInterpretation(activeMetric, activeAnalysis)}</p>
             </section>
 
             <section className="gc-card gc-history-card">
