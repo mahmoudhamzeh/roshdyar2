@@ -63,10 +63,10 @@ export const getYDomain = (visibleRows) => {
     const whoMax = whoValues.length ? Math.max(...whoValues) : Math.max(...childValues);
     const childMin = childValues.length ? Math.min(...childValues) : whoMin;
     const childMax = childValues.length ? Math.max(...childValues) : whoMax;
-    const whoPad = Math.max((whoMax - whoMin) * 0.08, 1);
     const minValue = Math.min(whoMin, childMin);
     const maxValue = Math.max(whoMax, childMax);
-    return [Math.max(0, Math.floor(minValue - whoPad)), Math.ceil(maxValue + whoPad)];
+    const pad = Math.max((maxValue - minValue) * 0.12, 2);
+    return [Math.max(0, Math.floor(minValue - pad)), Math.ceil(maxValue + pad)];
 };
 
 export const buildAgeTicks = (minAge, maxAge) => {

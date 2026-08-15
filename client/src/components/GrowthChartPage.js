@@ -175,12 +175,13 @@ const GrowthChart = ({
                         width={isNarrow ? 38 : 46}
                         tick={{ fontSize: 11, fill: '#5b716e' }}
                         tickMargin={4}
+                        allowDataOverflow={false}
                     />
                     <Tooltip
                         content={<CustomTooltip childName={childName} />}
                         allowEscapeViewBox={{ x: true, y: true }}
                     />
-                    <Area type="monotone" dataKey="P97" stroke="none" fill="#99f6e4" fillOpacity={0.28} connectNulls isAnimationActive={false} />
+                    <Area type="monotone" dataKey="P97" stroke="none" fill="#99f6e4" fillOpacity={0.28} connectNulls isAnimationActive={false} baseValue={yDomain[0]} />
                     <Line type="monotone" dataKey="P3" stroke="#d97706" name="صدک ۳" dot={false} strokeWidth={1.6} connectNulls isAnimationActive={false} />
                     <Line type="monotone" dataKey="P50" stroke="#0f766e" name="صدک ۵۰" dot={false} strokeWidth={2.2} connectNulls isAnimationActive={false} />
                     <Line type="monotone" dataKey="P97" stroke="#0284c7" name="صدک ۹۷" dot={false} strokeWidth={1.6} connectNulls isAnimationActive={false} />
