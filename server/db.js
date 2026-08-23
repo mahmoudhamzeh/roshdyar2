@@ -1184,6 +1184,31 @@ const children = {
         const info = stmts.deleteChild.run(Number(id));
         return info.changes > 0;
     },
+    getGrowthState(childId) {
+        connect();
+        const row = stmts.getChildById.get(Number(childId));
+        if (!row) return null;
+        const extra = parseJson(row.extra, {});
+        return {
+            milestones: extra.milestones && typeof extra.milestones === 'object' ? extra.milestones : {},
+            completions: extra.completions && typeof extra.completions === 'object' ? extra.completions : {},
+            concerns: Array.isArray(extra.concerns) ? extra.concerns : []
+        };
+    },
+    saveGrowthState(childId, patch) {
+        connect();
+        const row = stmts.getChildById.get(Number(childId));
+        if (!row) return null;
+        const extra = parseJson(row.extra, {});
+        const next = {
+            ...extra,
+            milestones: patch.milestones !== undefined ? patch.milestones : extra.milestones || {},
+            completions: patch.completions !== undefined ? patch.completions : extra.completions || {},
+            concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || []
+        };
+        db.prepare('UPDATE children SET extra = ? WHERE id = ?').run(JSON.stringify(next), Number(childId));
+        return children.getGrowthState(childId);
+    },
     setVaccinationValue(childId, ageGroup, vaccineName, value) {
         connect();
         stmts.upsertVaccination.run({

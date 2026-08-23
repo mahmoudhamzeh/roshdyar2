@@ -16,15 +16,23 @@ import { getChildDisplayName } from '../utils/childName';
 import './ServiceTiles.css';
 
 const services = [
-    { name: 'راهنمای سنی', icon: faSeedling, link: '#', id: 'age-guidance', tone: 'mint' },
-    { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', tone: 'amber' },
-    { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', tone: 'mint' },
+    { name: 'رشد کودک من', icon: faSeedling, link: '#', id: 'child-growth', path: '/child-growth', tone: 'mint' },
+    { name: 'نمودار رشد', icon: faChartLine, link: '#', id: 'growth-chart', path: '/growth-chart', tone: 'amber' },
+    { name: 'واکسیناسیون', icon: faSyringe, link: '#', id: 'vaccination', path: '/vaccination', tone: 'mint' },
     { name: 'مشاوره با متخصص', icon: faUserMd, link: '#', id: 'consultant', tone: 'teal', soon: true },
     { name: 'مشاوره روانشناسی', icon: faBrain, link: '#', id: 'psychology', tone: 'amber', soon: true },
     { name: 'آزمایش در محل', icon: faFlask, link: '#', id: 'lab-test', tone: 'mint', soon: true },
     { name: 'فروشگاه', icon: faStore, link: '/shop', id: 'store', tone: 'teal' },
     { name: 'سرگرمی', icon: faGamepad, link: '#', id: 'entertainment', tone: 'amber', soon: true },
 ];
+
+const CHILD_SERVICE_IDS = new Set(['child-growth', 'growth-chart', 'vaccination', 'age-guidance']);
+
+const resolveServicePath = (serviceId, childId) => {
+    const service = services.find((item) => item.id === serviceId);
+    const base = service?.path || `/${serviceId}`;
+    return `${base}/${childId}`;
+};
 
 Modal.setAppElement('#root');
 
@@ -74,9 +82,11 @@ const ServiceTiles = () => {
     };
 
     const handleModalSubmit = () => {
-        if (selectedChild && selectedService) {
-            history.push(`/${selectedService}/${selectedChild}`);
-        }
+        if (!selectedChild || !selectedService) return;
+        const target = resolveServicePath(selectedService, selectedChild);
+        setModalIsOpen(false);
+        setSelectedChild('');
+        history.push(target);
     };
 
     const renderTile = (service) => (
@@ -98,10 +108,7 @@ const ServiceTiles = () => {
                 </div>
                 <div className="tiles-container">
                     {services.map((service, index) => {
-                        const requiresChild =
-                            service.id === 'growth-chart' ||
-                            service.id === 'vaccination' ||
-                            service.id === 'age-guidance';
+                        const requiresChild = CHILD_SERVICE_IDS.has(service.id);
                         const style = { animationDelay: `${0.05 * index}s` };
                         if (service.soon) {
                             return (

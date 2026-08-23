@@ -106,6 +106,11 @@ async function run() {
         assert.ok(children.data.length >= 1);
         const childId = children.data[0].id;
 
+        const ageGuide = await request('GET', `/api/children/${childId}/age-guide`);
+        assert.strictEqual(ageGuide.status, 200, JSON.stringify(ageGuide.data));
+        assert.ok(ageGuide.data.band);
+        assert.ok(Array.isArray(ageGuide.data.milestones.items));
+
         const growth = await request('GET', `/api/growth/${childId}`);
         assert.strictEqual(growth.status, 200);
         assert.ok(Array.isArray(growth.data));
