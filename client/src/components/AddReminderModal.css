@@ -1,89 +1,98 @@
 .add-reminder-modal {
-    background: white;
-    padding: 2rem;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 450px;
-    outline: none;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+  background: var(--surface);
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  width: min(92vw, 450px);
+  outline: none;
+  box-shadow: var(--shadow-md);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    z-index: 1500;
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 61, 58, 0.45);
+  z-index: 1500;
 }
 
 .add-reminder-modal h2 {
-    text-align: center;
-    margin-top: 0;
-    margin-bottom: 1.5rem;
-    font-size: 1.5rem;
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  color: var(--ink);
 }
 
 .form-group {
-    margin-bottom: 1rem;
+  margin-bottom: 1rem;
 }
 
 .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
 }
 
 .form-group input,
 .form-group textarea,
 .date-picker-full-width {
-    width: 100%;
-    padding: 0.8rem;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-size: 1rem;
-    box-sizing: border-box;
-    font-family: inherit;
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  box-sizing: border-box;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .form-group textarea {
-    resize: vertical;
+  resize: vertical;
 }
 
 .modal-actions {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 
 .modal-actions button {
-    flex-grow: 1;
-    padding: 0.8rem;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    font-family: inherit;
+  flex-grow: 1;
+  padding: 0.8rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  cursor: pointer;
+  font-family: inherit;
+  min-height: var(--tap-min);
 }
 
 .btn-submit {
-    background-color: #007bff;
-    color: white;
+  background-color: var(--brand);
+  color: var(--text-on-brand);
 }
 
 .btn-cancel {
-    background-color: #f1f1f1;
-    color: #333;
+  background-color: var(--brand-soft);
+  color: var(--brand-deep);
 }
 
 .error-message {
-    color: #dc3545;
-    text-align: center;
-    margin-top: 1rem;
+  color: var(--danger);
+  text-align: center;
+  margin-top: 1rem;
+}
+
+@media (max-width: 480px) {
+  .add-reminder-modal {
+    padding: 1.1rem;
+  }
+
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
 }

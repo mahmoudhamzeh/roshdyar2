@@ -88,7 +88,7 @@ const TicketManagement = () => {
                         <p><strong>کاربر:</strong> {selectedTicket.userId}</p>
                         <p><strong>وضعیت:</strong> {selectedTicket.status}</p>
                         <div className="ticket-history">
-                            <p>{selectedTicket.message}</p>
+                            <p>{selectedTicket.content || selectedTicket.message}</p>
                             {selectedTicket.replies && selectedTicket.replies.map((r, index) => (
                                 <p key={index} className="reply"><strong>پاسخ ادمین:</strong> {r.content}</p>
                             ))}

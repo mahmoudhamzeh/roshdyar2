@@ -6,8 +6,8 @@
 
 /* Main container for the calendar */
 .rmdp-container {
-  background-color: #fff; /* Ensure background is white */
-  color: #333; /* Default text color for the calendar */
+  background-color: var(--surface);
+  color: var(--ink);
 }
 
 /* Day elements */
