@@ -86,8 +86,8 @@ fi
 echo "==> Health"
 curl -sS --max-time 8 http://127.0.0.1:5000/api/health || true
 echo
-echo "Set JWT_SECRET in server/.env before going live with the new auth."
-echo "PostgreSQL: set DATABASE_URL then: npm run migrate:postgres --prefix $APP_DIR/server"
+echo "Put JWT_SECRET and DATABASE_URL in $APP_DIR/server/.env (not as a one-off shell variable)."
+echo "Postgres migrate: bash $APP_DIR/scripts/migrate-postgres.sh"
 echo "https://tatkids.com/  → app home"
 echo "/register            → SMS login"
 echo "/login               → Amin / admin"

@@ -2,24 +2,43 @@
 /**
  * Copy the live SQLite database into PostgreSQL.
  *
- * Usage on the server (after installing Postgres and setting DATABASE_URL):
- *   DATABASE_URL=postgres://roshdyar:SECRET@127.0.0.1:5432/roshdyar \
- *   SQLITE_PATH=/var/www/roshdyar/server/data/roshdyar.db \
- *   node server/migrate-to-postgres.js
+ * Preferred (reads server/.env):
+ *   bash scripts/migrate-postgres.sh
+ *
+ * Or from /var/www/roshdyar/server after DATABASE_URL is in .env:
+ *   node migrate-to-postgres.js
  *
  * FORCE_MIGRATE=1 overwrites existing Postgres rows.
  */
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
-require('dotenv').config();
-
+const fs = require('fs');
 const path = require('path');
 
+const envPath = path.join(__dirname, '.env');
+require('dotenv').config({ path: envPath });
+require('dotenv').config();
+
+function readDatabaseUrl() {
+    const raw = process.env.DATABASE_URL;
+    if (raw == null) return '';
+    return String(raw).trim().replace(/^['"]|['"]$/g, '');
+}
+
 async function main() {
-    if (!process.env.DATABASE_URL) {
-        console.error('DATABASE_URL is required. Example:');
-        console.error('  DATABASE_URL=postgres://roshdyar:pass@127.0.0.1:5432/roshdyar node migrate-to-postgres.js');
+    const databaseUrl = readDatabaseUrl();
+    if (!databaseUrl) {
+        console.error('DATABASE_URL is not set.');
+        console.error(`Looked for ${envPath} (${fs.existsSync(envPath) ? 'found' : 'missing'}).`);
+        console.error('Put an English-only password in server/.env, then run:');
+        console.error('  bash /var/www/roshdyar/scripts/migrate-postgres.sh');
+        console.error('Do not use Persian letters in the Postgres password or URL.');
         process.exit(1);
     }
+    if (/[^\x00-\x7F]/.test(databaseUrl)) {
+        console.error('DATABASE_URL contains non-English characters. Use an ASCII password.');
+        process.exit(1);
+    }
+    process.env.DATABASE_URL = databaseUrl;
+
     const sqlitePath = process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
     const pg = require('./db-pg');
     console.log(`PostgreSQL: ${pg.databaseUrl()}`);
