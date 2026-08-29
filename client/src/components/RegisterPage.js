@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useHistory } from 'react-router-dom';
 import Modal from 'react-modal';
 import BrandLogo from './BrandLogo';
+import { setAuthSession } from '../api';
 import './LoginPage.css';
 import './RegisterPage.css';
 
@@ -171,7 +172,7 @@ const RegisterPage = () => {
                 return;
             }
 
-            localStorage.setItem('loggedInUser', JSON.stringify(data.user));
+            setAuthSession(data.user, data.token);
             if (data.isNewUser) {
                 setIsNewUser(true);
                 setShowWelcome(true);

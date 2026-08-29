@@ -9,6 +9,7 @@ const assert = require('assert');
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roshdyar-db-'));
 process.env.SQLITE_PATH = path.join(tmpDir, 'test.db');
+delete process.env.DATABASE_URL;
 
 const store = require('./db');
 

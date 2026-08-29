@@ -68,7 +68,10 @@ async function run() {
             PORT: String(port),
             SQLITE_PATH: dbFile,
             NODE_ENV: 'test',
-            SMS_PROVIDER: 'log'
+            JWT_SECRET: 'test-jwt-secret',
+            AUTH_ALLOW_LEGACY_HEADER: '0',
+            SMS_PROVIDER: 'log',
+            DATABASE_URL: ''
         },
         stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -87,7 +90,17 @@ async function run() {
         });
         assert.strictEqual(login.status, 200, JSON.stringify(login.data));
         assert.strictEqual(login.data.user.isAdmin, true);
+        assert.ok(login.data.token, 'login must return a JWT');
         const adminId = login.data.user.id;
+        const auth = { Authorization: `Bearer ${login.data.token}` };
+
+        const unauthChildren = await request('GET', '/api/children');
+        assert.strictEqual(unauthChildren.status, 401);
+
+        const spoof = await request('GET', '/api/children', {
+            headers: { 'x-user-id': String(adminId) }
+        });
+        assert.strictEqual(spoof.status, 401, 'legacy x-user-id must not authenticate');
 
         const news = await request('GET', '/api/news');
         assert.strictEqual(news.status, 200);
@@ -100,22 +113,25 @@ async function run() {
         const stockBefore = product.stock;
 
         const children = await request('GET', '/api/children', {
-            headers: { 'x-user-id': String(adminId) }
+            headers: auth
         });
         assert.strictEqual(children.status, 200);
         assert.ok(children.data.length >= 1);
         const childId = children.data[0].id;
 
-        const ageGuide = await request('GET', `/api/children/${childId}/age-guide`);
+        const ageGuide = await request('GET', `/api/children/${childId}/age-guide`, {
+            headers: auth
+        });
         assert.strictEqual(ageGuide.status, 200, JSON.stringify(ageGuide.data));
         assert.ok(ageGuide.data.band);
         assert.ok(Array.isArray(ageGuide.data.milestones.items));
 
-        const growth = await request('GET', `/api/growth/${childId}`);
+        const growth = await request('GET', `/api/growth/${childId}`, { headers: auth });
         assert.strictEqual(growth.status, 200);
         assert.ok(Array.isArray(growth.data));
 
         const createdChild = await request('POST', '/api/children', {
+            headers: auth,
             body: {
                 userId: adminId,
                 firstName: 'تست',
@@ -133,7 +149,7 @@ async function run() {
         assert.ok(createdChild.data.growthData.length >= 1);
 
         const order = await request('POST', '/api/shop/orders', {
-            headers: { 'x-user-id': String(adminId) },
+            headers: auth,
             body: {
                 items: [{ productId: product.id, quantity: 1 }],
                 shippingAddress: 'تهران، خیابان تست',
@@ -147,7 +163,7 @@ async function run() {
         assert.strictEqual(productAfter.data.stock, stockBefore - 1);
 
         const stats = await request('GET', '/api/admin/stats', {
-            headers: { 'x-user-id': String(adminId) }
+            headers: auth
         });
         assert.strictEqual(stats.status, 200);
         assert.ok(stats.data.totalOrders >= 1);
@@ -158,27 +174,30 @@ async function run() {
         assert.ok(catalog.data.groups.admin.includes('POST /api/admin/podcasts'));
 
         const ticket = await request('POST', '/api/tickets', {
-            headers: { 'x-user-id': String(adminId) },
+            headers: auth,
             body: { subject: 'سؤال تست', content: 'متن تیکت برای بار ترافیک' }
         });
         assert.strictEqual(ticket.status, 201, JSON.stringify(ticket.data));
         assert.strictEqual(ticket.data.subject, 'سؤال تست');
 
         const myTickets = await request('GET', '/api/tickets', {
-            headers: { 'x-user-id': String(adminId) }
+            headers: auth
         });
         assert.strictEqual(myTickets.status, 200);
         assert.ok(myTickets.data.some((t) => t.id === ticket.data.id));
 
         const visit = await request('POST', `/api/visits/${childId}`, {
+            headers: auth,
             body: { date: '2024-06-01', doctorName: 'دکتر تست', reason: 'معاینه' }
         });
         assert.strictEqual(visit.status, 201, JSON.stringify(visit.data));
-        const deletedVisit = await request('DELETE', `/api/visits/${childId}/${visit.data.id}`);
+        const deletedVisit = await request('DELETE', `/api/visits/${childId}/${visit.data.id}`, {
+            headers: auth
+        });
         assert.strictEqual(deletedVisit.status, 200);
 
         const podcast = await request('POST', '/api/admin/podcasts', {
-            headers: { 'x-user-id': String(adminId) },
+            headers: auth,
             body: { title: 'پادکست تست', url: 'https://example.com/p', summary: 'خلاصه' }
         });
         assert.strictEqual(podcast.status, 201, JSON.stringify(podcast.data));
@@ -201,6 +220,19 @@ async function run() {
         });
         assert.ok([200, 201].includes(verify.status), JSON.stringify(verify.data));
         assert.ok(verify.data.user.id);
+        assert.ok(verify.data.token, 'OTP login must return a JWT');
+
+        const me = await request('GET', '/api/auth/me', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(me.status, 200, JSON.stringify(me.data));
+        assert.strictEqual(me.data.user.id, verify.data.user.id);
+
+        const loginAgain = await request('POST', '/api/login', {
+            body: { login: 'Amin', password: 'admin' }
+        });
+        assert.strictEqual(loginAgain.status, 200, JSON.stringify(loginAgain.data));
+        assert.ok(loginAgain.data.token);
 
         console.log('api smoke tests passed');
     } finally {

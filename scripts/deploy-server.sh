@@ -73,7 +73,11 @@ npm run build --prefix "$APP_DIR/client"
 
 if command -v pm2 >/dev/null 2>&1; then
   echo "==> Restart pm2"
-  pm2 restart roshdyar || pm2 restart all
+  if [ -f "$APP_DIR/ecosystem.config.js" ]; then
+    pm2 startOrReload "$APP_DIR/ecosystem.config.js" --update-env || pm2 restart roshdyar || pm2 restart all
+  else
+    pm2 restart roshdyar || pm2 restart all
+  fi
   pm2 list
 else
   echo "pm2 not found – restart Node manually if needed"
@@ -82,6 +86,8 @@ fi
 echo "==> Health"
 curl -sS --max-time 8 http://127.0.0.1:5000/api/health || true
 echo
+echo "Set JWT_SECRET in server/.env before going live with the new auth."
+echo "PostgreSQL: set DATABASE_URL then: npm run migrate:postgres --prefix $APP_DIR/server"
 echo "https://tatkids.com/  → app home"
 echo "/register            → SMS login"
 echo "/login               → Amin / admin"

@@ -5,6 +5,7 @@ import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
 import TicketsPage from './TicketsPage';
 import MainNavbar from './MainNavbar';
+import { clearAuthSession } from '../api';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
@@ -14,7 +15,7 @@ const ProfilePage = () => {
     const [activeTab, setActiveTab] = useState('userInfo');
 
     const handleLogout = () => {
-        localStorage.removeItem('loggedInUser');
+        clearAuthSession();
         history.push('/register');
     };
 

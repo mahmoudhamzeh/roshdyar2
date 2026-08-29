@@ -1,3 +1,4 @@
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -8,6 +9,16 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
+const rateLimit = require('express-rate-limit');
+const {
+    hashPassword,
+    verifyPassword,
+    isHashedPassword,
+    signToken,
+    verifyToken,
+    readBearerToken,
+    allowLegacyUserHeader
+} = require('./auth');
 const {
     MILESTONE_STATUS,
     getBandForAge,
@@ -31,9 +42,18 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.get('/api/health', (req, res) => {
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: Number(process.env.AUTH_RATE_LIMIT || 20),
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => process.env.NODE_ENV === 'test',
+    message: { message: 'تعداد درخواست بیش از حد مجاز است. کمی بعد دوباره تلاش کنید.' }
+});
+
+app.get('/api/health', async (req, res) => {
     try {
-        res.json(store.health());
+        res.json(await store.health());
     } catch (err) {
         res.status(503).json({ ok: false, message: err.message });
     }
@@ -42,7 +62,9 @@ app.get('/api/health', (req, res) => {
 const API_CATALOG = {
     name: 'TatKids API',
     language: 'Node.js / Express',
-    database: 'SQLite relational (WAL, indexed tables)',
+    database: store.engine === 'postgresql'
+        ? 'PostgreSQL (connection pool, indexed tables)'
+        : 'SQLite relational (WAL, indexed tables)',
     groups: {
         system: ['GET /api', 'GET /api/health'],
         auth: [
@@ -52,7 +74,8 @@ const API_CATALOG = {
             'POST /api/auth/verify-otp',
             'POST /api/auth/forgot-password/send-otp',
             'POST /api/auth/forgot-password/verify-otp',
-            'POST /api/auth/forgot-password/reset'
+            'POST /api/auth/forgot-password/reset',
+            'GET /api/auth/me'
         ],
         users: ['GET /api/users/:id', 'PUT /api/users/:id', 'PUT /api/users/:id/password'],
         children: [
@@ -163,22 +186,53 @@ const API_CATALOG = {
     }
 };
 
-app.get('/api', (req, res) => {
+app.get('/api', async (req, res) => {
     res.json(API_CATALOG);
 });
 
-function requireUser(req, res) {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId) {
-        res.status(401).json({ message: 'لطفا وارد شوید' });
-        return null;
+async function resolveAuthUser(req) {
+    const token = readBearerToken(req);
+    if (token) {
+        const payload = verifyToken(token);
+        if (!payload || !payload.id) return null;
+        const user = await store.users.getById(payload.id);
+        if (user) req.user = user;
+        return user || null;
     }
-    const user = store.users.getById(userId);
+    if (!allowLegacyUserHeader()) return null;
+    const userId = parseInt(req.headers['x-user-id'], 10);
+    if (!userId) return null;
+    const user = await store.users.getById(userId);
+    if (user) req.user = user;
+    return user || null;
+}
+
+async function requireUser(req, res) {
+    const user = await resolveAuthUser(req);
     if (!user) {
         res.status(401).json({ message: 'لطفا وارد شوید' });
         return null;
     }
     return user;
+}
+
+function authSession(user) {
+    return { user: publicUser(user), token: signToken(user) };
+}
+
+async function requireOwnedChild(req, res) {
+    const user = await requireUser(req, res);
+    if (!user) return null;
+    const child = await store.children.getById(req.params.childId);
+    if (!child) {
+        res.status(404).json({ message: 'کودک یافت نشد' });
+        return null;
+    }
+    if (Number(child.userId) !== Number(user.id) && !user.isAdmin) {
+        res.status(403).json({ message: 'دسترسی غیرمجاز' });
+        return null;
+    }
+    return { user, child };
 }
 
 function paginateList(list, req) {
@@ -288,8 +342,8 @@ function generateOtpCode() {
     return String(Math.floor(10000 + Math.random() * 90000));
 }
 
-function findUserByPhone(phone) {
-    return store.users.findByPhone(phone);
+async function findUserByPhone(phone) {
+    return await store.users.findByPhone(phone);
 }
 
 /** Admin accounts accept both "Amin" and "admin" as login aliases. */
@@ -319,20 +373,20 @@ function identitiesMatch(user, login) {
     );
 }
 
-function ensureDefaultAdmin() {
-    const existingAdmin = store.users.list().find((u) => u.isAdmin);
+async function ensureDefaultAdmin() {
+    const existingAdmin = (await store.users.list()).find((u) => u.isAdmin);
     if (existingAdmin) {
         if (String(existingAdmin.username || '').toLowerCase() === 'admin') {
-            store.users.update(existingAdmin.id, { username: 'Amin' });
+            await store.users.update(existingAdmin.id, { username: 'Amin' });
             console.log('Renamed legacy admin username to Amin');
         }
         return;
     }
 
-    store.users.create({
+    await store.users.create({
         username: 'Amin',
         email: 'admin@example.com',
-        password: 'admin',
+        password: await hashPassword('admin'),
         isAdmin: true
     });
     console.log('Created default admin user: Amin / admin');
@@ -457,34 +511,47 @@ async function deliverOtp(phone, code) {
 }
 
 // --- Auth Routes ---
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authLimiter, async (req, res) => {
     const { login, password } = req.body;
     if (!login || !password) {
         return res.status(400).json({ message: 'نام کاربری و رمز عبور الزامی است' });
     }
-    const user = store.users.findCandidatesForLogin(login).find(
-        (u) => identitiesMatch(u, login) && u.password != null && u.password === password
-    );
-    if (user) {
-        res.status(200).json({ message: 'ورود موفقیت‌آمیز', user: publicUser(user) });
-    } else {
-        res.status(401).json({ message: 'نام کاربری یا رمز عبور نامعتبر است' });
+    const candidates = await store.users.findCandidatesForLogin(login);
+    let user = null;
+    for (const candidate of candidates) {
+        if (!identitiesMatch(candidate, login) || candidate.password == null) continue;
+        if (await verifyPassword(candidate.password, password)) {
+            user = candidate;
+            break;
+        }
     }
+    if (!user) {
+        return res.status(401).json({ message: 'نام کاربری یا رمز عبور نامعتبر است' });
+    }
+    if (!isHashedPassword(user.password)) {
+        user = await store.users.update(user.id, { password: await hashPassword(password) }) || user;
+    }
+    res.status(200).json({ message: 'ورود موفقیت‌آمیز', ...authSession(user) });
 });
 
-app.post('/api/signup', (req, res) => {
+app.post('/api/signup', authLimiter, async (req, res) => {
     const { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ message: 'نام کاربری و رمز عبور الزامی است' });
 
-    const existingUser = store.users.findByUsernameOrEmail(login);
+    const existingUser = await store.users.findByUsernameOrEmail(login);
     if (existingUser) return res.status(409).json({ message: 'این نام کاربری قبلاً ثبت شده است' });
 
-    store.users.create({ username: login, email: login, password, isAdmin: false });
-    res.status(201).json({ message: 'ثبت‌نام با موفقیت انجام شد. اکنون می‌توانید وارد شوید.' });
+    const created = await store.users.create({
+        username: login,
+        email: login,
+        password: await hashPassword(password),
+        isAdmin: false
+    });
+    res.status(201).json({ message: 'ثبت‌نام با موفقیت انجام شد. اکنون می‌توانید وارد شوید.', ...authSession(created) });
 });
 
 async function issueOtp({ phone, purpose, res }) {
-    const existing = store.otp.get(phone);
+    const existing = await store.otp.get(phone);
     const now = Date.now();
 
     if (existing && existing.purpose === purpose && now - existing.sentAt < OTP_RESEND_COOLDOWN_MS) {
@@ -507,7 +574,7 @@ async function issueOtp({ phone, purpose, res }) {
         // Persist OTP only after SMS succeeds so failed sends do not trigger cooldown.
         await deliverOtp(phone, code);
         const sentAt = Date.now();
-        store.otp.set(phone, { code, expiresAt, sentAt, attempts: 0, purpose });
+        await store.otp.set(phone, { code, expiresAt, sentAt, attempts: 0, purpose });
     } catch (err) {
         console.error('OTP delivery failed:', err);
         return res.status(502).json({ message: 'ارسال کد تأیید ناموفق بود. دوباره تلاش کنید.' });
@@ -528,7 +595,7 @@ async function issueOtp({ phone, purpose, res }) {
     return res.status(200).json(payload);
 }
 
-function readOtpEntry({ phone, code, purpose, consume }) {
+async function readOtpEntry({ phone, code, purpose, consume }) {
     if (!isValidIranMobile(phone)) {
         return { error: { status: 400, body: { message: 'شماره موبایل معتبر نیست.' } } };
     }
@@ -536,19 +603,19 @@ function readOtpEntry({ phone, code, purpose, consume }) {
         return { error: { status: 400, body: { message: 'کد تأیید باید ۵ رقم باشد.' } } };
     }
 
-    const entry = store.otp.get(phone);
+    const entry = await store.otp.get(phone);
     if (!entry || entry.purpose !== purpose) {
         return { error: { status: 400, body: { message: 'کد تأیید یافت نشد. دوباره درخواست کنید.' } } };
     }
 
     const now = Date.now();
     if (now > entry.expiresAt) {
-        store.otp.remove(phone);
+        await store.otp.remove(phone);
         return { error: { status: 410, body: { message: 'کد تأیید منقضی شده است. دوباره درخواست کنید.' } } };
     }
 
     if (entry.attempts >= OTP_MAX_ATTEMPTS) {
-        store.otp.remove(phone);
+        await store.otp.remove(phone);
         return {
             error: {
                 status: 429,
@@ -559,7 +626,7 @@ function readOtpEntry({ phone, code, purpose, consume }) {
 
     if (entry.code !== code) {
         entry.attempts += 1;
-        store.otp.set(phone, entry);
+        await store.otp.set(phone, entry);
         const remaining = OTP_MAX_ATTEMPTS - entry.attempts;
         return {
             error: {
@@ -575,16 +642,16 @@ function readOtpEntry({ phone, code, purpose, consume }) {
     }
 
     if (consume) {
-        store.otp.remove(phone);
+        await store.otp.remove(phone);
     }
     return { ok: true, entry };
 }
 
-function consumeOtp({ phone, code, purpose }) {
-    return readOtpEntry({ phone, code, purpose, consume: true });
+async function consumeOtp({ phone, code, purpose }) {
+    return await readOtpEntry({ phone, code, purpose, consume: true });
 }
 
-app.post('/api/auth/send-otp', async (req, res) => {
+app.post('/api/auth/send-otp', authLimiter, async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     if (!isValidIranMobile(phone)) {
         return res.status(400).json({ message: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲xxxxxxx' });
@@ -594,19 +661,19 @@ app.post('/api/auth/send-otp', async (req, res) => {
     return issueOtp({ phone, purpose: 'auth', res });
 });
 
-app.post('/api/auth/verify-otp', (req, res) => {
+app.post('/api/auth/verify-otp', async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
-    const result = consumeOtp({ phone, code, purpose: 'auth' });
+    const result = await consumeOtp({ phone, code, purpose: 'auth' });
     if (result.error) {
         return res.status(result.error.status).json(result.error.body);
     }
 
-    let user = findUserByPhone(phone);
+    let user = await findUserByPhone(phone);
     let isNewUser = false;
     if (!user) {
         isNewUser = true;
-        user = store.users.create({
+        user = await store.users.create({
             username: phone,
             email: '',
             mobile: phone,
@@ -624,19 +691,19 @@ app.post('/api/auth/verify-otp', (req, res) => {
 
     res.status(isNewUser ? 201 : 200).json({
         message: isNewUser ? 'ثبت‌نام با موفقیت انجام شد.' : 'ورود موفقیت‌آمیز.',
-        user: publicUser(user),
+        ...authSession(user),
         isNewUser
     });
 });
 
 // Forgot / set password via OTP (for users who registered without a password, or forgot it)
-app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
+app.post('/api/auth/forgot-password/send-otp', authLimiter, async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     if (!isValidIranMobile(phone)) {
         return res.status(400).json({ message: 'شماره موبایل معتبر نیست. مثال: ۰۹۱۲xxxxxxx' });
     }
 
-    const user = findUserByPhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
         return res.status(404).json({
             message: 'حسابی با این شماره یافت نشد. ابتدا با پیامک ثبت‌نام کنید.'
@@ -646,10 +713,10 @@ app.post('/api/auth/forgot-password/send-otp', async (req, res) => {
     return issueOtp({ phone, purpose: 'reset', res });
 });
 
-app.post('/api/auth/forgot-password/verify-otp', (req, res) => {
+app.post('/api/auth/forgot-password/verify-otp', async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
-    const result = readOtpEntry({ phone, code, purpose: 'reset', consume: false });
+    const result = await readOtpEntry({ phone, code, purpose: 'reset', consume: false });
     if (result.error) {
         return res.status(result.error.status).json(result.error.body);
     }
@@ -661,7 +728,7 @@ app.post('/api/auth/forgot-password/verify-otp', (req, res) => {
     });
 });
 
-app.post('/api/auth/forgot-password/reset', (req, res) => {
+app.post('/api/auth/forgot-password/reset', async (req, res) => {
     const phone = normalizePhone(req.body.phone || req.body.mobile);
     const code = toEnglishDigits(req.body.code || req.body.otp || '').replace(/\D/g, '');
     const newPassword = req.body.newPassword || req.body.password;
@@ -670,18 +737,18 @@ app.post('/api/auth/forgot-password/reset', (req, res) => {
         return res.status(400).json({ message: passwordError });
     }
 
-    const result = consumeOtp({ phone, code, purpose: 'reset' });
+    const result = await consumeOtp({ phone, code, purpose: 'reset' });
     if (result.error) {
         return res.status(result.error.status).json(result.error.body);
     }
 
-    const user = findUserByPhone(phone);
+    const user = await findUserByPhone(phone);
     if (!user) {
         return res.status(404).json({ message: 'کاربر یافت نشد.' });
     }
 
-    store.users.update(user.id, { password: String(newPassword) });
-    const updated = store.users.getById(user.id);
+    await store.users.update(user.id, { password: await hashPassword(String(newPassword)) });
+    const updated = await store.users.getById(user.id);
 
     res.status(200).json({
         message: 'رمز عبور با موفقیت ثبت شد. اکنون می‌توانید وارد شوید.',
@@ -689,18 +756,34 @@ app.post('/api/auth/forgot-password/reset', (req, res) => {
     });
 });
 
+app.get('/api/auth/me', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    res.json(authSession(user));
+});
+
 // --- User Profile Routes ---
-app.get('/api/users/:id', (req, res) => {
+app.get('/api/users/:id', async (req, res) => {
+    const actor = await requireUser(req, res);
+    if (!actor) return;
     const { id } = req.params;
-    const user = store.users.getById(id);
+    if (Number(actor.id) !== Number(id) && !actor.isAdmin) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
+    const user = await store.users.getById(id);
     if (user) {
         res.json(publicUser(user));
     } else res.status(404).json({ message: 'کاربر یافت نشد' });
 });
 
-app.put('/api/users/:id', (req, res) => {
+app.put('/api/users/:id', async (req, res) => {
+    const actor = await requireUser(req, res);
+    if (!actor) return;
     const { id } = req.params;
-    const current = store.users.getById(id);
+    if (Number(actor.id) !== Number(id) && !actor.isAdmin) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
+    const current = await store.users.getById(id);
     if (!current) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
     const { firstName, lastName, birthDate, province, city, mobile, email } = req.body;
@@ -716,44 +799,49 @@ app.put('/api/users/:id', (req, res) => {
     const nextFirst = patch.firstName !== undefined ? patch.firstName : current.firstName;
     const nextLast = patch.lastName !== undefined ? patch.lastName : current.lastName;
     patch.profileComplete = Boolean(String(nextFirst || '').trim() || String(nextLast || '').trim());
-    const updated = store.users.update(id, patch);
+    const updated = await store.users.update(id, patch);
     res.json({ message: 'اطلاعات با موفقیت ذخیره شد.', user: publicUser(updated) });
 });
 
-app.put('/api/users/:id/password', (req, res) => {
+app.put('/api/users/:id/password', async (req, res) => {
+    const actor = await requireUser(req, res);
+    if (!actor) return;
     const { id } = req.params;
+    if (Number(actor.id) !== Number(id) && !actor.isAdmin) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
     const { currentPassword, newPassword } = req.body;
-    const user = store.users.getById(id);
+    const user = await store.users.getById(id);
 
-    if (!user || user.password !== currentPassword) {
+    if (!user || !(await verifyPassword(user.password, currentPassword))) {
         return res.status(401).json({ message: 'رمز عبور فعلی اشتباه است' });
     }
     if (!newPassword || String(newPassword).length < 4) {
         return res.status(400).json({ message: 'رمز عبور جدید باید حداقل ۴ کاراکتر باشد' });
     }
 
-    store.users.update(id, { password: newPassword });
+    await store.users.update(id, { password: await hashPassword(newPassword) });
     res.status(200).json({ message: 'رمز عبور با موفقیت تغییر کرد' });
 });
 
 // --- Children Routes ---
-app.get('/api/children', (req, res) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'User ID is required' });
-    const userChildren = store.children.listByUserId(userId)
+app.get('/api/children', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userChildren = (await store.children.listByUserId(user.id))
         .map(c => ({ ...c, name: getChildDisplayName(c) }));
     res.json(userChildren);
 });
 
-app.post('/api/children', (req, res) => {
-    const childData = req.body;
-    if (!childData || !childData.userId) {
-        return res.status(400).json({ message: 'Child data and userId are required' });
-    }
+app.post('/api/children', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const childData = req.body || {};
+    const ownerId = user.isAdmin && childData.userId ? parseInt(childData.userId, 10) : user.id;
     normalizeChildName(childData);
-    const newChild = store.children.create({
+    const newChild = await store.children.create({
         ...childData,
-        userId: parseInt(childData.userId, 10),
+        userId: ownerId,
         vaccinationRecords: childData.vaccinationRecords || {}
     });
 
@@ -761,7 +849,7 @@ app.post('/api/children', (req, res) => {
     const birthWeight = parseFloat(childData.weight || childData.birthWeight);
     const birthHead = parseFloat(childData.birthHeadCircumference);
     if (childData.birthDate && (birthHeight || birthWeight || birthHead)) {
-        store.growth.upsert(newChild.id, {
+        await store.growth.upsert(newChild.id, {
             date: String(childData.birthDate).replace(/\//g, '-'),
             height: birthHeight || null,
             weight: birthWeight ? (birthWeight > 100 ? birthWeight / 1000 : birthWeight) : null,
@@ -769,39 +857,37 @@ app.post('/api/children', (req, res) => {
         });
     }
 
-    res.status(201).json({ ...newChild, growthData: store.growth.list(newChild.id) });
+    res.status(201).json({ ...newChild, growthData: await store.growth.list(newChild.id) });
 });
 
-app.get('/api/children/:childId', (req, res) => {
+app.get('/api/children/:childId', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
     const { childId } = req.params;
-    const child = store.children.getById(childId);
     if (child) {
         res.json({
             ...child,
             name: getChildDisplayName(child),
-            growthData: store.growth.list(childId)
+            growthData: await store.growth.list(childId)
         });
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
 });
 
-function findChildOrNull(childId) {
-    return store.children.getById(childId);
-}
-
-function getChildMilestoneMap(childId) {
-    const state = store.children.getGrowthState(childId);
+async function getChildMilestoneMap(childId) {
+    const state = await store.children.getGrowthState(childId);
     return state ? state.milestones : {};
 }
 
-function getChildCompletionMap(childId) {
-    const state = store.children.getGrowthState(childId);
+async function getChildCompletionMap(childId) {
+    const state = await store.children.getGrowthState(childId);
     return state ? state.completions : {};
 }
 
-function buildGrowthSummaryForChild(childId, child) {
-    const records = store.growth.list(childId).slice().sort((a, b) => {
+async function buildGrowthSummaryForChild(childId, child) {
+    const records = (await store.growth.list(childId)).slice().sort((a, b) => {
         const da = new Date(String(a.date || '').replace(/\//g, '-')).getTime() || 0;
         const db = new Date(String(b.date || '').replace(/\//g, '-')).getTime() || 0;
         return da - db;
@@ -839,17 +925,18 @@ function buildGrowthSummaryForChild(childId, child) {
     };
 }
 
-app.get('/api/children/:childId/age-guide', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
-    const milestoneStatuses = getChildMilestoneMap(req.params.childId);
-    const completions = getChildCompletionMap(req.params.childId);
+app.get('/api/children/:childId/age-guide', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const milestoneStatuses = await getChildMilestoneMap(req.params.childId);
+    const completions = await getChildCompletionMap(req.params.childId);
     const payload = buildAgeGuidePayload(
         { ...child, name: getChildDisplayName(child) },
         {
             milestoneStatuses,
             completions,
-            growthSummary: buildGrowthSummaryForChild(req.params.childId, child),
+            growthSummary: await buildGrowthSummaryForChild(req.params.childId, child),
             parentConcern: req.query.concern || null
         }
     );
@@ -861,15 +948,16 @@ app.get('/api/children/:childId/age-guide', (req, res) => {
     res.json(payload);
 });
 
-app.get('/api/children/:childId/milestones', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+app.get('/api/children/:childId/milestones', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
     const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
     const contentAge = guide.child.isPremature && guide.child.ageInMonths < 24
         ? guide.child.correctedAgeInMonths
         : guide.child.ageInMonths;
     const band = getBandForAge(contentAge);
-    const statuses = getChildMilestoneMap(req.params.childId);
+    const statuses = await getChildMilestoneMap(req.params.childId);
     const items = (band.milestones || []).map((milestone) => ({
         ...milestone,
         status: statuses[milestone.id]?.status || MILESTONE_STATUS.NOT_CHECKED,
@@ -884,36 +972,38 @@ app.get('/api/children/:childId/milestones', (req, res) => {
     });
 });
 
-app.post('/api/children/:childId/milestones/:milestoneId/status', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+app.post('/api/children/:childId/milestones/:milestoneId/status', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
     const { status, observedAt } = req.body || {};
     const allowed = Object.values(MILESTONE_STATUS);
     if (!allowed.includes(status)) {
         return res.status(400).json({ message: 'وضعیت نامعتبر است' });
     }
-    const state = store.children.getGrowthState(req.params.childId);
+    const state = await store.children.getGrowthState(req.params.childId);
     const milestones = { ...state.milestones };
     milestones[req.params.milestoneId] = {
         status,
         observedAt: observedAt || (status === MILESTONE_STATUS.OBSERVED ? new Date().toISOString().slice(0, 10) : null),
         updatedAt: new Date().toISOString()
     };
-    store.children.saveGrowthState(req.params.childId, { milestones });
+    await store.children.saveGrowthState(req.params.childId, { milestones });
     res.json({ milestoneId: req.params.milestoneId, ...milestones[req.params.milestoneId] });
 });
 
-app.get('/api/children/:childId/activities', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+app.get('/api/children/:childId/activities', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
     const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
     const contentAge = guide.child.isPremature && guide.child.ageInMonths < 24
         ? guide.child.correctedAgeInMonths
         : guide.child.ageInMonths;
     const band = getBandForAge(contentAge);
-    const completions = getChildCompletionMap(req.params.childId);
+    const completions = await getChildCompletionMap(req.params.childId);
     const recommended = recommendActivities(band, {
-        milestoneStatuses: getChildMilestoneMap(req.params.childId),
+        milestoneStatuses: await getChildMilestoneMap(req.params.childId),
         completions,
         parentConcern: req.query.concern || null
     });
@@ -927,38 +1017,42 @@ app.get('/api/children/:childId/activities', (req, res) => {
     });
 });
 
-app.post('/api/children/:childId/activities/:activityId/completion', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+app.post('/api/children/:childId/activities/:activityId/completion', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
     const { completed = true, duration = null } = req.body || {};
-    const state = store.children.getGrowthState(req.params.childId);
+    const state = await store.children.getGrowthState(req.params.childId);
     const completions = { ...state.completions };
     completions[req.params.activityId] = {
         completed: Boolean(completed),
         duration,
         completedAt: new Date().toISOString()
     };
-    store.children.saveGrowthState(req.params.childId, { completions });
+    await store.children.saveGrowthState(req.params.childId, { completions });
     res.json({ activityId: req.params.activityId, ...completions[req.params.activityId] });
 });
 
-app.get('/api/children/:childId/growth-summary', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
-    res.json(buildGrowthSummaryForChild(req.params.childId, child));
+app.get('/api/children/:childId/growth-summary', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    res.json(await buildGrowthSummaryForChild(req.params.childId, child));
 });
 
-app.get('/api/children/:childId/concerns', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
-    const state = store.children.getGrowthState(req.params.childId);
+app.get('/api/children/:childId/concerns', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const state = await store.children.getGrowthState(req.params.childId);
     res.json({ concerns: state.concerns || [] });
 });
 
-app.post('/api/children/:childId/concerns', (req, res) => {
-    const child = findChildOrNull(req.params.childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
-    const state = store.children.getGrowthState(req.params.childId);
+app.post('/api/children/:childId/concerns', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const state = await store.children.getGrowthState(req.params.childId);
     const entry = {
         id: `c-${Date.now()}`,
         topic: req.body?.topic || 'موضوع دیگر',
@@ -966,62 +1060,62 @@ app.post('/api/children/:childId/concerns', (req, res) => {
         result: req.body?.result || 'green',
         createdAt: new Date().toISOString()
     };
-    store.children.saveGrowthState(req.params.childId, { concerns: [entry, ...(state.concerns || [])] });
+    await store.children.saveGrowthState(req.params.childId, { concerns: [entry, ...(state.concerns || [])] });
     res.status(201).json(entry);
 });
 
-app.put('/api/children/:childId', (req, res) => {
+app.put('/api/children/:childId', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
     const { childId } = req.params;
     const updatedData = { ...req.body };
     normalizeChildName(updatedData);
     delete updatedData.id;
     delete updatedData.growthData;
-    const updated = store.children.update(childId, updatedData);
+    const updated = await store.children.update(childId, updatedData);
     if (updated) {
         res.status(200).json({
             ...updated,
             name: getChildDisplayName(updated),
-            growthData: store.growth.list(childId)
+            growthData: await store.growth.list(childId)
         });
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
 });
 
-app.delete('/api/children/:childId', (req, res) => {
+app.delete('/api/children/:childId', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
     const { childId } = req.params;
-    if (store.children.remove(childId)) {
+    if (await store.children.remove(childId)) {
         res.status(200).json({ message: 'کودک و تمام اطلاعات مربوطه با موفقیت حذف شدند' });
     } else {
         res.status(404).json({ message: 'کودک یافت نشد' });
     }
 });
 
-app.put('/api/children/:childId/vaccination-records', (req, res) => {
+app.put('/api/children/:childId/vaccination-records', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
     const { childId } = req.params;
     const { vaccinationRecords } = req.body;
-    const updated = store.children.update(childId, { vaccinationRecords });
+    const updated = await store.children.update(childId, { vaccinationRecords });
     if (updated) res.status(200).json(updated);
     else res.status(404).json({ message: 'کودک یافت نشد' });
 });
 
-app.post('/api/children/:childId/avatar', upload.single('avatar'), (req, res) => {
+app.post('/api/children/:childId/avatar', upload.single('avatar'), async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
     const { childId } = req.params;
-    const userId = req.headers['x-user-id'];
-    const child = store.children.getById(childId);
-
-    if (!child) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
-    if (!userId || child.userId !== Number(userId)) {
-        return res.status(403).json({ message: 'دسترسی غیرمجاز برای تغییر عکس این کودک' });
-    }
+    const child = owned.child;
     if (!req.file) {
         return res.status(400).json({ message: 'فایل عکس انتخاب نشده است' });
     }
 
     const avatarPath = `/uploads/${req.file.filename}`;
-    store.children.update(childId, { avatar: avatarPath });
+    await store.children.update(childId, { avatar: avatarPath });
     res.status(200).json({ message: 'عکس با موفقیت آپلود شد', filePath: avatarPath });
 });
 
@@ -1048,16 +1142,14 @@ const compareGrowthDates = (a, b) => {
     return da.localeCompare(db);
 };
 
-app.get('/api/growth/:childId', (req, res) => {
+app.get('/api/growth/:childId', async (req, res) => {
     const { childId } = req.params;
-    if (!store.children.getById(childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
-    const list = store.growth.list(childId).slice().sort((a, b) => compareGrowthDates(a.date, b.date));
+    if (!(await requireOwnedChild(req, res))) return;
+    const list = (await store.growth.list(childId)).slice().sort((a, b) => compareGrowthDates(a.date, b.date));
     res.json(list);
 });
 
-app.post('/api/growth/:childId', (req, res) => {
+app.post('/api/growth/:childId', async (req, res) => {
     const { childId } = req.params;
     const date = normalizeGrowthDate(req.body?.date);
     const height = parseOptionalNumber(req.body?.height);
@@ -1070,21 +1162,17 @@ app.post('/api/growth/:childId', (req, res) => {
     if (height == null && weight == null && headCircumference == null) {
         return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
     }
-    if (!store.children.getById(childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
+    if (!(await requireOwnedChild(req, res))) return;
 
-    const result = store.growth.upsert(childId, { date, height, weight, headCircumference });
+    const result = await store.growth.upsert(childId, { date, height, weight, headCircumference });
     res.status(result.created ? 201 : 200).json(result.record);
 });
 
-app.put('/api/growth/:childId/record/:recordId', (req, res) => {
+app.put('/api/growth/:childId/record/:recordId', async (req, res) => {
     const { childId, recordId } = req.params;
-    if (!store.children.getById(childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
+    if (!(await requireOwnedChild(req, res))) return;
 
-    const list = store.growth.list(childId);
+    const list = await store.growth.list(childId);
     const current = list.find((r) => String(r.id) === String(recordId));
     if (!current) {
         return res.status(404).json({ message: 'رکورد یافت نشد' });
@@ -1104,7 +1192,7 @@ app.put('/api/growth/:childId/record/:recordId', (req, res) => {
         return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
     }
 
-    const result = store.growth.update(childId, recordId, { date, height, weight, headCircumference });
+    const result = await store.growth.update(childId, recordId, { date, height, weight, headCircumference });
     if (!result) return res.status(404).json({ message: 'رکورد یافت نشد' });
     if (result.error === 'duplicate-date') {
         return res.status(400).json({ message: 'برای این تاریخ قبلاً رکورد دیگری ثبت شده است.' });
@@ -1112,28 +1200,29 @@ app.put('/api/growth/:childId/record/:recordId', (req, res) => {
     res.json(result.record);
 });
 
-app.delete('/api/growth/:childId/record/:recordId', (req, res) => {
+app.delete('/api/growth/:childId/record/:recordId', async (req, res) => {
     const { childId, recordId } = req.params;
-    if (!store.growth.removeById(childId, recordId)) {
+    if (!await store.growth.removeById(childId, recordId)) {
         return res.status(404).json({ message: 'رکورد یافت نشد' });
     }
     res.json({ message: 'رکورد حذف شد' });
 });
 
-app.delete('/api/growth/:childId/:date', (req, res) => {
+app.delete('/api/growth/:childId/:date', async (req, res) => {
     const { childId, date } = req.params;
     const normalized = normalizeGrowthDate(decodeURIComponent(date));
-    if (!store.growth.removeByDate(childId, normalized) && !store.growth.removeByDate(childId, date)) {
+    if (!await store.growth.removeByDate(childId, normalized) && !await store.growth.removeByDate(childId, date)) {
         return res.status(404).json({ message: 'رکورد یافت نشد' });
     }
     res.status(200).json({ message: 'رکورد حذف شد' });
 });
 
 // --- Vaccination Status Routes ---
-app.get('/api/vaccination-status/:childId', (req, res) => {
+app.get('/api/vaccination-status/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = store.children.getById(childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
 
     const ageInMonths = calculateAgeInMonths(child.birthDate);
     const records = child.vaccinationRecords || {};
@@ -1166,11 +1255,12 @@ app.get('/api/vaccination-status/:childId', (req, res) => {
     res.json(status);
 });
 
-app.post('/api/vaccinate/:childId', (req, res) => {
+app.post('/api/vaccinate/:childId', async (req, res) => {
     const { childId } = req.params;
     const { vaccineName, dose, date, age } = req.body;
-    const child = store.children.getById(childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
 
     let targetAge = age !== undefined ? Number(age) : null;
     if (targetAge === null || Number.isNaN(targetAge)) {
@@ -1181,52 +1271,48 @@ app.post('/api/vaccinate/:childId', (req, res) => {
         targetAge = match.age;
     }
 
-    const updated = store.children.setVaccinationValue(childId, targetAge, vaccineName, date || true);
+    const updated = await store.children.setVaccinationValue(childId, targetAge, vaccineName, date || true);
     res.status(200).json({ message: 'وضعیت واکسن به‌روز شد', vaccinationRecords: updated.vaccinationRecords });
 });
 
 // --- Medical Data Routes ---
-app.get('/api/visits/:childId', (req, res) => {
-    res.json(store.visits.list(req.params.childId));
+app.get('/api/visits/:childId', async (req, res) => {
+    if (!(await requireOwnedChild(req, res))) return;
+    res.json(await store.visits.list(req.params.childId));
 });
 
-app.post('/api/visits/:childId', (req, res) => {
+app.post('/api/visits/:childId', async (req, res) => {
     const { childId } = req.params;
     const { date, doctorName, reason, summary } = req.body;
     if (!date || !doctorName || !reason) {
         return res.status(400).json({ message: 'تاریخ، نام پزشک و علت مراجعه الزامی است' });
     }
-    if (!store.children.getById(childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
-    const newVisit = store.visits.create(childId, { date, doctorName, reason, summary });
+    if (!(await requireOwnedChild(req, res))) return;
+    const newVisit = await store.visits.create(childId, { date, doctorName, reason, summary });
     res.status(201).json(newVisit);
 });
 
-app.delete('/api/visits/:childId/:visitId', (req, res) => {
-    if (!store.children.getById(req.params.childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
-    if (store.visits.remove(req.params.childId, req.params.visitId)) {
+app.delete('/api/visits/:childId/:visitId', async (req, res) => {
+    if (!(await requireOwnedChild(req, res))) return;
+    if (await store.visits.remove(req.params.childId, req.params.visitId)) {
         return res.json({ message: 'مراجعه حذف شد' });
     }
     res.status(404).json({ message: 'مراجعه یافت نشد' });
 });
 
-app.get('/api/checkups/:childId', (req, res) => {
-    res.json(store.checkups.list(req.params.childId));
+app.get('/api/checkups/:childId', async (req, res) => {
+    if (!(await requireOwnedChild(req, res))) return;
+    res.json(await store.checkups.list(req.params.childId));
 });
 
-app.post('/api/checkups/:childId', upload.single('checkupFile'), (req, res) => {
+app.post('/api/checkups/:childId', upload.single('checkupFile'), async (req, res) => {
     const { childId } = req.params;
     const { title, date, parameters } = req.body;
 
     if (!title || !date || !parameters) {
         return res.status(400).json({ message: 'عنوان، تاریخ و پارامترها الزامی هستند.' });
     }
-    if (!store.children.getById(childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
+    if (!(await requireOwnedChild(req, res))) return;
 
     let parsedParameters;
     try {
@@ -1235,7 +1321,7 @@ app.post('/api/checkups/:childId', upload.single('checkupFile'), (req, res) => {
         return res.status(400).json({ message: 'فرمت پارامترها نامعتبر است.' });
     }
 
-    const newCheckup = store.checkups.create(childId, {
+    const newCheckup = await store.checkups.create(childId, {
         title,
         date,
         parameters: parsedParameters,
@@ -1244,27 +1330,27 @@ app.post('/api/checkups/:childId', upload.single('checkupFile'), (req, res) => {
     res.status(201).json(newCheckup);
 });
 
-app.delete('/api/checkups/:childId/:checkupId', (req, res) => {
-    if (!store.children.getById(req.params.childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
-    if (store.checkups.remove(req.params.childId, req.params.checkupId)) {
+app.delete('/api/checkups/:childId/:checkupId', async (req, res) => {
+    if (!(await requireOwnedChild(req, res))) return;
+    if (await store.checkups.remove(req.params.childId, req.params.checkupId)) {
         return res.json({ message: 'آزمایش حذف شد' });
     }
     res.status(404).json({ message: 'آزمایش یافت نشد' });
 });
 
-app.get('/api/documents/:childId', (req, res) => {
-    res.json(store.documents.list(req.params.childId));
+app.get('/api/documents/:childId', async (req, res) => {
+    if (!(await requireOwnedChild(req, res))) return;
+    res.json(await store.documents.list(req.params.childId));
 });
 
-app.post('/api/documents/:childId', upload.single('document'), (req, res) => {
+app.post('/api/documents/:childId', upload.single('document'), async (req, res) => {
     const { childId } = req.params;
+    if (!(await requireOwnedChild(req, res))) return;
     if (!req.file) {
         return res.status(400).json({ message: 'فایل مدرک الزامی است' });
     }
     const filePath = `/uploads/${req.file.filename}`;
-    const newDocument = store.documents.create(childId, {
+    const newDocument = await store.documents.create(childId, {
         title: req.body.title || req.file.originalname,
         url: filePath,
         filePath,
@@ -1273,20 +1359,19 @@ app.post('/api/documents/:childId', upload.single('document'), (req, res) => {
     res.status(201).json(newDocument);
 });
 
-app.delete('/api/documents/:childId/:documentId', (req, res) => {
-    if (!store.children.getById(req.params.childId)) {
-        return res.status(404).json({ message: 'کودک یافت نشد' });
-    }
-    if (store.documents.remove(req.params.childId, req.params.documentId)) {
+app.delete('/api/documents/:childId/:documentId', async (req, res) => {
+    if (!(await requireOwnedChild(req, res))) return;
+    if (await store.documents.remove(req.params.childId, req.params.documentId)) {
         return res.json({ message: 'مدرک حذف شد' });
     }
     res.status(404).json({ message: 'مدرک یافت نشد' });
 });
 
-app.get('/api/recommended-tests/:childId', (req, res) => {
+app.get('/api/recommended-tests/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = store.children.getById(childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
 
     const ageInMonths = calculateAgeInMonths(child.birthDate);
     let ageGroup = '24-60';
@@ -1299,116 +1384,115 @@ app.get('/api/recommended-tests/:childId', (req, res) => {
 
 // --- Admin Middleware ---
 const isAdmin = (req, res, next) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'دسترسی غیرمجاز: شناسه کاربری ارائه نشده است' });
-    const user = store.users.getById(userId);
-    if (user && user.isAdmin) next();
-    else res.status(403).json({ message: 'دسترسی غیرمجاز: شما مدیر نیستید' });
+    Promise.resolve(resolveAuthUser(req)).then((user) => {
+        if (!user) return res.status(401).json({ message: 'دسترسی غیرمجاز: شناسه کاربری ارائه نشده است' });
+        if (!user.isAdmin) return res.status(403).json({ message: 'دسترسی غیرمجاز: شما مدیر نیستید' });
+        req.user = user;
+        next();
+    }).catch(next);
 };
 
 // --- Admin Routes ---
-app.get('/api/admin/users', isAdmin, (req, res) => {
-    res.json(store.users.list().map((u) => publicUser(u)));
+app.get('/api/admin/users', isAdmin, async (req, res) => {
+    res.json((await store.users.list()).map((u) => publicUser(u)));
 });
 
-app.put('/api/admin/users/:id', isAdmin, (req, res) => {
+app.put('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const userData = { ...req.body };
-    const current = store.users.getById(id);
+    const current = await store.users.getById(id);
     if (!current) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
     delete userData.password;
-    const requestingUserId = req.headers['x-user-id'];
-    if (id === requestingUserId && current.isAdmin && !userData.isAdmin) {
+    if (Number(id) === Number(req.user.id) && current.isAdmin && !userData.isAdmin) {
         return res.status(400).json({ message: 'شما نمی‌توانید دسترسی ادمین خود را لغو کنید.' });
     }
 
-    const updated = store.users.update(id, userData);
+    const updated = await store.users.update(id, userData);
     res.json(publicUser(updated));
 });
 
-app.delete('/api/admin/users/:id', isAdmin, (req, res) => {
+app.delete('/api/admin/users/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
-    if (!store.users.getById(id)) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    if (!await store.users.getById(id)) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
-    const requestingUserId = req.headers['x-user-id'];
-    if (id === requestingUserId) return res.status(400).json({ message: 'شما نمی‌توانید حساب کاربری خود را حذف کنید.' });
+    if (Number(id) === Number(req.user.id)) return res.status(400).json({ message: 'شما نمی‌توانید حساب کاربری خود را حذف کنید.' });
 
-    store.users.remove(id);
+    await store.users.remove(id);
     res.status(200).json({ message: 'کاربر با موفقیت حذف شد' });
 });
 
-app.get('/api/admin/users/:userId/children', isAdmin, (req, res) => {
-    res.json(store.children.listByUserId(req.params.userId));
+app.get('/api/admin/users/:userId/children', isAdmin, async (req, res) => {
+    res.json(await store.children.listByUserId(req.params.userId));
 });
 
-app.put('/api/admin/users/:id/set-password', isAdmin, (req, res) => {
+app.put('/api/admin/users/:id/set-password', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;
-    if (!store.users.getById(id)) return res.status(404).json({ message: 'کاربر یافت نشد' });
+    if (!await store.users.getById(id)) return res.status(404).json({ message: 'کاربر یافت نشد' });
     if (!newPassword || newPassword.length < 4) return res.status(400).json({ message: 'رمز عبور جدید باید حداقل ۴ کاراکتر باشد' });
 
-    store.users.update(id, { password: newPassword });
+    await store.users.update(id, { password: await hashPassword(newPassword) });
     res.status(200).json({ message: 'رمز عبور کاربر با موفقیت تغییر کرد' });
 });
 
-app.get('/api/admin/tickets', isAdmin, (req, res) => {
-    res.json(store.tickets.list());
+app.get('/api/admin/tickets', isAdmin, async (req, res) => {
+    res.json(await store.tickets.list());
 });
 
-app.get('/api/admin/tickets/:id', isAdmin, (req, res) => {
-    const ticket = store.tickets.getById(req.params.id);
+app.get('/api/admin/tickets/:id', isAdmin, async (req, res) => {
+    const ticket = await store.tickets.getById(req.params.id);
     if (ticket) res.json(ticket);
     else res.status(404).json({ message: 'تیکت یافت نشد' });
 });
 
-app.put('/api/admin/tickets/:id', isAdmin, (req, res) => {
+app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { status, reply } = req.body;
-    const ticket = store.tickets.getById(id);
+    const ticket = await store.tickets.getById(id);
     if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
 
     if (status) ticket.status = status;
     if (reply) {
         ticket.replies = ticket.replies || [];
         ticket.replies.push({
-            userId: req.headers['x-user-id'],
+            userId: req.user.id,
             content: reply,
             createdAt: new Date().toISOString()
         });
         ticket.status = 'answered';
     }
     ticket.updatedAt = new Date().toISOString();
-    res.json(store.tickets.update(id, ticket));
+    res.json(await store.tickets.update(id, ticket));
 });
 
-app.get('/api/admin/stats', isAdmin, (req, res) => {
-    res.json(store.stats());
+app.get('/api/admin/stats', isAdmin, async (req, res) => {
+    res.json(await store.stats());
 });
 
 // --- User tickets ---
-app.get('/api/tickets', (req, res) => {
-    const user = requireUser(req, res);
+app.get('/api/tickets', async (req, res) => {
+    const user = await requireUser(req, res);
     if (!user) return;
-    res.json(store.tickets.listByUser(user.id));
+    res.json(await store.tickets.listByUser(user.id));
 });
 
-app.post('/api/tickets', (req, res) => {
-    const user = requireUser(req, res);
+app.post('/api/tickets', async (req, res) => {
+    const user = await requireUser(req, res);
     if (!user) return;
     const subject = String(req.body.subject || '').trim();
     const content = String(req.body.content || req.body.message || '').trim();
     if (!subject || !content) {
         return res.status(400).json({ message: 'موضوع و متن تیکت الزامی است' });
     }
-    const ticket = store.tickets.create({ userId: user.id, subject, content });
+    const ticket = await store.tickets.create({ userId: user.id, subject, content });
     res.status(201).json(ticket);
 });
 
-app.get('/api/tickets/:id', (req, res) => {
-    const user = requireUser(req, res);
+app.get('/api/tickets/:id', async (req, res) => {
+    const user = await requireUser(req, res);
     if (!user) return;
-    const ticket = store.tickets.getById(req.params.id);
+    const ticket = await store.tickets.getById(req.params.id);
     if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
     if (ticket.userId !== user.id && !user.isAdmin) {
         return res.status(403).json({ message: 'دسترسی غیرمجاز' });
@@ -1417,37 +1501,37 @@ app.get('/api/tickets/:id', (req, res) => {
 });
 
 // --- Banner, News, Video, Podcast Routes (Content Management) ---
-app.get('/api/banners', (req, res) => res.set('Cache-Control', 'no-store').json(store.banners.list()));
-app.post('/api/admin/banners', isAdmin, upload.single('image'), (req, res) => {
+app.get('/api/banners', async (req, res) => res.set('Cache-Control', 'no-store').json(await store.banners.list()));
+app.post('/api/admin/banners', isAdmin, upload.single('image'), async (req, res) => {
     const { title, link } = req.body;
     if (!req.file) return res.status(400).json({ message: 'تصویر بنر الزامی است' });
-    const newBanner = store.banners.create({ title, link, imageUrl: `/uploads/${req.file.filename}` });
+    const newBanner = await store.banners.create({ title, link, imageUrl: `/uploads/${req.file.filename}` });
     res.status(201).json(newBanner);
 });
-app.put('/api/admin/banners/:id', isAdmin, upload.single('image'), (req, res) => {
-    const current = store.banners.list().find((b) => Number(b.id) === Number(req.params.id));
+app.put('/api/admin/banners/:id', isAdmin, upload.single('image'), async (req, res) => {
+    const current = (await store.banners.list()).find((b) => Number(b.id) === Number(req.params.id));
     if (!current) return res.status(404).json({ message: 'بنر یافت نشد' });
-    const updated = store.banners.update(req.params.id, {
+    const updated = await store.banners.update(req.params.id, {
         title: req.body.title !== undefined ? req.body.title : current.title,
         link: req.body.link !== undefined ? req.body.link : current.link,
         imageUrl: req.file ? `/uploads/${req.file.filename}` : current.imageUrl
     });
     res.json(updated);
 });
-app.delete('/api/admin/banners/:id', isAdmin, (req, res) => {
-    if (store.banners.remove(req.params.id)) res.status(200).json({ message: 'بنر با موفقیت حذف شد' });
+app.delete('/api/admin/banners/:id', isAdmin, async (req, res) => {
+    if (await store.banners.remove(req.params.id)) res.status(200).json({ message: 'بنر با موفقیت حذف شد' });
     else res.status(404).json({ message: 'بنر یافت نشد' });
 });
 
-app.get('/api/news', (req, res) => res.json(paginateList(store.news.list(), req)));
-app.get('/api/news/:id', (req, res) => {
-    const article = store.news.getById(req.params.id);
+app.get('/api/news', async (req, res) => res.json(paginateList(await store.news.list(), req)));
+app.get('/api/news/:id', async (req, res) => {
+    const article = await store.news.getById(req.params.id);
     if (article) res.json(article);
     else res.status(404).json({ message: 'مقاله یافت نشد' });
 });
-app.post('/api/admin/news', isAdmin, upload.single('image'), (req, res) => {
+app.post('/api/admin/news', isAdmin, upload.single('image'), async (req, res) => {
     const { title, content, summary, category } = req.body;
-    const newArticle = store.news.create({
+    const newArticle = await store.news.create({
         title,
         summary,
         content,
@@ -1457,13 +1541,13 @@ app.post('/api/admin/news', isAdmin, upload.single('image'), (req, res) => {
     });
     res.status(201).json(newArticle);
 });
-app.put('/api/admin/news/:id', isAdmin, upload.single('image'), (req, res) => {
+app.put('/api/admin/news/:id', isAdmin, upload.single('image'), async (req, res) => {
     const { id } = req.params;
     const { title, content, summary, category } = req.body;
-    const current = store.news.getById(id);
+    const current = await store.news.getById(id);
     if (!current) return res.status(404).json({ message: 'مقاله یافت نشد' });
 
-    const updatedArticle = store.news.update(id, {
+    const updatedArticle = await store.news.update(id, {
         title,
         summary,
         content,
@@ -1473,22 +1557,22 @@ app.put('/api/admin/news/:id', isAdmin, upload.single('image'), (req, res) => {
     });
     res.json(updatedArticle);
 });
-app.delete('/api/admin/news/:id', isAdmin, (req, res) => {
-    if (store.news.remove(req.params.id)) res.status(200).json({ message: 'مقاله با موفقیت حذف شد' });
+app.delete('/api/admin/news/:id', isAdmin, async (req, res) => {
+    if (await store.news.remove(req.params.id)) res.status(200).json({ message: 'مقاله با موفقیت حذف شد' });
     else res.status(404).json({ message: 'مقاله یافت نشد' });
 });
 
-app.get('/api/videos', (req, res) => res.json(paginateList(store.videos.list(), req)));
-app.get('/api/videos/:id', (req, res) => {
-    const video = store.videos.getById(req.params.id);
+app.get('/api/videos', async (req, res) => res.json(paginateList(await store.videos.list(), req)));
+app.get('/api/videos/:id', async (req, res) => {
+    const video = await store.videos.getById(req.params.id);
     if (video) res.json(video);
     else res.status(404).json({ message: 'ویدیو یافت نشد' });
 });
-app.post('/api/admin/videos', isAdmin, upload.single('thumbnail'), (req, res) => {
+app.post('/api/admin/videos', isAdmin, upload.single('thumbnail'), async (req, res) => {
     const { title, url, summary } = req.body;
     if (!title || !url) return res.status(400).json({ message: 'Title and URL are required' });
     if (!req.file) return res.status(400).json({ message: 'تصویر کاور ویدیو الزامی است' });
-    const newVideo = store.videos.create({
+    const newVideo = await store.videos.create({
         title,
         url,
         summary: summary || '',
@@ -1497,8 +1581,8 @@ app.post('/api/admin/videos', isAdmin, upload.single('thumbnail'), (req, res) =>
     });
     res.status(201).json(newVideo);
 });
-app.delete('/api/admin/videos/:id', isAdmin, (req, res) => {
-    const removed = store.videos.remove(req.params.id);
+app.delete('/api/admin/videos/:id', isAdmin, async (req, res) => {
+    const removed = await store.videos.remove(req.params.id);
     if (removed) {
         if (removed.thumbnailUrl && removed.thumbnailUrl.startsWith('/uploads/')) {
             const filePath = path.join(uploadsDir, path.basename(removed.thumbnailUrl));
@@ -1507,11 +1591,11 @@ app.delete('/api/admin/videos/:id', isAdmin, (req, res) => {
         res.status(200).json({ message: 'ویدیو با موفقیت حذف شد' });
     } else res.status(404).json({ message: 'ویدیو یافت نشد' });
 });
-app.put('/api/admin/videos/:id', isAdmin, upload.single('thumbnail'), (req, res) => {
-    const current = store.videos.getById(req.params.id);
+app.put('/api/admin/videos/:id', isAdmin, upload.single('thumbnail'), async (req, res) => {
+    const current = await store.videos.getById(req.params.id);
     if (!current) return res.status(404).json({ message: 'ویدیو یافت نشد' });
     const { title, url, summary } = req.body;
-    const updated = store.videos.update(req.params.id, {
+    const updated = await store.videos.update(req.params.id, {
         title: title !== undefined ? title : current.title,
         url: url !== undefined ? url : current.url,
         summary: summary !== undefined ? summary : current.summary,
@@ -1520,16 +1604,16 @@ app.put('/api/admin/videos/:id', isAdmin, upload.single('thumbnail'), (req, res)
     res.json(updated);
 });
 
-app.get('/api/podcasts', (req, res) => res.json(paginateList(store.podcasts.list(), req)));
-app.get('/api/podcasts/:id', (req, res) => {
-    const podcast = store.podcasts.getById(req.params.id);
+app.get('/api/podcasts', async (req, res) => res.json(paginateList(await store.podcasts.list(), req)));
+app.get('/api/podcasts/:id', async (req, res) => {
+    const podcast = await store.podcasts.getById(req.params.id);
     if (podcast) res.json(podcast);
     else res.status(404).json({ message: 'پادکست یافت نشد' });
 });
-app.post('/api/admin/podcasts', isAdmin, upload.single('thumbnail'), (req, res) => {
+app.post('/api/admin/podcasts', isAdmin, upload.single('thumbnail'), async (req, res) => {
     const { title, url, summary, duration } = req.body;
     if (!title || !url) return res.status(400).json({ message: 'عنوان و لینک پادکست الزامی است' });
-    const newPodcast = store.podcasts.create({
+    const newPodcast = await store.podcasts.create({
         title,
         url,
         summary: summary || '',
@@ -1539,11 +1623,11 @@ app.post('/api/admin/podcasts', isAdmin, upload.single('thumbnail'), (req, res) 
     });
     res.status(201).json(newPodcast);
 });
-app.put('/api/admin/podcasts/:id', isAdmin, upload.single('thumbnail'), (req, res) => {
-    const current = store.podcasts.getById(req.params.id);
+app.put('/api/admin/podcasts/:id', isAdmin, upload.single('thumbnail'), async (req, res) => {
+    const current = await store.podcasts.getById(req.params.id);
     if (!current) return res.status(404).json({ message: 'پادکست یافت نشد' });
     const { title, url, summary, duration } = req.body;
-    const updated = store.podcasts.update(req.params.id, {
+    const updated = await store.podcasts.update(req.params.id, {
         title: title !== undefined ? title : current.title,
         url: url !== undefined ? url : current.url,
         summary: summary !== undefined ? summary : current.summary,
@@ -1552,8 +1636,8 @@ app.put('/api/admin/podcasts/:id', isAdmin, upload.single('thumbnail'), (req, re
     });
     res.json(updated);
 });
-app.delete('/api/admin/podcasts/:id', isAdmin, (req, res) => {
-    const removed = store.podcasts.remove(req.params.id);
+app.delete('/api/admin/podcasts/:id', isAdmin, async (req, res) => {
+    const removed = await store.podcasts.remove(req.params.id);
     if (removed) return res.json({ message: 'پادکست حذف شد' });
     res.status(404).json({ message: 'پادکست یافت نشد' });
 });
@@ -1567,27 +1651,27 @@ const parsePrice = (value) => {
     return Number.isFinite(n) && n >= 0 ? n : null;
 };
 
-app.get('/api/shop/categories', (req, res) => {
+app.get('/api/shop/categories', async (req, res) => {
     res.json(SHOP_CATEGORIES);
 });
 
-app.get('/api/shop/products', (req, res) => {
-    res.json(paginateList(store.products.listActive({ category: req.query.category, q: req.query.q }), req));
+app.get('/api/shop/products', async (req, res) => {
+    res.json(paginateList(await store.products.listActive({ category: req.query.category, q: req.query.q }), req));
 });
 
-app.get('/api/shop/products/:id', (req, res) => {
-    const product = store.products.getById(req.params.id);
+app.get('/api/shop/products/:id', async (req, res) => {
+    const product = await store.products.getById(req.params.id);
     if (!product || product.active === false) {
         return res.status(404).json({ message: 'محصول یافت نشد' });
     }
     res.json(product);
 });
 
-app.get('/api/admin/products', isAdmin, (req, res) => {
-    res.json(store.products.listAll());
+app.get('/api/admin/products', isAdmin, async (req, res) => {
+    res.json(await store.products.listAll());
 });
 
-app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
+app.post('/api/admin/products', isAdmin, upload.single('image'), async (req, res) => {
     const { name, description, category, price, stock } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -1601,7 +1685,7 @@ app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
         return res.status(400).json({ message: 'موجودی معتبر نیست' });
     }
 
-    const newProduct = store.products.create({
+    const newProduct = await store.products.create({
         name: String(name).trim(),
         description: description ? String(description).trim() : '',
         category: SHOP_CATEGORIES.includes(category) ? category : 'تغذیه',
@@ -1614,9 +1698,9 @@ app.post('/api/admin/products', isAdmin, upload.single('image'), (req, res) => {
     res.status(201).json(newProduct);
 });
 
-app.put('/api/admin/products/:id', isAdmin, upload.single('image'), (req, res) => {
+app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, res) => {
     const id = parseInt(req.params.id, 10);
-    const current = store.products.getById(id);
+    const current = await store.products.getById(id);
     if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
 
     const { name, description, category, price, stock, active } = req.body;
@@ -1647,43 +1731,39 @@ app.put('/api/admin/products/:id', isAdmin, upload.single('image'), (req, res) =
     }
     if (req.file) updated.imageUrl = `/uploads/${req.file.filename}`;
 
-    res.json(store.products.update(id, updated));
+    res.json(await store.products.update(id, updated));
 });
 
-app.delete('/api/admin/products/:id', isAdmin, (req, res) => {
-    if (store.products.remove(req.params.id)) {
+app.delete('/api/admin/products/:id', isAdmin, async (req, res) => {
+    if (await store.products.remove(req.params.id)) {
         return res.status(200).json({ message: 'محصول حذف شد' });
     }
     res.status(404).json({ message: 'محصول یافت نشد' });
 });
 
-app.get('/api/shop/orders', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId || !store.users.getById(userId)) {
-        return res.status(401).json({ message: 'لطفا وارد شوید' });
-    }
-    res.json(store.orders.listByUser(userId));
+app.get('/api/shop/orders', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
+    res.json(await store.orders.listByUser(userId));
 });
 
-app.get('/api/shop/orders/:id', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId || !store.users.getById(userId)) {
-        return res.status(401).json({ message: 'لطفا وارد شوید' });
-    }
-    const order = store.orders.getById(req.params.id);
+app.get('/api/shop/orders/:id', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
+    const order = await store.orders.getById(req.params.id);
     if (!order) return res.status(404).json({ message: 'سفارش یافت نشد' });
-    const user = store.users.getById(userId);
-    if (order.userId !== userId && !(user && user.isAdmin)) {
+    if (order.userId !== userId && !user.isAdmin) {
         return res.status(403).json({ message: 'دسترسی غیرمجاز' });
     }
     res.json(order);
 });
 
-app.post('/api/shop/orders', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId || !store.users.getById(userId)) {
-        return res.status(401).json({ message: 'لطفا وارد شوید' });
-    }
+app.post('/api/shop/orders', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
 
     const { items, shippingAddress, phone, notes } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
@@ -1705,7 +1785,7 @@ app.post('/api/shop/orders', (req, res) => {
         if (!productId || !Number.isFinite(quantity) || quantity < 1) {
             return res.status(400).json({ message: 'آیتم سفارش نامعتبر است' });
         }
-        const product = store.products.getById(productId);
+        const product = await store.products.getById(productId);
         if (!product || product.active === false) {
             return res.status(400).json({ message: `محصول با شناسه ${productId} یافت نشد` });
         }
@@ -1724,7 +1804,7 @@ app.post('/api/shop/orders', (req, res) => {
     }
 
     try {
-        const newOrder = store.orders.create({
+        const newOrder = await store.orders.create({
             userId,
             items: orderItems,
             total,
@@ -1744,17 +1824,17 @@ app.post('/api/shop/orders', (req, res) => {
     }
 });
 
-app.get('/api/admin/orders', isAdmin, (req, res) => {
-    res.json(store.orders.listAll());
+app.get('/api/admin/orders', isAdmin, async (req, res) => {
+    res.json(await store.orders.listAll());
 });
 
-app.put('/api/admin/orders/:id', isAdmin, (req, res) => {
+app.put('/api/admin/orders/:id', isAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const { status } = req.body;
     if (!ORDER_STATUSES.includes(status)) {
         return res.status(400).json({ message: 'وضعیت سفارش نامعتبر است' });
     }
-    const updated = store.orders.updateStatus(id, status);
+    const updated = await store.orders.updateStatus(id, status);
     if (!updated) return res.status(404).json({ message: 'سفارش یافت نشد' });
     res.json(updated);
 });
@@ -1784,8 +1864,8 @@ const getOverdueVaccinationReminders = (child) => {
     }];
 };
 
-const getVaccineDelayMessagesForUser = (userId) => {
-    const userChildren = store.children.listByUserId(userId);
+const getVaccineDelayMessagesForUser = async (userId) => {
+    const userChildren = await store.children.listByUserId(userId);
     return userChildren
         .filter(childHasOverdueVaccination)
         .map(child => ({
@@ -1803,20 +1883,25 @@ const getVaccineDelayMessagesForUser = (userId) => {
         }));
 };
 
-app.get('/api/vaccination-schedule', (req, res) => res.json(vaccinationSchedule));
+app.get('/api/vaccination-schedule', async (req, res) => res.json(vaccinationSchedule));
 
-app.post('/api/generate-reminders/:userId', (req, res) => {
+app.post('/api/generate-reminders/:userId', async (req, res) => {
+    const actor = await requireUser(req, res);
+    if (!actor) return;
     const { userId } = req.params;
-    const userChildren = store.children.listByUserId(userId);
+    if (Number(actor.id) !== Number(userId) && !actor.isAdmin) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
+    const userChildren = await store.children.listByUserId(userId);
     let created = 0;
 
-    userChildren.forEach(child => {
-        const existing = store.reminders.list(child.id);
+    for (const child of userChildren) {
+        const existing = await store.reminders.list(child.id);
         const reminderId = `generated-vaccine-delay-${child.id}`;
         const alreadyExists = existing.some(r => r.id === reminderId || r.id === `vaccine-delay-${child.id}`);
 
         if (!alreadyExists && childHasOverdueVaccination(child)) {
-            store.reminders.create(child.id, {
+            await store.reminders.create(child.id, {
                 id: reminderId,
                 title: 'تاخیر در تزریق واکس',
                 date: new Date().toISOString().split('T')[0],
@@ -1828,17 +1913,18 @@ app.post('/api/generate-reminders/:userId', (req, res) => {
             });
             created++;
         }
-    });
+    }
 
     res.status(201).json({ message: 'یادآورها با موفقیت تولید شدند', created });
 });
 
-app.get('/api/reminders/all/:childId', (req, res) => {
+app.get('/api/reminders/all/:childId', async (req, res) => {
     const { childId } = req.params;
-    const child = store.children.getById(childId);
-    if (!child) return res.status(404).json({ message: 'کودک یافت نشد' });
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
 
-    const manualReminders = store.reminders.list(childId).filter(r => {
+    const manualReminders = (await store.reminders.list(childId)).filter(r => {
         if (r.category === 'vaccine_delay') return false;
         if (r.id && String(r.id).startsWith('generated-vaccine')) return false;
         if (r.title && (r.title.includes('تأخیر در واکسن') || r.title.includes('تاخیر در تزریق'))) return false;
@@ -1848,11 +1934,11 @@ app.get('/api/reminders/all/:childId', (req, res) => {
     res.json([...autoReminders, ...manualReminders]);
 });
 
-app.post('/api/reminders/manual/:childId', (req, res) => {
+app.post('/api/reminders/manual/:childId', async (req, res) => {
     const { childId } = req.params;
     const { title, date, description, alarmAt } = req.body;
     if (!title || !date) return res.status(400).json({ message: 'عنوان و تاریخ الزامی است' });
-    if (!store.children.getById(childId)) return res.status(404).json({ message: 'کودک یافت نشد' });
+    if (!(await requireOwnedChild(req, res))) return;
 
     const newReminder = {
         id: `manual-${Date.now()}`,
@@ -1864,13 +1950,13 @@ app.post('/api/reminders/manual/:childId', (req, res) => {
         type: 'info',
         source: 'manual'
     };
-    store.reminders.create(childId, newReminder);
+    await store.reminders.create(childId, newReminder);
     res.status(201).json(newReminder);
 });
 
-app.delete('/api/reminders/manual/:childId/:reminderId', (req, res) => {
+app.delete('/api/reminders/manual/:childId/:reminderId', async (req, res) => {
     const { childId, reminderId } = req.params;
-    if (store.reminders.remove(childId, reminderId)) {
+    if (await store.reminders.remove(childId, reminderId)) {
         res.status(200).json({ message: 'یادآوری با موفقیت حذف شد' });
     } else {
         res.status(404).json({ message: 'یادآوری مشخص شده یافت نشد' });
@@ -1878,16 +1964,18 @@ app.delete('/api/reminders/manual/:childId/:reminderId', (req, res) => {
 });
 
 // --- User personal reminders / alarms ---
-app.get('/api/user-reminders', (req, res) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    res.json(store.userReminders.list(userId));
+app.get('/api/user-reminders', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = user.id;
+    res.json(await store.userReminders.list(userId));
 });
 
-app.post('/api/user-reminders', (req, res) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    if (!store.users.getById(userId)) return res.status(404).json({ message: 'کاربر یافت نشد' });
+app.post('/api/user-reminders', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = user.id;
+    if (!await store.users.getById(userId)) return res.status(404).json({ message: 'کاربر یافت نشد' });
 
     const { title, description, alarmAt } = req.body;
     if (!title || !alarmAt) {
@@ -1907,13 +1995,14 @@ app.post('/api/user-reminders', (req, res) => {
         type: 'info',
         source: 'user'
     };
-    store.userReminders.create(userId, newReminder);
+    await store.userReminders.create(userId, newReminder);
     res.status(201).json(newReminder);
 });
 
-app.put('/api/user-reminders/:id', (req, res) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+app.put('/api/user-reminders/:id', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = user.id;
     const { title, description, alarmAt, notified } = req.body;
     if (alarmAt !== undefined && Number.isNaN(new Date(alarmAt).getTime())) {
         return res.status(400).json({ message: 'زمان آلارم نامعتبر است' });
@@ -1923,76 +2012,81 @@ app.put('/api/user-reminders/:id', (req, res) => {
     if (description !== undefined) patch.description = description;
     if (alarmAt !== undefined) patch.alarmAt = new Date(alarmAt).toISOString();
     if (notified !== undefined) patch.notified = !!notified;
-    const updated = store.userReminders.update(userId, req.params.id, patch);
+    const updated = await store.userReminders.update(userId, req.params.id, patch);
     if (!updated) return res.status(404).json({ message: 'یادآوری یافت نشد' });
     res.json(updated);
 });
 
-app.delete('/api/user-reminders/:id', (req, res) => {
-    const userId = req.headers['x-user-id'];
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    if (store.userReminders.remove(userId, req.params.id)) {
+app.delete('/api/user-reminders/:id', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = user.id;
+    if (await store.userReminders.remove(userId, req.params.id)) {
         return res.status(200).json({ message: 'یادآوری حذف شد' });
     }
     res.status(404).json({ message: 'یادآوری یافت نشد' });
 });
 
 // --- Messages (inbox) ---
-app.get('/api/messages', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+app.get('/api/messages', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
 
-    const inbox = store.messages.listForUser(userId);
-    const vaccineMessages = getVaccineDelayMessagesForUser(userId);
+    const inbox = await store.messages.listForUser(userId);
+    const vaccineMessages = await getVaccineDelayMessagesForUser(userId);
     const combined = [...vaccineMessages, ...inbox].sort((a, b) =>
         new Date(b.createdAt) - new Date(a.createdAt)
     );
     res.json(combined);
 });
 
-app.get('/api/messages/unread-count', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
-    const unreadAdmin = store.messages.unreadCount(userId);
-    const unreadVaccine = getVaccineDelayMessagesForUser(userId).length;
+app.get('/api/messages/unread-count', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
+    const unreadAdmin = await store.messages.unreadCount(userId);
+    const unreadVaccine = (await getVaccineDelayMessagesForUser(userId)).length;
     res.json({ count: unreadAdmin + unreadVaccine });
 });
 
-app.put('/api/messages/:id/read', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+app.put('/api/messages/:id/read', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
 
     const messageId = req.params.id;
     if (String(messageId).startsWith('vaccine-delay-')) {
         return res.json({ message: 'پیام واکسن به‌عنوان خوانده‌شده در نظر گرفته شد' });
     }
 
-    const msg = store.messages.getById(messageId);
+    const msg = await store.messages.getById(messageId);
     if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
         return res.status(404).json({ message: 'پیام یافت نشد' });
     }
-    store.messages.markRead(messageId, userId);
+    await store.messages.markRead(messageId, userId);
     res.json({ message: 'پیام خوانده شد', id: msg.id });
 });
 
-app.delete('/api/messages/:id', (req, res) => {
-    const userId = parseInt(req.headers['x-user-id'], 10);
-    if (!userId) return res.status(401).json({ message: 'شناسه کاربری الزامی است' });
+app.delete('/api/messages/:id', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const userId = Number(user.id);
 
     const messageId = parseInt(req.params.id, 10);
-    const msg = store.messages.getById(messageId);
+    const msg = await store.messages.getById(messageId);
     if (!msg || !Array.isArray(msg.recipientIds) || !msg.recipientIds.includes(userId)) {
         return res.status(404).json({ message: 'پیام یافت نشد' });
     }
-    store.messages.removeRecipient(messageId, userId);
+    await store.messages.removeRecipient(messageId, userId);
     res.json({ message: 'پیام حذف شد' });
 });
 
-app.get('/api/admin/messages', isAdmin, (req, res) => {
-    res.json(store.messages.listAll());
+app.get('/api/admin/messages', isAdmin, async (req, res) => {
+    res.json(await store.messages.listAll());
 });
 
-app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
+app.post('/api/admin/messages', isAdmin, upload.single('image'), async (req, res) => {
     const { title, body, link, mode, userId, userIds } = req.body;
     if (!title || !String(title).trim()) {
         return res.status(400).json({ message: 'عنوان پیام الزامی است' });
@@ -2005,22 +2099,25 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         if (userIds) {
             try {
                 const parsed = typeof userIds === 'string' ? JSON.parse(userIds) : userIds;
-                recipientIds = (Array.isArray(parsed) ? parsed : [])
-                    .map(id => parseInt(id, 10))
-                    .filter(id => !Number.isNaN(id) && store.users.getById(id));
+                const ids = (Array.isArray(parsed) ? parsed : []).map(id => parseInt(id, 10));
+                recipientIds = [];
+                for (const id of ids) {
+                    if (Number.isNaN(id)) continue;
+                    if (await store.users.getById(id)) recipientIds.push(id);
+                }
             } catch (e) {
                 return res.status(400).json({ message: 'لیست کاربران نامعتبر است' });
             }
         }
         if (recipientIds.length === 0) {
-            recipientIds = store.users.listNonAdminIds();
+            recipientIds = await store.users.listNonAdminIds();
             if (recipientIds.length === 0) {
-                recipientIds = store.users.listAllIds();
+                recipientIds = await store.users.listAllIds();
             }
         }
     } else {
         const targetId = parseInt(userId, 10);
-        if (!targetId || !store.users.getById(targetId)) {
+        if (!targetId || !await store.users.getById(targetId)) {
             return res.status(400).json({ message: 'کاربر گیرنده معتبر نیست' });
         }
         recipientIds = [targetId];
@@ -2030,7 +2127,7 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         return res.status(400).json({ message: 'هیچ گیرنده‌ای یافت نشد' });
     }
 
-    const newMessage = store.messages.create({
+    const newMessage = await store.messages.create({
         title: String(title).trim(),
         body: body ? String(body).trim() : '',
         link: link ? String(link).trim() : null,
@@ -2039,25 +2136,31 @@ app.post('/api/admin/messages', isAdmin, upload.single('image'), (req, res) => {
         isBulk: sendMode === 'bulk',
         recipientIds,
         createdAt: new Date().toISOString(),
-        createdBy: parseInt(req.headers['x-user-id'], 10)
+        createdBy: req.user ? Number(req.user.id) : null
     });
     res.status(201).json(newMessage);
 });
 
-app.delete('/api/admin/messages/:id', isAdmin, (req, res) => {
-    if (store.messages.remove(req.params.id)) {
+app.delete('/api/admin/messages/:id', isAdmin, async (req, res) => {
+    if (await store.messages.remove(req.params.id)) {
         return res.status(200).json({ message: 'پیام حذف شد' });
     }
     res.status(404).json({ message: 'پیام یافت نشد' });
 });
 
+app.use((err, req, res, next) => {
+    console.error(err);
+    if (res.headersSent) return next(err);
+    res.status(500).json({ message: 'خطای داخلی سرور' });
+});
+
 async function startServer() {
     try {
-        store.connect();
-        ensureDefaultAdmin();
+        await store.connect();
+        await ensureDefaultAdmin();
         app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));
     } catch (err) {
-        console.error('Failed to start server with SQLite:', err);
+        console.error('Failed to start TatKids server:', err);
         process.exit(1);
     }
 }
