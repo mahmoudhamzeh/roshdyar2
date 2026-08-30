@@ -79,14 +79,45 @@ function toPgPlaceholders(sql) {
     return String(sql).replace(/\?/g, () => `$${++index}`);
 }
 
+function findCategoryNode(tree, name) {
+    if (!name) return null;
+    const walk = (nodes) => {
+        for (const node of nodes || []) {
+            if (node.name === name) return node;
+            const found = walk(node.children);
+            if (found) return found;
+        }
+        return null;
+    };
+    return walk(tree);
+}
+
+function descendantCategoryNames(tree, name) {
+    if (!name || name === 'همه') return [];
+    const node = findCategoryNode(tree, name);
+    if (!node) return [name];
+    return flattenCategories([node]).map((item) => item.name);
+}
+
 function catalogFilters(raw = {}) {
     const category = raw.category && raw.category !== 'همه' ? String(raw.category).trim() : '';
     const categoryId = raw.categoryId ? Number(raw.categoryId) : null;
+    const categoryNames = Array.isArray(raw.categoryNames)
+        ? raw.categoryNames.map((name) => String(name || '').trim()).filter(Boolean)
+        : (category ? [category] : []);
     const q = raw.q ? String(raw.q).trim().toLowerCase() : '';
     const ageBand = raw.age || raw.ageBand ? String(raw.age || raw.ageBand).trim() : '';
     const skill = raw.skill ? String(raw.skill).trim() : '';
     const sort = String(raw.sort || 'newest');
-    return { category, categoryId: Number.isFinite(categoryId) ? categoryId : null, q, ageBand, skill, sort };
+    return {
+        category,
+        categoryNames,
+        categoryId: Number.isFinite(categoryId) ? categoryId : null,
+        q,
+        ageBand,
+        skill,
+        sort
+    };
 }
 
 function catalogOrderBy(sort) {
@@ -151,9 +182,12 @@ function buildCatalogSql(filters = {}, { activeOnly = true } = {}) {
         WHERE 1 = 1
     `;
     if (activeOnly) sql += ' AND p.active = 1';
-    if (f.category) {
+    if (f.categoryNames.length === 1) {
         sql += ' AND p.category = ?';
-        params.push(f.category);
+        params.push(f.categoryNames[0]);
+    } else if (f.categoryNames.length > 1) {
+        sql += ` AND p.category IN (${f.categoryNames.map(() => '?').join(',')})`;
+        params.push(...f.categoryNames);
     }
     if (f.q) {
         sql += ' AND (lower(p.name) LIKE ? OR lower(p.description) LIKE ?)';
@@ -215,6 +249,8 @@ module.exports = {
     ageBandFromBirthDate,
     buildCategoryTree,
     flattenCategories,
+    findCategoryNode,
+    descendantCategoryNames,
     toPgPlaceholders,
     catalogFilters,
     buildCatalogSql,

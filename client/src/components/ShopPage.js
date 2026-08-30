@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSearch, faSliders } from '@fortawesome/free-solid-svg-icons';
+import { faSearch } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import ShopProductCard from './ShopProductCard';
 import ShopHeroSlider from './ShopHeroSlider';
 import AmazingOffersRail from './AmazingOffersRail';
 import ShopCategoryTiles from './ShopCategoryTiles';
+import CategoryCascade from './CategoryCascade';
 import { AGE_BANDS, SORT_OPTIONS, ageBandFromBirthDate } from '../utils/shop';
 import './ShopPage.css';
 import './ShopWorld.css';
@@ -30,8 +31,6 @@ const ShopPage = () => {
     const [error, setError] = useState('');
     const [search, setSearch] = useState(query);
     const [childBands, setChildBands] = useState([]);
-    const [filtersOpen, setFiltersOpen] = useState(false);
-
     const hasFilters = category !== 'همه' || Boolean(skill || age || query);
 
     const setParam = (key, value) => {
@@ -138,56 +137,53 @@ const ShopPage = () => {
                         />
                         <button type="submit">جستجو</button>
                     </form>
-                    <div className="shop-toolbar-row">
-                        <button
-                            type="button"
-                            className="shop-filter-toggle"
-                            onClick={() => setFiltersOpen((open) => !open)}
-                        >
-                            <FontAwesomeIcon icon={faSliders} />
-                            فیلتر سن و مهارت
-                        </button>
-                        <select
-                            className="shop-sort"
-                            value={sort}
-                            onChange={(e) => setParam('sort', e.target.value)}
-                            aria-label="مرتب‌سازی"
-                        >
-                            {SORT_OPTIONS.map((option) => (
-                                <option key={option.id} value={option.id}>{option.label}</option>
-                            ))}
-                        </select>
-                    </div>
-                    {filtersOpen && (
-                        <div className="shop-filter-panel">
-                            <p>رده سنی</p>
-                            <div className="shop-chip-row">
+                    <div className="shop-filter-panel shop-filter-selects">
+                        <CategoryCascade
+                            tree={home?.categories || []}
+                            value={category === 'همه' ? '' : category}
+                            onChange={(name) => setParam('category', name || 'همه')}
+                            emptyLabel="همه گروه‌ها"
+                        />
+                        <label>
+                            رده سنی
+                            <select
+                                className="shop-sort"
+                                value={age}
+                                onChange={(e) => setParam('age', e.target.value)}
+                            >
+                                <option value="">همه سنین</option>
                                 {AGE_BANDS.map((band) => (
-                                    <button
-                                        key={band.id}
-                                        type="button"
-                                        className={`shop-chip ${age === band.id ? 'is-active' : ''}`}
-                                        onClick={() => setParam('age', age === band.id ? '' : band.id)}
-                                    >
-                                        {band.label}
-                                    </button>
+                                    <option key={band.id} value={band.id}>{band.label}</option>
                                 ))}
-                            </div>
-                            <p>مهارت رشدی</p>
-                            <div className="shop-chip-row">
+                            </select>
+                        </label>
+                        <label>
+                            مهارت رشدی
+                            <select
+                                className="shop-sort"
+                                value={skill}
+                                onChange={(e) => setParam('skill', e.target.value)}
+                            >
+                                <option value="">همه مهارت‌ها</option>
                                 {(home?.skills || []).map((item) => (
-                                    <button
-                                        key={item.slug}
-                                        type="button"
-                                        className={`shop-chip ${skill === item.slug ? 'is-active' : ''}`}
-                                        onClick={() => setParam('skill', skill === item.slug ? '' : item.slug)}
-                                    >
-                                        {item.title}
-                                    </button>
+                                    <option key={item.slug} value={item.slug}>{item.title}</option>
                                 ))}
-                            </div>
-                        </div>
-                    )}
+                            </select>
+                        </label>
+                        <label>
+                            مرتب‌سازی
+                            <select
+                                className="shop-sort"
+                                value={sort}
+                                onChange={(e) => setParam('sort', e.target.value)}
+                                aria-label="مرتب‌سازی"
+                            >
+                                {SORT_OPTIONS.map((option) => (
+                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
                 </section>
 
                 {loading && <p className="shop-status">در حال بارگذاری محصولات...</p>}

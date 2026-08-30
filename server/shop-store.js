@@ -3,6 +3,8 @@ const {
     SKILLS,
     INTERNAL_VENDOR,
     CATEGORY_DEFAULTS,
+    buildCategoryTree,
+    descendantCategoryNames,
     buildCatalogSql,
     mapCatalogRow
 } = require('./shop-model');
@@ -219,24 +221,94 @@ function seedShopExtrasSqlite(db) {
         `).run();
     }
 
-    const parents = db.prepare(
-        "SELECT id, name FROM product_categories WHERE parent_id IS NULL"
-    ).all();
-    const insertChild = db.prepare(
-        'INSERT INTO product_categories (name, parent_id, sort_order) VALUES (?, ?, ?)'
-    );
-    const childSeeds = {
-        'اسباب‌بازی': ['ساختنی', 'چوبی', 'حرکتی'],
-        'کتاب': ['داستان', 'آموزشی'],
-        'تغذیه': ['غذای کمکی', 'میان‌وعده'],
-        'پوشاک': ['نوزاد', 'کودک'],
-        'بهداشت': ['حمام', 'مراقبت پوست']
+    seedCategoryTreeSqlite(db);
+}
+
+const CATEGORY_TREE_SEED = {
+    'اسباب‌بازی': [
+        { name: 'دخترانه', children: ['عروسک', 'آشپزخانه'] },
+        { name: 'پسرانه', children: ['لگو', 'ماشین', 'تفنگ'] },
+        { name: 'ساختنی' },
+        { name: 'چوبی' },
+        { name: 'حرکتی' }
+    ],
+    'کتاب': [{ name: 'داستان' }, { name: 'آموزشی' }],
+    'تغذیه': [{ name: 'غذای کمکی' }, { name: 'میان‌وعده' }],
+    'پوشاک': [{ name: 'نوزاد' }, { name: 'کودک' }],
+    'بهداشت': [{ name: 'حمام' }, { name: 'مراقبت پوست' }]
+};
+
+function looksLikePhone(value) {
+    const digits = String(value || '').replace(/[\s-]/g, '');
+    return /^\+?\d{8,15}$/.test(digits);
+}
+
+function publicCommentAuthor(row) {
+    const username = String((row && row.username) || '').trim();
+    if (username && !looksLikePhone(username)) return username;
+    return 'کاربر تات کیدز';
+}
+
+function seedCategoryTreeSqlite(db) {
+    const find = (name, parentId) => (parentId == null
+        ? db.prepare('SELECT * FROM product_categories WHERE name = ? AND parent_id IS NULL').get(name)
+        : db.prepare('SELECT * FROM product_categories WHERE name = ? AND parent_id = ?').get(name, parentId));
+    const insert = db.prepare('INSERT INTO product_categories (name, parent_id, sort_order) VALUES (?, ?, ?)');
+    const ensure = (name, parentId, sort) => {
+        const row = find(name, parentId);
+        if (row) return row;
+        const info = insert.run(name, parentId, sort);
+        return { id: Number(info.lastInsertRowid), name };
     };
-    parents.forEach((parent) => {
-        const n = db.prepare('SELECT COUNT(*) AS n FROM product_categories WHERE parent_id = ?').get(parent.id).n;
-        if (n > 0) return;
-        (childSeeds[parent.name] || []).forEach((name, index) => insertChild.run(name, parent.id, index));
+    Object.entries(CATEGORY_TREE_SEED).forEach(([rootName, children]) => {
+        const root = find(rootName, null);
+        if (!root) return;
+        children.forEach((child, index) => {
+            const node = ensure(child.name, root.id, index);
+            (child.children || []).forEach((leaf, leafIndex) => ensure(leaf, node.id, leafIndex));
+        });
     });
+}
+
+async function seedCategoryTreePg(one, q) {
+    const find = async (name, parentId) => (parentId == null
+        ? one('SELECT * FROM product_categories WHERE name = $1 AND parent_id IS NULL', [name])
+        : one('SELECT * FROM product_categories WHERE name = $1 AND parent_id = $2', [name, parentId]));
+    const ensure = async (name, parentId, sort) => {
+        const row = await find(name, parentId);
+        if (row) return row;
+        return one(
+            'INSERT INTO product_categories (name, parent_id, sort_order) VALUES ($1,$2,$3) RETURNING *',
+            [name, parentId, sort]
+        );
+    };
+    const roots = Object.entries(CATEGORY_TREE_SEED);
+    for (let i = 0; i < roots.length; i += 1) {
+        const [rootName, children] = roots[i];
+        const root = await find(rootName, null);
+        if (!root) continue;
+        for (let j = 0; j < children.length; j += 1) {
+            const child = children[j];
+            const node = await ensure(child.name, root.id, j);
+            const leaves = child.children || [];
+            for (let k = 0; k < leaves.length; k += 1) {
+                await ensure(leaves[k], node.id, k);
+            }
+        }
+    }
+}
+
+function withCategoryDescendants(filters, tree) {
+    if (!filters || !filters.category) return filters;
+    return { ...filters, categoryNames: descendantCategoryNames(tree, filters.category) };
+}
+
+function categoryTreeFromRows(rows) {
+    return buildCategoryTree((rows || []).map((row) => ({
+        id: Number(row.id),
+        name: row.name,
+        parentId: row.parent_id == null ? null : Number(row.parent_id)
+    })));
 }
 
 function attachSkillsToProducts(products, skillRows) {
@@ -349,7 +421,8 @@ function loadSkillsForProductsSqlite(db, products) {
 }
 
 function listCatalogSqlite(db, asBool, filters, options) {
-    const { sql, params } = buildCatalogSql(filters, options);
+    const tree = categoryTreeFromRows(db.prepare('SELECT id, name, parent_id FROM product_categories').all());
+    const { sql, params } = buildCatalogSql(withCategoryDescendants(filters, tree), options);
     const rows = db.prepare(sql).all(...params).map((row) => mapCatalogRow(row, asBool));
     return loadSkillsForProductsSqlite(db, rows);
 }
@@ -587,6 +660,7 @@ async function ensureShopSchemaPg(q, one, many) {
             WHERE id IN (SELECT id FROM shop_offers ORDER BY id LIMIT 4)
         `);
     }
+    await seedCategoryTreePg(one, q);
 }
 
 function toPg(sql) {
@@ -615,7 +689,8 @@ async function loadSkillsForProductsPg(many, products) {
 }
 
 async function listCatalogPg(many, asBool, filters, options) {
-    const { sql, params } = buildCatalogSql(filters, options);
+    const tree = categoryTreeFromRows(await many('SELECT id, name, parent_id FROM product_categories'));
+    const { sql, params } = buildCatalogSql(withCategoryDescendants(filters, tree), options);
     const rows = (await many(toPg(sql), params)).map((row) => mapCatalogRow(row, asBool));
     return loadSkillsForProductsPg(many, rows);
 }
@@ -756,6 +831,8 @@ module.exports = {
     AGE_BANDS,
     SKILLS,
     INTERNAL_VENDOR,
+    publicCommentAuthor,
+    looksLikePhone,
     ensureShopSchemaSqlite,
     listSkillsSqlite,
     getInternalVendorSqlite,

@@ -180,6 +180,14 @@ async function run() {
         const productAfter = await request('GET', `/api/shop/products/${product.id}`);
         assert.strictEqual(productAfter.data.stock, stockBefore - 1);
 
+        const adminComment = await request('POST', `/api/shop/products/${product.id}/comments`, {
+            headers: auth,
+            body: { body: 'نظر تست ادمین برای امتیاز محصول', rating: 4 }
+        });
+        assert.strictEqual(adminComment.status, 201, JSON.stringify(adminComment.data));
+        assert.strictEqual(adminComment.data.author, 'Amin');
+        assert.ok(!/\d{8,}/.test(String(adminComment.data.author || '')));
+
         const stats = await request('GET', '/api/admin/stats', {
             headers: auth
         });
@@ -245,6 +253,25 @@ async function run() {
         });
         assert.strictEqual(me.status, 200, JSON.stringify(me.data));
         assert.strictEqual(me.data.user.id, verify.data.user.id);
+
+        const phoneComment = await request('POST', `/api/shop/products/${product.id}/comments`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { body: 'نظر کاربر پیامکی بدون نمایش موبایل', rating: 5 }
+        });
+        assert.strictEqual(phoneComment.status, 201, JSON.stringify(phoneComment.data));
+        assert.strictEqual(phoneComment.data.author, 'کاربر تات کیدز');
+        assert.ok(!/\d{8,}/.test(String(phoneComment.data.author || '')));
+
+        const categories = await request('GET', '/api/shop/categories');
+        assert.strictEqual(categories.status, 200);
+        const names = [];
+        const walk = (nodes) => (nodes || []).forEach((node) => {
+            names.push(node.name);
+            walk(node.children);
+        });
+        walk(categories.data);
+        assert.ok(names.includes('پسرانه'));
+        assert.ok(names.includes('لگو'));
 
         const loginAgain = await request('POST', '/api/login', {
             body: { login: 'Amin', password: 'admin' }

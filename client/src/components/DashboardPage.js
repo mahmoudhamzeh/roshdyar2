@@ -99,8 +99,10 @@ const DashboardPage = () => {
             <MainNavbar />
             <main className="dashboard-main">
                 <AppCarousel slides={banners} />
-                <AmazingOffersRail products={sale.products} campaign={sale.campaign} />
                 <ServiceTiles />
+                <div className="dashboard-sale-wrap">
+                    <AmazingOffersRail products={sale.products} campaign={sale.campaign} />
+                </div>
                 <ContentRow
                     title="ویدیوهای آموزشی و تربیتی"
                     items={videos}

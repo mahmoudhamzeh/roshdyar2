@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
-import { AGE_BANDS, flattenCategories } from '../../utils/shop';
+import { AGE_BANDS, findCategoryPath } from '../../utils/shop';
+import CategoryCascade from '../CategoryCascade';
 import './ProductManagement.css';
 
 const API = '';
@@ -90,6 +91,12 @@ const ProductManagement = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const path = findCategoryPath(categories, form.category);
+        const leaf = path[path.length - 1];
+        if (!form.category || (leaf && (leaf.children || []).length)) {
+            alert('گروه و زیرگروه محصول را تا آخرین سطح انتخاب کنید.');
+            return;
+        }
         const admin = getAdmin();
         const formData = new FormData();
         formData.append('name', form.name);
@@ -178,19 +185,15 @@ const ProductManagement = () => {
                         placeholder="توضیحات"
                         rows="4"
                     />
-                    <label>دسته‌بندی</label>
-                    <select
-                        name="category"
+                    <label>گروه و زیرگروه محصول</label>
+                    <CategoryCascade
+                        tree={categories}
                         value={form.category}
-                        onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-                    >
-                        <option value="">انتخاب گروه</option>
-                        {flattenCategories(categories).map((node) => (
-                            <option key={node.id} value={node.name}>
-                                {'— '.repeat(node.depth || 0)}{node.name}
-                            </option>
-                        ))}
-                    </select>
+                        onChange={(name) => setForm((p) => ({ ...p, category: name }))}
+                        emptyLabel="انتخاب گروه"
+                        required
+                        forceLeaf
+                    />
                     <div className="product-form-row">
                         <label>
                             قیمت فروش (تومان)

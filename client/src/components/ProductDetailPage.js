@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useHistory } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faArrowRight, faCartPlus, faStore } from '@fortawesome/free-solid-svg-icons';
+import { faArrowRight, faCartPlus } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import { addToCart, formatPrice } from '../utils/cart';
-import { ageBandLabel, stars } from '../utils/shop';
+import { ageBandLabel, displayCommentAuthor, formatRating, stars } from '../utils/shop';
+import ProductImageGallery from './ProductImageGallery';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
 
@@ -19,7 +20,6 @@ const ProductDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
-    const [activeImage, setActiveImage] = useState(0);
     const [comment, setComment] = useState('');
     const [comments, setComments] = useState([]);
     const [rating, setRating] = useState(5);
@@ -35,7 +35,6 @@ const ProductDetailPage = () => {
                 const data = await res.json();
                 setProduct(data);
                 setQuantity(1);
-                setActiveImage(0);
                 setComments(data.comments || []);
                 setOfferId(data.offerId || (data.offers && data.offers[0] && data.offers[0].id) || null);
             } catch (err) {
@@ -80,30 +79,12 @@ const ProductDetailPage = () => {
                 {!loading && !error && product && (
                     <article className="product-detail animate-fade-up">
                         <div className="product-detail-media">
-                            {(product.images && product.images[activeImage] && product.images[activeImage].imageUrl) || product.imageUrl ? (
-                                <img
-                                    src={`${API}${(product.images && product.images[activeImage] && product.images[activeImage].imageUrl) || product.imageUrl}`}
-                                    alt={product.name}
-                                />
-                            ) : (
-                                <div className="product-detail-placeholder">
-                                    <FontAwesomeIcon icon={faStore} />
-                                </div>
-                            )}
-                            {product.images && product.images.length > 1 && (
-                                <div className="product-thumbs">
-                                    {product.images.map((img, index) => (
-                                        <button
-                                            key={`${img.id}-${index}`}
-                                            type="button"
-                                            className={index === activeImage ? 'is-active' : ''}
-                                            onClick={() => setActiveImage(index)}
-                                        >
-                                            <img src={`${API}${img.imageUrl}`} alt="" />
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
+                            <ProductImageGallery
+                                images={product.images}
+                                imageUrl={product.imageUrl}
+                                name={product.name}
+                                api={API}
+                            />
                         </div>
                         <div className="product-detail-info">
                             <span className="product-detail-cat">{product.category}</span>
@@ -127,7 +108,11 @@ const ProductDetailPage = () => {
                                 </div>
                             )}
                             {product.ratingCount > 0 && (
-                                <p className="shop-rating">{stars(product.ratingAvg)} ({product.ratingCount})</p>
+                                <p className="shop-rating">
+                                    <strong className="shop-rating-num">{formatRating(product.ratingAvg)}</strong>
+                                    {stars(product.ratingAvg)}
+                                    <span> ({product.ratingCount})</span>
+                                </p>
                             )}
                             <p className="product-detail-price">
                                 {formatPrice(product.price)}
@@ -228,8 +213,14 @@ const ProductDetailPage = () => {
                         ) : (
                             comments.map((item) => (
                                 <article key={item.id} className="product-comment">
-                                    <strong>{item.author || 'کاربر'}</strong>
-                                    {item.rating ? <span className="shop-rating"> {stars(item.rating)}</span> : null}
+                                    <strong>{displayCommentAuthor(item)}</strong>
+                                    {item.rating ? (
+                                        <span className="shop-rating">
+                                            {' '}
+                                            <strong className="shop-rating-num">{formatRating(item.rating)}</strong>
+                                            {stars(item.rating)}
+                                        </span>
+                                    ) : null}
                                     <p>{item.body}</p>
                                 </article>
                             ))

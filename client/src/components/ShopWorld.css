@@ -61,6 +61,15 @@
   color: #d97706;
   letter-spacing: 0.08em;
   font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.shop-rating-num {
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  color: #92400e;
 }
 
 .shop-price-was {
@@ -138,6 +147,40 @@
   border: 1px solid #eadfbf;
   border-radius: 14px;
   padding: 0.85rem;
+}
+
+.shop-filter-selects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.shop-filter-selects label,
+.category-cascade label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #6b5b3a;
+}
+
+.shop-filter-selects .category-cascade {
+  grid-column: 1 / -1;
+}
+
+.category-cascade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.65rem;
+}
+
+.category-cascade-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #9a3412;
+  font-size: 0.8rem;
 }
 
 .shop-filter-panel p {

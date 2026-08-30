@@ -86,6 +86,21 @@ function run() {
     assert.strictEqual(upsert2.created, false);
     assert.strictEqual(store.growth.list(createdChild.id).length, 1);
 
+    const shopStore = require('./shop-store');
+    assert.strictEqual(shopStore.publicCommentAuthor({ username: 'Amin' }), 'Amin');
+    assert.strictEqual(shopStore.publicCommentAuthor({ username: '09121112233' }), 'کاربر تات کیدز');
+    assert.strictEqual(shopStore.publicCommentAuthor({ first_name: '09120000000' }), 'کاربر تات کیدز');
+
+    const categoryTree = store.productCategories.tree();
+    const categoryNames = [];
+    const walkCats = (nodes) => (nodes || []).forEach((node) => {
+        categoryNames.push(node.name);
+        walkCats(node.children);
+    });
+    walkCats(categoryTree);
+    assert.ok(categoryNames.includes('پسرانه'), 'toy tree should include پسرانه');
+    assert.ok(categoryNames.includes('لگو'), 'toy tree should include لگو');
+
     const product = store.products.listActive()[0];
     assert.ok(product);
     const vendor = store.shop.getInternalVendor();

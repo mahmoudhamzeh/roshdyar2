@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faStore } from '@fortawesome/free-solid-svg-icons';
 import { formatPrice } from '../utils/cart';
-import { ageBandLabel, stars } from '../utils/shop';
+import { ageBandLabel, formatRating, stars } from '../utils/shop';
 
 const ShopProductCard = ({ product, index = 0 }) => (
     <Link
@@ -26,7 +26,8 @@ const ShopProductCard = ({ product, index = 0 }) => (
             {product.ageBand && <span className="shop-age-badge">{ageBandLabel(product.ageBand)}</span>}
             <h2>{product.name}</h2>
             {product.ratingCount > 0 && (
-                <div className="shop-rating" aria-label={`${product.ratingAvg} از ۵`}>
+                <div className="shop-rating" aria-label={`${formatRating(product.ratingAvg)} از ۵`}>
+                    <strong className="shop-rating-num">{formatRating(product.ratingAvg)}</strong>
                     {stars(product.ratingAvg)}
                     <span> ({product.ratingCount})</span>
                 </div>

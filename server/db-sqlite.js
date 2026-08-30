@@ -2292,7 +2292,7 @@ const productComments = {
             id: Number(row.id),
             productId: Number(row.product_id),
             userId: row.user_id == null ? null : Number(row.user_id),
-            author: row.first_name || row.username || 'کاربر',
+            author: shopStore.publicCommentAuthor(row),
             body: row.body,
             rating: row.rating != null ? Number(row.rating) : null,
             createdAt: row.created_at

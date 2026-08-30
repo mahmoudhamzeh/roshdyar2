@@ -47,6 +47,55 @@ export const flattenCategories = (tree, depth = 0) => {
     return out;
 };
 
+export const findCategoryPath = (tree, name) => {
+    if (!name || name === 'همه') return [];
+    const walk = (nodes, acc) => {
+        for (const node of nodes || []) {
+            const next = [...acc, node];
+            if (node.name === name) return next;
+            const found = walk(node.children || [], next);
+            if (found) return found;
+        }
+        return null;
+    };
+    return walk(tree, []) || [];
+};
+
+export const findCategoryById = (tree, id) => {
+    if (id == null || id === '') return null;
+    for (const node of tree || []) {
+        if (String(node.id) === String(id)) return node;
+        const found = findCategoryById(node.children || [], id);
+        if (found) return found;
+    }
+    return null;
+};
+
+export const findCategoryPathById = (tree, id, acc = []) => {
+    for (const node of tree || []) {
+        const next = [...acc, node];
+        if (String(node.id) === String(id)) return next;
+        const found = findCategoryPathById(node.children || [], id, next);
+        if (found) return found;
+    }
+    return [];
+};
+
+export const formatRating = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return '0.0';
+    return n.toFixed(1);
+};
+
+export const looksLikePhone = (value) =>
+    /^\+?\d{8,15}$/.test(String(value || '').replace(/[\s-]/g, ''));
+
+export const displayCommentAuthor = (item) => {
+    const author = String((item && (item.author || item.username)) || '').trim();
+    if (author && !looksLikePhone(author) && author !== 'کاربر') return author;
+    return 'کاربر تات کیدز';
+};
+
 export const stars = (value) => {
     const n = Math.round(Number(value) || 0);
     return '★'.repeat(Math.max(0, Math.min(5, n))) + '☆'.repeat(Math.max(0, 5 - n));

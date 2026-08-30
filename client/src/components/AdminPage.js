@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Switch, Route, useRouteMatch, Redirect } from 'react-router-dom';
+import { NavLink, Switch, Route, useRouteMatch, Redirect, useLocation } from 'react-router-dom';
 import './AdminPage.css';
 import AdminDashboard from './admin/AdminDashboard';
 import UserManagement from './admin/UserManagement';
@@ -15,9 +15,18 @@ import CategoryManagement from './admin/CategoryManagement';
 import VendorManagement from './admin/VendorManagement';
 import OrderManagement from './admin/OrderManagement';
 
+const SHOP_LINKS = [
+    { to: 'products', label: 'محصولات' },
+    { to: 'product-categories', label: 'گروه و زیرگروه' },
+    { to: 'vendors', label: 'فروشندگان' },
+    { to: 'orders', label: 'سفارش‌ها' },
+    { to: 'banners', label: 'بنر فروشگاه' }
+];
 
 const AdminPage = () => {
-    let { path, url } = useRouteMatch();
+    const { path, url } = useRouteMatch();
+    const location = useLocation();
+    const shopActive = SHOP_LINKS.some((item) => location.pathname.includes(`/${item.to}`));
 
     return (
         <div className="admin-page-container">
@@ -29,11 +38,16 @@ const AdminPage = () => {
                     <NavLink to={`${url}/dashboard`} activeClassName="active">داشبورد</NavLink>
                     <NavLink to={`${url}/users`} activeClassName="active">مدیریت کاربران</NavLink>
                     <NavLink to={`${url}/messages`} activeClassName="active">پیام‌ها</NavLink>
-                    <NavLink to={`${url}/products`} activeClassName="active">محصولات فروشگاه</NavLink>
-                    <NavLink to={`${url}/product-categories`} activeClassName="active">گروه محصولات</NavLink>
-                    <NavLink to={`${url}/vendors`} activeClassName="active">فروشندگان</NavLink>
-                    <NavLink to={`${url}/orders`} activeClassName="active">سفارش‌ها</NavLink>
-                    <NavLink to={`${url}/banners`} activeClassName="active">مدیریت بنرها</NavLink>
+                    <div className={`admin-nav-group ${shopActive ? 'is-open' : ''}`}>
+                        <span className={`admin-nav-heading ${shopActive ? 'is-active' : ''}`}>فروشگاه</span>
+                        <div className="admin-nav-sub">
+                            {SHOP_LINKS.map((item) => (
+                                <NavLink key={item.to} to={`${url}/${item.to}`} activeClassName="active">
+                                    {item.label}
+                                </NavLink>
+                            ))}
+                        </div>
+                    </div>
                     <NavLink to={`${url}/articles`} activeClassName="active">مدیریت مقالات</NavLink>
                     <NavLink to={`${url}/videos`} activeClassName="active">مدیریت ویدیوها</NavLink>
                     <NavLink to={`${url}/podcasts`} activeClassName="active">مدیریت پادکست‌ها</NavLink>

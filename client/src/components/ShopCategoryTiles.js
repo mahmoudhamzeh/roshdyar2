@@ -11,7 +11,7 @@ import {
     faEllipsis,
     faLayerGroup
 } from '@fortawesome/free-solid-svg-icons';
-import { categoryVisual } from '../utils/shop';
+import { categoryVisual, findCategoryById, findCategoryPathById } from '../utils/shop';
 import './ShopCategoryTiles.css';
 
 const ICONS = {
@@ -26,16 +26,14 @@ const ICONS = {
 
 const ShopCategoryTiles = ({ tree = [], selected, onSelect }) => {
     const [parentId, setParentId] = useState(null);
-
-    const parent = useMemo(
-        () => (tree || []).find((node) => String(node.id) === String(parentId)) || null,
-        [tree, parentId]
-    );
+    const crumbs = useMemo(() => findCategoryPathById(tree, parentId), [tree, parentId]);
+    const parent = crumbs[crumbs.length - 1] || findCategoryById(tree, parentId);
     const nodes = parent ? (parent.children || []) : (tree || []);
 
     const pick = (node) => {
         if ((node.children || []).length) {
             setParentId(node.id);
+            onSelect(node.name);
             return;
         }
         onSelect(node.name);
@@ -45,9 +43,25 @@ const ShopCategoryTiles = ({ tree = [], selected, onSelect }) => {
         <section className="shop-circles" aria-label="دسته‌بندی درختی">
             {parent && (
                 <div className="shop-circles__crumb">
-                    <button type="button" onClick={() => setParentId(null)}>همه گروه‌ها</button>
-                    <span>/</span>
-                    <strong>{parent.name}</strong>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setParentId(null);
+                            onSelect('همه');
+                        }}
+                    >
+                        همه گروه‌ها
+                    </button>
+                    {crumbs.map((node, index) => (
+                        <React.Fragment key={node.id || node.name}>
+                            <span>/</span>
+                            {index === crumbs.length - 1 ? (
+                                <strong>{node.name}</strong>
+                            ) : (
+                                <button type="button" onClick={() => setParentId(node.id)}>{node.name}</button>
+                            )}
+                        </React.Fragment>
+                    ))}
                 </div>
             )}
             <div className="shop-circles__row">
@@ -55,6 +69,10 @@ const ShopCategoryTiles = ({ tree = [], selected, onSelect }) => {
                     type="button"
                     className={`shop-circle ${!selected || selected === 'همه' ? 'is-active' : ''}`}
                     onClick={() => {
+                        if (parent) {
+                            onSelect(parent.name);
+                            return;
+                        }
                         setParentId(null);
                         onSelect('همه');
                     }}
@@ -62,7 +80,7 @@ const ShopCategoryTiles = ({ tree = [], selected, onSelect }) => {
                     <span className="shop-circle__icon" style={{ background: '#0f766e' }}>
                         <FontAwesomeIcon icon={faLayerGroup} />
                     </span>
-                    <em>همه</em>
+                    <em>{parent ? `همه ${parent.name}` : 'همه'}</em>
                 </button>
                 {nodes.map((node) => {
                     const visual = categoryVisual(node.name);
