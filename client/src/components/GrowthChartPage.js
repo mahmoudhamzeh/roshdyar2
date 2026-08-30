@@ -18,6 +18,8 @@ import {
 } from '../utils/growth-dates';
 import { toShamsi } from '../utils/dateConverter';
 import { getChildDisplayName } from '../utils/childName';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faRulerVertical, faWeight, faBaby } from '@fortawesome/free-solid-svg-icons';
 import './GrowthChartPage.css';
 import './DatePickerOverride.css';
 
@@ -214,6 +216,10 @@ const GrowthChartPage = () => {
     const [saving, setSaving] = useState(false);
     const [formError, setFormError] = useState('');
     const [expandedId, setExpandedId] = useState(null);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyFrom, setHistoryFrom] = useState('');
+    const [historyTo, setHistoryTo] = useState('');
+    const [chartTab, setChartTab] = useState('height');
 
     const fetchChildData = useCallback(async () => {
         try {
@@ -413,6 +419,13 @@ const GrowthChartPage = () => {
                 >
                     + افزودن داده جدید
                 </button>
+                <button
+                    type="button"
+                    className="history-open-btn"
+                    onClick={() => setHistoryOpen(true)}
+                >
+                    تاریخچه
+                </button>
                 {birthDate && (
                     <p className="age-now-label">
                         سن فعلی کودک: <strong>{formatAgeLabel(childAgeInMonths)}</strong>
@@ -441,90 +454,145 @@ const GrowthChartPage = () => {
                 />
             </div>
 
-            <div className="history-section">
-                <div className="history-header">
-                    <h3>تاریخچه اندازه‌گیری‌ها</h3>
-                    <span>{historyRows.length} رکورد</span>
-                </div>
-                {historyRows.length === 0 ? (
-                    <p className="history-empty">هنوز اندازه‌گیری ثبت نشده است. از دکمه «افزودن داده جدید» استفاده کنید.</p>
-                ) : (
-                    <div className="history-list">
-                        {historyRows.map((record) => {
-                            const age = ageInMonths(record.date, child.birthDate);
-                            const rowKey = record.id || record.date;
-                            const open = expandedId === rowKey;
-                            return (
-                                <article key={rowKey} className={`history-item ${open ? 'is-open' : ''}`}>
-                                    <button
-                                        type="button"
-                                        className="history-item-main"
-                                        onClick={() => setExpandedId(open ? null : rowKey)}
-                                    >
-                                        <div className="history-item-title">
-                                            <strong>{toShamsi(record.date)}</strong>
-                                            <span>{formatAgeLabel(age)}</span>
-                                        </div>
-                                        <div className="history-item-summary">
-                                            <span>قد: {record.height != null ? `${record.height} cm` : '—'}</span>
-                                            <span>وزن: {record.weight != null ? `${record.weight} kg` : '—'}</span>
-                                            <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} cm` : '—'}</span>
-                                        </div>
-                                    </button>
-                                    {open && (
-                                        <div className="history-item-detail">
-                                            <p>در تاریخ <strong>{toShamsi(record.date)}</strong> (سن {formatAgeLabel(age)}) این مقادیر ثبت شده است:</p>
-                                            <ul>
-                                                <li>قد: {record.height != null ? `${record.height} سانتی‌متر` : 'ثبت نشده'}</li>
-                                                <li>وزن: {record.weight != null ? `${record.weight} کیلوگرم` : 'ثبت نشده'}</li>
-                                                <li>دور سر: {record.headCircumference != null ? `${record.headCircumference} سانتی‌متر` : 'ثبت نشده'}</li>
-                                            </ul>
-                                            <div className="history-item-actions">
-                                                <button type="button" className="btn-edit" onClick={() => openEditModal(record)}>ویرایش</button>
-                                                <button type="button" className="btn-delete" onClick={() => handleDelete(record)}>حذف</button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </article>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+            {(() => {
+                const chartTabs = [
+                    {
+                        id: 'height',
+                        label: 'قد',
+                        icon: faRulerVertical,
+                        title: 'نمودار قد به سن',
+                        hint: 'این نمودار قد کودک را با صدک‌های سازمان بهداشت جهانی مقایسه می‌کند. اگر نقطه نزدیک خط میانه (صدک ۵۰) باشد رشد قد طبیعی است.',
+                        data: formatMetricData('height'),
+                        standardData: isBoy ? whoStats.heightForAgeBoys : whoStats.heightForAgeGirls,
+                        yAxisLabel: 'قد (cm)'
+                    },
+                    {
+                        id: 'weight',
+                        label: 'وزن',
+                        icon: faWeight,
+                        title: 'نمودار وزن به سن',
+                        hint: 'وزن نسبت به سن را نشان می‌دهد. نوسان کم طبیعی است؛ جهش یا افت ناگهانی را با پزشک مطرح کنید.',
+                        data: formatMetricData('weight'),
+                        standardData: isBoy ? whoStats.weightForAgeBoys : whoStats.weightForAgeGirls,
+                        yAxisLabel: 'وزن (kg)'
+                    },
+                    {
+                        id: 'head',
+                        label: 'دور سر',
+                        icon: faBaby,
+                        title: 'نمودار دور سر به سن',
+                        hint: 'دور سر شاخص رشد مغز در سال‌های نخست است. مسیر موازی با صدک‌ها معمولاً مطلوب است.',
+                        data: formatMetricData('headCircumference'),
+                        standardData: isBoy ? whoStats.headCircumferenceForAgeBoys : whoStats.headCircumferenceForAgeGirls,
+                        yAxisLabel: 'دور سر (cm)'
+                    }
+                ];
+                const activeChart = chartTabs.find((tab) => tab.id === chartTab) || chartTabs[0];
+                const filteredHistory = historyRows.filter((record) => {
+                    const time = parseLocalDate(record.date)?.getTime();
+                    if (time == null) return false;
+                    if (historyFrom) {
+                        const from = parseLocalDate(historyFrom)?.getTime();
+                        if (from && time < from) return false;
+                    }
+                    if (historyTo) {
+                        const to = parseLocalDate(historyTo)?.getTime();
+                        if (to && time > to) return false;
+                    }
+                    return true;
+                });
+                return (
+                    <>
+                        <div className="chart-tabs" role="tablist">
+                            {chartTabs.map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={chartTab === tab.id}
+                                    className={`chart-tab${chartTab === tab.id ? ' is-active' : ''}`}
+                                    onClick={() => setChartTab(tab.id)}
+                                >
+                                    <FontAwesomeIcon icon={tab.icon} />
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="chart-section">
+                            <h3>{activeChart.title}</h3>
+                            <GrowthChart
+                                data={activeChart.data}
+                                standardData={activeChart.standardData}
+                                childName={childName}
+                                yAxisLabel={activeChart.yAxisLabel}
+                                childAgeInMonths={childAgeInMonths}
+                            />
+                            <p className="chart-guide">{activeChart.hint}</p>
+                        </div>
 
-            <div className="chart-section">
-                <h3>نمودار قد به سن</h3>
-                <p className="chart-hint">نقاط قرمز بر اساس سن کودک در تاریخ ثبت روی محور ماه قرار می‌گیرند.</p>
-                <GrowthChart
-                    data={formatMetricData('height')}
-                    standardData={isBoy ? whoStats.heightForAgeBoys : whoStats.heightForAgeGirls}
-                    childName={childName}
-                    yAxisLabel="قد (cm)"
-                    childAgeInMonths={childAgeInMonths}
-                />
-            </div>
-
-            <div className="chart-section">
-                <h3>نمودار وزن به سن</h3>
-                <GrowthChart
-                    data={formatMetricData('weight')}
-                    standardData={isBoy ? whoStats.weightForAgeBoys : whoStats.weightForAgeGirls}
-                    childName={childName}
-                    yAxisLabel="وزن (kg)"
-                    childAgeInMonths={childAgeInMonths}
-                />
-            </div>
-
-            <div className="chart-section">
-                <h3>نمودار دور سر به سن</h3>
-                <GrowthChart
-                    data={formatMetricData('headCircumference')}
-                    standardData={isBoy ? whoStats.headCircumferenceForAgeBoys : whoStats.headCircumferenceForAgeGirls}
-                    childName={childName}
-                    yAxisLabel="دور سر (cm)"
-                    childAgeInMonths={childAgeInMonths}
-                />
-            </div>
+                        <Modal
+                            isOpen={historyOpen}
+                            onRequestClose={() => setHistoryOpen(false)}
+                            contentLabel="تاریخچه اندازه‌گیری"
+                            className="history-modal"
+                            overlayClassName="growth-modal-overlay"
+                        >
+                            <h2>تاریخچه اندازه‌گیری‌ها</h2>
+                            <div className="history-filters">
+                                <label>
+                                    از تاریخ
+                                    <input type="date" value={historyFrom} onChange={(e) => setHistoryFrom(e.target.value)} />
+                                </label>
+                                <label>
+                                    تا تاریخ
+                                    <input type="date" value={historyTo} onChange={(e) => setHistoryTo(e.target.value)} />
+                                </label>
+                            </div>
+                            {filteredHistory.length === 0 ? (
+                                <p className="history-empty">در این بازه رکوردی نیست.</p>
+                            ) : (
+                                <div className="history-list">
+                                    {filteredHistory.map((record) => {
+                                        const age = ageInMonths(record.date, child.birthDate);
+                                        const rowKey = record.id || record.date;
+                                        const open = expandedId === rowKey;
+                                        return (
+                                            <article key={rowKey} className={`history-item ${open ? 'is-open' : ''}`}>
+                                                <button
+                                                    type="button"
+                                                    className="history-item-main"
+                                                    onClick={() => setExpandedId(open ? null : rowKey)}
+                                                >
+                                                    <div className="history-item-title">
+                                                        <strong>{toShamsi(record.date)}</strong>
+                                                        <span>{formatAgeLabel(age)}</span>
+                                                    </div>
+                                                    <div className="history-item-summary">
+                                                        <span>قد: {record.height != null ? `${record.height} cm` : '—'}</span>
+                                                        <span>وزن: {record.weight != null ? `${record.weight} kg` : '—'}</span>
+                                                        <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} cm` : '—'}</span>
+                                                    </div>
+                                                </button>
+                                                {open && (
+                                                    <div className="history-item-detail">
+                                                        <div className="history-item-actions">
+                                                            <button type="button" className="btn-edit" onClick={() => { setHistoryOpen(false); openEditModal(record); }}>ویرایش</button>
+                                                            <button type="button" className="btn-delete" onClick={() => handleDelete(record)}>حذف</button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </article>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            <div className="modal-actions">
+                                <button type="button" onClick={() => setHistoryOpen(false)}>بستن</button>
+                            </div>
+                        </Modal>
+                    </>
+                );
+            })()}
 
             <Modal
                 isOpen={modalIsOpen}
