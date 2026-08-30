@@ -894,6 +894,7 @@ async function connect() {
             pool = next;
             const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');
             await pool.query(schemaSql);
+            await seedShopCategories();
             const version = await getSchemaVersion();
             if (version < SCHEMA_VERSION) {
                 const importedSqlite = await maybeImportFromSqlite();
@@ -1757,11 +1758,14 @@ const tickets = {
         const row = await one('SELECT * FROM tickets WHERE id = $1', [Number(id)]);
         return row ? rowToTicket(row) : null;
     },
-    async create({ userId, subject, content }) {
+    async create({ userId, subject, content, groupName, subgroup, attachments }) {
         const createdAt = new Date().toISOString();
         const payload = {
             subject: String(subject || '').trim(),
             content: String(content || '').trim(),
+            groupName: String(groupName || '').trim(),
+            subgroup: String(subgroup || '').trim(),
+            attachments: Array.isArray(attachments) ? attachments : [],
             replies: []
         };
         const row = await one(
@@ -1769,7 +1773,9 @@ const tickets = {
              VALUES ($1,$2,$3,$4,$5) RETURNING *`,
             [Number(userId), 'open', createdAt, createdAt, JSON.stringify(payload)]
         );
-        return rowToTicket(row);
+        const ticket = rowToTicket(row);
+        ticket.ticketNumber = `TK-${String(ticket.id).padStart(5, '0')}`;
+        return tickets.update(ticket.id, ticket);
     },
     async count() {
         return (await one('SELECT COUNT(*)::int AS n FROM tickets')).n;
@@ -1789,7 +1795,7 @@ const tickets = {
 const products = {
     async getById(id) {
         const row = await one('SELECT * FROM products WHERE id = $1', [Number(id)]);
-        return row ? rowToProduct(row) : null;
+        return row ? hydrateProduct(rowToProduct(row)) : null;
     },
     async listAll() {
         return (await many('SELECT * FROM products ORDER BY id DESC')).map(rowToProduct);
@@ -2033,6 +2039,137 @@ async function migrateFromJson(jsonPath) {
     return true;
 }
 
+const DEFAULT_SHOP_GROUPS = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
+
+async function seedShopCategories() {
+    const count = await one('SELECT COUNT(*)::int AS n FROM product_categories');
+    if (count.n > 0) return;
+    for (let i = 0; i < DEFAULT_SHOP_GROUPS.length; i += 1) {
+        await q('INSERT INTO product_categories (name, parent_id, sort_order) VALUES ($1, NULL, $2)', [
+            DEFAULT_SHOP_GROUPS[i],
+            i
+        ]);
+    }
+}
+
+function rowToCategory(row) {
+    return {
+        id: Number(row.id),
+        name: row.name,
+        parentId: row.parent_id == null ? null : Number(row.parent_id),
+        sortOrder: Number(row.sort_order || 0)
+    };
+}
+
+const productCategories = {
+    async list() {
+        await seedShopCategories();
+        return (await many('SELECT * FROM product_categories ORDER BY sort_order, id')).map(rowToCategory);
+    },
+    async tree() {
+        const all = await productCategories.list();
+        return all.filter((c) => !c.parentId).map((group) => ({
+            ...group,
+            children: all.filter((c) => c.parentId === group.id)
+        }));
+    },
+    async create({ name, parentId, sortOrder }) {
+        const row = await one(
+            'INSERT INTO product_categories (name, parent_id, sort_order) VALUES ($1,$2,$3) RETURNING *',
+            [String(name || '').trim(), parentId ? Number(parentId) : null, Number(sortOrder || 0)]
+        );
+        return rowToCategory(row);
+    },
+    async update(id, { name, parentId, sortOrder }) {
+        const row = await one(
+            'UPDATE product_categories SET name=$1, parent_id=$2, sort_order=$3 WHERE id=$4 RETURNING *',
+            [String(name || '').trim(), parentId ? Number(parentId) : null, Number(sortOrder || 0), Number(id)]
+        );
+        return row ? rowToCategory(row) : null;
+    },
+    async remove(id) {
+        const result = await q('DELETE FROM product_categories WHERE id = $1', [Number(id)]);
+        return result.rowCount > 0;
+    }
+};
+
+const productImages = {
+    async listByProduct(productId) {
+        return (await many(
+            'SELECT * FROM product_images WHERE product_id = $1 ORDER BY sort_order, id',
+            [Number(productId)]
+        )).map((row) => ({
+            id: Number(row.id),
+            productId: Number(row.product_id),
+            imageUrl: row.image_url,
+            sortOrder: Number(row.sort_order || 0)
+        }));
+    },
+    async replace(productId, urls) {
+        await q('DELETE FROM product_images WHERE product_id = $1', [Number(productId)]);
+        for (let i = 0; i < (urls || []).length; i += 1) {
+            if (urls[i]) {
+                await q(
+                    'INSERT INTO product_images (product_id, image_url, sort_order) VALUES ($1,$2,$3)',
+                    [Number(productId), urls[i], i]
+                );
+            }
+        }
+        return productImages.listByProduct(productId);
+    },
+    async add(productId, url) {
+        const max = await one(
+            'SELECT COALESCE(MAX(sort_order), -1)::int AS n FROM product_images WHERE product_id = $1',
+            [Number(productId)]
+        );
+        await q(
+            'INSERT INTO product_images (product_id, image_url, sort_order) VALUES ($1,$2,$3)',
+            [Number(productId), url, max.n + 1]
+        );
+        return productImages.listByProduct(productId);
+    }
+};
+
+const productComments = {
+    async listByProduct(productId) {
+        return (await many(`
+            SELECT c.*, u.username, u.first_name, u.last_name
+            FROM product_comments c
+            LEFT JOIN users u ON u.id = c.user_id
+            WHERE c.product_id = $1
+            ORDER BY c.id DESC
+        `, [Number(productId)])).map((row) => ({
+            id: Number(row.id),
+            productId: Number(row.product_id),
+            userId: row.user_id == null ? null : Number(row.user_id),
+            author: row.first_name || row.username || 'کاربر',
+            body: row.body,
+            createdAt: row.created_at
+        }));
+    },
+    async create({ productId, userId, body }) {
+        const createdAt = new Date().toISOString();
+        const row = await one(
+            'INSERT INTO product_comments (product_id, user_id, body, created_at) VALUES ($1,$2,$3,$4) RETURNING *',
+            [Number(productId), userId ? Number(userId) : null, String(body || '').trim(), createdAt]
+        );
+        const list = await productComments.listByProduct(productId);
+        return list.find((c) => c.id === Number(row.id));
+    }
+};
+
+async function hydrateProduct(product) {
+    if (!product) return null;
+    const images = await productImages.listByProduct(product.id);
+    const comments = await productComments.listByProduct(product.id);
+    const cover = product.imageUrl ? [{ id: 0, productId: product.id, imageUrl: product.imageUrl, sortOrder: -1 }] : [];
+    return {
+        ...product,
+        images: [...cover, ...images.filter((img) => img.imageUrl !== product.imageUrl)],
+        comments
+    };
+}
+
 async function stats() {
     return {
         totalUsers: await users.count(),
@@ -2075,6 +2212,9 @@ module.exports = {
     podcasts,
     tickets,
     products,
+    productCategories,
+    productImages,
+    productComments,
     orders,
     otp,
     normalizePhone

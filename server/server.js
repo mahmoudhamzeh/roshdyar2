@@ -1369,15 +1369,51 @@ app.get('/api/tickets', async (req, res) => {
     res.json(await store.tickets.listByUser(user.id));
 });
 
-app.post('/api/tickets', async (req, res) => {
+const TICKET_GROUPS = {
+    'حساب کاربری': ['ورود و ثبت‌نام', 'پروفایل', 'رمز عبور'],
+    'کودکان و پرونده': ['ثبت کودک', 'واکسیناسیون', 'نمودار رشد', 'پرونده سلامت'],
+    'فروشگاه': ['سفارش', 'پرداخت', 'محصول'],
+    'فنی': ['خطای سایت', 'پیشنهاد'],
+    'سایر': ['عمومی']
+};
+
+app.get('/api/tickets/groups', (req, res) => {
+    res.json(TICKET_GROUPS);
+});
+
+function maybeMultipart(field, maxCount) {
+    return (req, res, next) => {
+        const type = String(req.headers['content-type'] || '');
+        if (type.includes('multipart/form-data')) {
+            return upload.array(field, maxCount)(req, res, next);
+        }
+        return next();
+    };
+}
+
+app.post('/api/tickets', maybeMultipart('attachments', 4), async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
     const subject = String(req.body.subject || '').trim();
     const content = String(req.body.content || req.body.message || '').trim();
+    const groupName = String(req.body.groupName || req.body.group || 'سایر').trim();
+    const subgroup = String(req.body.subgroup || 'عمومی').trim();
     if (!subject || !content) {
         return res.status(400).json({ message: 'موضوع و متن تیکت الزامی است' });
     }
-    const ticket = await store.tickets.create({ userId: user.id, subject, content });
+    const allowed = TICKET_GROUPS[groupName];
+    if (!allowed || !allowed.includes(subgroup)) {
+        return res.status(400).json({ message: 'گروه یا زیرگروه نامعتبر است' });
+    }
+    const attachments = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    const ticket = await store.tickets.create({
+        userId: user.id,
+        subject,
+        content,
+        groupName,
+        subgroup,
+        attachments
+    });
     res.status(201).json(ticket);
 });
 
@@ -1544,7 +1580,58 @@ const parsePrice = (value) => {
 };
 
 app.get('/api/shop/categories', async (req, res) => {
-    res.json(SHOP_CATEGORIES);
+    const tree = await store.productCategories.tree();
+    res.json(tree.length ? tree : SHOP_CATEGORIES.map((name) => ({ name, children: [] })));
+});
+
+app.get('/api/admin/product-categories', isAdmin, async (req, res) => {
+    res.json(await store.productCategories.tree());
+});
+
+app.post('/api/admin/product-categories', isAdmin, async (req, res) => {
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.status(400).json({ message: 'نام گروه الزامی است' });
+    res.status(201).json(await store.productCategories.create({
+        name,
+        parentId: req.body.parentId || null,
+        sortOrder: req.body.sortOrder || 0
+    }));
+});
+
+app.put('/api/admin/product-categories/:id', isAdmin, async (req, res) => {
+    const updated = await store.productCategories.update(req.params.id, {
+        name: req.body.name,
+        parentId: req.body.parentId || null,
+        sortOrder: req.body.sortOrder || 0
+    });
+    if (!updated) return res.status(404).json({ message: 'گروه یافت نشد' });
+    res.json(updated);
+});
+
+app.delete('/api/admin/product-categories/:id', isAdmin, async (req, res) => {
+    if (await store.productCategories.remove(req.params.id)) {
+        return res.json({ message: 'گروه حذف شد' });
+    }
+    res.status(404).json({ message: 'گروه یافت نشد' });
+});
+
+app.get('/api/shop/products/:id/comments', async (req, res) => {
+    res.json(await store.productComments.listByProduct(req.params.id));
+});
+
+app.post('/api/shop/products/:id/comments', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const body = String(req.body.body || req.body.comment || '').trim();
+    if (body.length < 3) return res.status(400).json({ message: 'متن نظر خیلی کوتاه است' });
+    const product = await store.products.getById(req.params.id);
+    if (!product || product.active === false) return res.status(404).json({ message: 'محصول یافت نشد' });
+    const comment = await store.productComments.create({
+        productId: product.id,
+        userId: user.id,
+        body
+    });
+    res.status(201).json(comment);
 });
 
 app.get('/api/shop/products', async (req, res) => {
@@ -1563,7 +1650,7 @@ app.get('/api/admin/products', isAdmin, async (req, res) => {
     res.json(await store.products.listAll());
 });
 
-app.post('/api/admin/products', isAdmin, upload.single('image'), async (req, res) => {
+app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, res) => {
     const { name, description, category, price, stock } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -1577,20 +1664,24 @@ app.post('/api/admin/products', isAdmin, upload.single('image'), async (req, res
         return res.status(400).json({ message: 'موجودی معتبر نیست' });
     }
 
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
     const newProduct = await store.products.create({
         name: String(name).trim(),
         description: description ? String(description).trim() : '',
-        category: SHOP_CATEGORIES.includes(category) ? category : 'تغذیه',
+        category: category ? String(category).trim() : 'تغذیه',
         price: parsedPrice,
         stock: parsedStock,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        imageUrl: uploaded[0] || null,
         active: true,
         createdAt: new Date().toISOString()
     });
-    res.status(201).json(newProduct);
+    if (uploaded.length) {
+        await store.productImages.replace(newProduct.id, uploaded);
+    }
+    res.status(201).json(await store.products.getById(newProduct.id));
 });
 
-app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, res) => {
+app.put('/api/admin/products/:id', isAdmin, upload.array('images', 8), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const current = await store.products.getById(id);
     if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
@@ -1604,7 +1695,7 @@ app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, 
     }
     if (description !== undefined) updated.description = String(description).trim();
     if (category !== undefined) {
-        updated.category = SHOP_CATEGORIES.includes(category) ? category : updated.category;
+        updated.category = String(category || '').trim() || updated.category;
     }
     if (price !== undefined && price !== '') {
         const parsedPrice = parsePrice(price);
@@ -1621,9 +1712,13 @@ app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, 
     if (active !== undefined) {
         updated.active = active === true || active === 'true';
     }
-    if (req.file) updated.imageUrl = `/uploads/${req.file.filename}`;
-
-    res.json(await store.products.update(id, updated));
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    if (uploaded[0]) updated.imageUrl = uploaded[0];
+    const saved = await store.products.update(id, updated);
+    if (uploaded.length) {
+        await store.productImages.replace(id, uploaded);
+    }
+    res.json(await store.products.getById(id) || saved);
 });
 
 app.delete('/api/admin/products/:id', isAdmin, async (req, res) => {

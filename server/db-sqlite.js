@@ -920,6 +920,7 @@ function connect() {
     applyPragmas();
     db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
     prepareStatements();
+    seedShopCategories();
 
     const version = getSchemaVersion();
     if (version < SCHEMA_VERSION) {
@@ -1832,12 +1833,15 @@ const tickets = {
         const row = stmts.getTicket.get(Number(id));
         return row ? rowToTicket(row) : null;
     },
-    create({ userId, subject, content }) {
+    create({ userId, subject, content, groupName, subgroup, attachments }) {
         connect();
         const createdAt = new Date().toISOString();
         const payload = {
             subject: String(subject || '').trim(),
             content: String(content || '').trim(),
+            groupName: String(groupName || '').trim(),
+            subgroup: String(subgroup || '').trim(),
+            attachments: Array.isArray(attachments) ? attachments : [],
             replies: []
         };
         const info = stmts.insertTicket.run({
@@ -1847,7 +1851,10 @@ const tickets = {
             updated_at: createdAt,
             payload: JSON.stringify(payload)
         });
-        return tickets.getById(Number(info.lastInsertRowid));
+        const id = Number(info.lastInsertRowid);
+        const ticket = tickets.getById(id);
+        ticket.ticketNumber = `TK-${String(id).padStart(5, '0')}`;
+        return tickets.update(id, ticket);
     },
     count() {
         connect();
@@ -1876,7 +1883,7 @@ const products = {
     getById(id) {
         connect();
         const row = stmts.getProduct.get(Number(id));
-        return row ? rowToProduct(row) : null;
+        return row ? hydrateProduct(rowToProduct(row)) : null;
     },
     listAll() {
         connect();
@@ -2159,6 +2166,133 @@ function migrateFromJson(jsonPath) {
     return true;
 }
 
+const DEFAULT_SHOP_GROUPS = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
+
+function seedShopCategories() {
+    connect();
+    const n = db.prepare('SELECT COUNT(*) AS n FROM product_categories').get().n;
+    if (n > 0) return;
+    const insert = db.prepare('INSERT INTO product_categories (name, parent_id, sort_order) VALUES (?, NULL, ?)');
+    DEFAULT_SHOP_GROUPS.forEach((name, index) => insert.run(name, index));
+}
+
+function rowToCategory(row) {
+    return {
+        id: Number(row.id),
+        name: row.name,
+        parentId: row.parent_id == null ? null : Number(row.parent_id),
+        sortOrder: Number(row.sort_order || 0)
+    };
+}
+
+const productCategories = {
+    list() {
+        connect();
+        seedShopCategories();
+        return db.prepare('SELECT * FROM product_categories ORDER BY sort_order, id').all().map(rowToCategory);
+    },
+    tree() {
+        const all = productCategories.list();
+        return all.filter((c) => !c.parentId).map((group) => ({
+            ...group,
+            children: all.filter((c) => c.parentId === group.id)
+        }));
+    },
+    create({ name, parentId, sortOrder }) {
+        connect();
+        const info = db.prepare(
+            'INSERT INTO product_categories (name, parent_id, sort_order) VALUES (?, ?, ?)'
+        ).run(String(name || '').trim(), parentId ? Number(parentId) : null, Number(sortOrder || 0));
+        return productCategories.list().find((c) => c.id === Number(info.lastInsertRowid));
+    },
+    update(id, { name, parentId, sortOrder }) {
+        connect();
+        db.prepare(
+            'UPDATE product_categories SET name = ?, parent_id = ?, sort_order = ? WHERE id = ?'
+        ).run(String(name || '').trim(), parentId ? Number(parentId) : null, Number(sortOrder || 0), Number(id));
+        return productCategories.list().find((c) => c.id === Number(id)) || null;
+    },
+    remove(id) {
+        connect();
+        return db.prepare('DELETE FROM product_categories WHERE id = ?').run(Number(id)).changes > 0;
+    }
+};
+
+const productImages = {
+    listByProduct(productId) {
+        connect();
+        return db.prepare(
+            'SELECT * FROM product_images WHERE product_id = ? ORDER BY sort_order, id'
+        ).all(Number(productId)).map((row) => ({
+            id: Number(row.id),
+            productId: Number(row.product_id),
+            imageUrl: row.image_url,
+            sortOrder: Number(row.sort_order || 0)
+        }));
+    },
+    replace(productId, urls) {
+        connect();
+        db.prepare('DELETE FROM product_images WHERE product_id = ?').run(Number(productId));
+        const insert = db.prepare(
+            'INSERT INTO product_images (product_id, image_url, sort_order) VALUES (?, ?, ?)'
+        );
+        (urls || []).forEach((url, index) => {
+            if (url) insert.run(Number(productId), url, index);
+        });
+        return productImages.listByProduct(productId);
+    },
+    add(productId, url) {
+        connect();
+        const max = db.prepare(
+            'SELECT COALESCE(MAX(sort_order), -1) AS n FROM product_images WHERE product_id = ?'
+        ).get(Number(productId)).n;
+        db.prepare(
+            'INSERT INTO product_images (product_id, image_url, sort_order) VALUES (?, ?, ?)'
+        ).run(Number(productId), url, max + 1);
+        return productImages.listByProduct(productId);
+    }
+};
+
+const productComments = {
+    listByProduct(productId) {
+        connect();
+        return db.prepare(`
+            SELECT c.*, u.username, u.first_name, u.last_name
+            FROM product_comments c
+            LEFT JOIN users u ON u.id = c.user_id
+            WHERE c.product_id = ?
+            ORDER BY c.id DESC
+        `).all(Number(productId)).map((row) => ({
+            id: Number(row.id),
+            productId: Number(row.product_id),
+            userId: row.user_id == null ? null : Number(row.user_id),
+            author: row.first_name || row.username || 'کاربر',
+            body: row.body,
+            createdAt: row.created_at
+        }));
+    },
+    create({ productId, userId, body }) {
+        connect();
+        const createdAt = new Date().toISOString();
+        const info = db.prepare(
+            'INSERT INTO product_comments (product_id, user_id, body, created_at) VALUES (?, ?, ?, ?)'
+        ).run(Number(productId), userId ? Number(userId) : null, String(body || '').trim(), createdAt);
+        return productComments.listByProduct(productId).find((c) => c.id === Number(info.lastInsertRowid));
+    }
+};
+
+function hydrateProduct(product) {
+    if (!product) return null;
+    const images = productImages.listByProduct(product.id);
+    const cover = product.imageUrl ? [{ id: 0, productId: product.id, imageUrl: product.imageUrl, sortOrder: -1 }] : [];
+    const merged = [...cover, ...images.filter((img) => img.imageUrl !== product.imageUrl)];
+    return {
+        ...product,
+        images: merged,
+        comments: productComments.listByProduct(product.id)
+    };
+}
+
 function stats() {
     connect();
     return {
@@ -2201,6 +2335,9 @@ module.exports = {
     podcasts,
     tickets,
     products,
+    productCategories,
+    productImages,
+    productComments,
     orders,
     otp,
     normalizePhone
