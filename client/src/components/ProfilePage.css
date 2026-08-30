@@ -9,7 +9,7 @@
 .profile-topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 1rem;
   max-width: 1200px;
   margin: 0 auto;
@@ -214,6 +214,7 @@
 }
 
 .user-info-edit-btn,
+.user-info-save-btn,
 .profile-content .edit-btn,
 .profile-content .btn-save {
   background-color: var(--brand);
@@ -230,6 +231,7 @@
 }
 
 .user-info-edit-btn:hover,
+.user-info-save-btn:hover,
 .profile-content .edit-btn:hover,
 .profile-content .btn-save:hover {
   background-color: var(--brand-deep);
