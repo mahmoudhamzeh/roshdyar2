@@ -120,6 +120,32 @@
   justify-content: space-between;
 }
 
+.shop-filter-toggle {
+  border: 1px solid #e4d8b8;
+  background: #fff;
+  color: #3f3a2f;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.shop-filter-panel {
+  background: #fffdf6;
+  border: 1px solid #eadfbf;
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+
+.shop-filter-panel p {
+  margin: 0.35rem 0 0.45rem;
+  font-weight: 800;
+  color: #6b5b3a;
+}
+
 .shop-cat-card,
 .shop-skill-card {
   display: flex;

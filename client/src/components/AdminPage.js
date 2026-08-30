@@ -12,6 +12,7 @@ import PodcastManagement from './admin/PodcastManagement';
 import MessageManagement from './admin/MessageManagement';
 import ProductManagement from './admin/ProductManagement';
 import CategoryManagement from './admin/CategoryManagement';
+import VendorManagement from './admin/VendorManagement';
 import OrderManagement from './admin/OrderManagement';
 
 
@@ -30,6 +31,7 @@ const AdminPage = () => {
                     <NavLink to={`${url}/messages`} activeClassName="active">پیام‌ها</NavLink>
                     <NavLink to={`${url}/products`} activeClassName="active">محصولات فروشگاه</NavLink>
                     <NavLink to={`${url}/product-categories`} activeClassName="active">گروه محصولات</NavLink>
+                    <NavLink to={`${url}/vendors`} activeClassName="active">فروشندگان</NavLink>
                     <NavLink to={`${url}/orders`} activeClassName="active">سفارش‌ها</NavLink>
                     <NavLink to={`${url}/banners`} activeClassName="active">مدیریت بنرها</NavLink>
                     <NavLink to={`${url}/articles`} activeClassName="active">مدیریت مقالات</NavLink>
@@ -49,6 +51,7 @@ const AdminPage = () => {
                     <Route path={`${path}/messages`} component={MessageManagement} />
                     <Route path={`${path}/products`} component={ProductManagement} />
                     <Route path={`${path}/product-categories`} component={CategoryManagement} />
+                    <Route path={`${path}/vendors`} component={VendorManagement} />
                     <Route path={`${path}/orders`} component={OrderManagement} />
                     <Route path={`${path}/banners`} component={BannerManagement} />
                     <Route path={`${path}/articles`} component={ArticleManagement} />

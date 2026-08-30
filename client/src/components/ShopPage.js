@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useHistory, useLocation } from 'react-router-dom';
+import { useHistory, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSearch, faStore } from '@fortawesome/free-solid-svg-icons';
+import { faSearch, faSliders } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import ShopProductCard from './ShopProductCard';
-import { AGE_BANDS, SORT_OPTIONS, ageBandFromBirthDate, flattenCategories } from '../utils/shop';
+import ShopHeroSlider from './ShopHeroSlider';
+import AmazingOffersRail from './AmazingOffersRail';
+import ShopCategoryTiles from './ShopCategoryTiles';
+import { AGE_BANDS, SORT_OPTIONS, ageBandFromBirthDate } from '../utils/shop';
 import './ShopPage.css';
 import './ShopWorld.css';
 
@@ -27,8 +30,7 @@ const ShopPage = () => {
     const [error, setError] = useState('');
     const [search, setSearch] = useState(query);
     const [childBands, setChildBands] = useState([]);
-    const [categories, setCategories] = useState([]);
-    const [skills, setSkills] = useState([]);
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
     const hasFilters = category !== 'همه' || Boolean(skill || age || query);
 
@@ -46,12 +48,7 @@ const ShopPage = () => {
     useEffect(() => {
         fetch(`${API}/api/shop/home`)
             .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-                if (!data) return;
-                setHome(data);
-                setCategories(data.categories || []);
-                setSkills(data.skills || []);
-            })
+            .then((data) => setHome(data))
             .catch(() => {});
         fetch('/api/children')
             .then((res) => (res.ok ? res.json() : []))
@@ -89,48 +86,48 @@ const ShopPage = () => {
         fetchProducts();
     }, [category, query, skill, age, sort]);
 
-    const categoryNames = useMemo(() => {
-        const names = ['همه'];
-        flattenCategories(categories).forEach((node) => {
-            if (node.name && !names.includes(node.name)) names.push(node.name);
-        });
-        return names;
-    }, [categories]);
-
     const forYourChild = useMemo(() => {
         if (!childBands.length) return [];
         return (home?.newest || home?.bestsellers || []).filter((p) => childBands.includes(p.ageBand));
     }, [childBands, home]);
 
-    const handleSearch = (e) => {
-        e.preventDefault();
-        setParam('q', search.trim());
-    };
-
     return (
         <div className="shop-page shop-world">
             <MainNavbar />
             <main className="shop-main">
-                <header className="shop-hero animate-fade-up">
-                    <div className="shop-hero-copy">
-                        <p className="shop-brand">دنیای فروشگاه تات کیدز</p>
-                        <h1>خرید هوشمند برای رشد کودک</h1>
-                        <p className="shop-hero-text">
-                            انتخاب بر اساس رده سنی و مهارت‌های رشدی — از اسباب‌بازی تا کتاب و تغذیه
-                        </p>
-                        <div className="shop-hero-actions">
-                            <Link to="/shop/categories" className="shop-btn shop-btn-primary">دسته‌بندی‌ها</Link>
-                            <Link to="/shop/skills" className="shop-btn shop-btn-ghost">خرید بر اساس مهارت</Link>
-                            <Link to="/orders" className="shop-btn shop-btn-ghost">سفارش‌های من</Link>
-                        </div>
-                    </div>
-                    <div className="shop-hero-visual" aria-hidden="true">
-                        <FontAwesomeIcon icon={faStore} />
-                    </div>
-                </header>
+                <ShopHeroSlider
+                    banners={
+                        (home?.banners || []).length
+                            ? home.banners
+                            : (home?.onSale || []).filter((p) => p.imageUrl).slice(0, 4).map((product) => ({
+                                id: `sale-${product.id}`,
+                                title: product.name,
+                                subtitle: 'فروش ویژه تات کیدز',
+                                imageUrl: product.imageUrl,
+                                productId: product.id,
+                                link: `/shop/${product.id}`
+                            }))
+                    }
+                />
+
+                <ShopCategoryTiles
+                    tree={home?.categories || []}
+                    selected={category}
+                    onSelect={(name) => setParam('category', name)}
+                />
+
+                {!hasFilters && home?.onSale?.length > 0 && (
+                    <AmazingOffersRail products={home.onSale} campaign={home.campaign} />
+                )}
 
                 <section className="shop-toolbar animate-fade-up">
-                    <form className="shop-search" onSubmit={handleSearch}>
+                    <form
+                        className="shop-search"
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            setParam('q', search.trim());
+                        }}
+                    >
                         <FontAwesomeIcon icon={faSearch} />
                         <input
                             type="search"
@@ -142,20 +139,14 @@ const ShopPage = () => {
                         <button type="submit">جستجو</button>
                     </form>
                     <div className="shop-toolbar-row">
-                        <div className="shop-categories" role="tablist" aria-label="دسته‌بندی‌ها">
-                            {categoryNames.map((cat) => (
-                                <button
-                                    key={cat}
-                                    type="button"
-                                    role="tab"
-                                    aria-selected={category === cat}
-                                    className={`shop-cat-btn ${category === cat ? 'active' : ''}`}
-                                    onClick={() => setParam('category', cat)}
-                                >
-                                    {cat}
-                                </button>
-                            ))}
-                        </div>
+                        <button
+                            type="button"
+                            className="shop-filter-toggle"
+                            onClick={() => setFiltersOpen((open) => !open)}
+                        >
+                            <FontAwesomeIcon icon={faSliders} />
+                            فیلتر سن و مهارت
+                        </button>
                         <select
                             className="shop-sort"
                             value={sort}
@@ -167,77 +158,52 @@ const ShopPage = () => {
                             ))}
                         </select>
                     </div>
-                    <div className="shop-chip-row" aria-label="رده سنی">
-                        {AGE_BANDS.map((band) => (
-                            <button
-                                key={band.id}
-                                type="button"
-                                className={`shop-chip ${age === band.id ? 'is-active' : ''}`}
-                                onClick={() => setParam('age', age === band.id ? '' : band.id)}
-                            >
-                                {band.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="shop-chip-row" aria-label="مهارت">
-                        {skills.map((item) => (
-                            <button
-                                key={item.slug}
-                                type="button"
-                                className={`shop-chip ${skill === item.slug ? 'is-active' : ''}`}
-                                onClick={() => setParam('skill', skill === item.slug ? '' : item.slug)}
-                            >
-                                {item.title}
-                            </button>
-                        ))}
-                    </div>
+                    {filtersOpen && (
+                        <div className="shop-filter-panel">
+                            <p>رده سنی</p>
+                            <div className="shop-chip-row">
+                                {AGE_BANDS.map((band) => (
+                                    <button
+                                        key={band.id}
+                                        type="button"
+                                        className={`shop-chip ${age === band.id ? 'is-active' : ''}`}
+                                        onClick={() => setParam('age', age === band.id ? '' : band.id)}
+                                    >
+                                        {band.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <p>مهارت رشدی</p>
+                            <div className="shop-chip-row">
+                                {(home?.skills || []).map((item) => (
+                                    <button
+                                        key={item.slug}
+                                        type="button"
+                                        className={`shop-chip ${skill === item.slug ? 'is-active' : ''}`}
+                                        onClick={() => setParam('skill', skill === item.slug ? '' : item.slug)}
+                                    >
+                                        {item.title}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </section>
 
                 {loading && <p className="shop-status">در حال بارگذاری محصولات...</p>}
                 {error && <p className="shop-status shop-error">{error}</p>}
 
-                {!hasFilters && !loading && !error && home && (
-                    <>
-                        {forYourChild.length > 0 && (
-                            <section>
-                                <div className="shop-section-title">
-                                    <h2>مناسب برای کودک شما</h2>
-                                </div>
-                                <div className="shop-grid">
-                                    {forYourChild.slice(0, 4).map((product, index) => (
-                                        <ShopProductCard key={`kid-${product.id}`} product={product} index={index} />
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-                        {home.onSale?.length > 0 && (
-                            <section>
-                                <div className="shop-section-title">
-                                    <h2>تخفیف‌های ویژه</h2>
-                                </div>
-                                <div className="shop-grid">
-                                    {home.onSale.map((product, index) => (
-                                        <ShopProductCard key={`sale-${product.id}`} product={product} index={index} />
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-                        {home.bestsellers?.length > 0 && (
-                            <section>
-                                <div className="shop-section-title">
-                                    <h2>پرفروش‌ها</h2>
-                                    <button type="button" className="shop-chip" onClick={() => setParam('sort', 'popular')}>
-                                        مشاهده همه
-                                    </button>
-                                </div>
-                                <div className="shop-grid">
-                                    {home.bestsellers.slice(0, 4).map((product, index) => (
-                                        <ShopProductCard key={`best-${product.id}`} product={product} index={index} />
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-                    </>
+                {!hasFilters && !loading && !error && home && forYourChild.length > 0 && (
+                    <section>
+                        <div className="shop-section-title">
+                            <h2>مناسب برای کودک شما</h2>
+                        </div>
+                        <div className="shop-grid">
+                            {forYourChild.slice(0, 4).map((product, index) => (
+                                <ShopProductCard key={`kid-${product.id}`} product={product} index={index} />
+                            ))}
+                        </div>
+                    </section>
                 )}
 
                 {!loading && !error && products.length === 0 && (

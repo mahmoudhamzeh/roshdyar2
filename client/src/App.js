@@ -21,6 +21,7 @@ import ArticleDetailPage from './components/ArticleDetailPage';
 import ShopPage from './components/ShopPage';
 import ShopCategoriesPage from './components/ShopCategoriesPage';
 import ShopSkillsPage from './components/ShopSkillsPage';
+import VendorPanelPage from './components/VendorPanelPage';
 import ProductDetailPage from './components/ProductDetailPage';
 import CartPage from './components/CartPage';
 import OrdersPage from './components/OrdersPage';
@@ -50,6 +51,7 @@ const App = () => {
                 <PrivateRoute exact path="/shop" component={ShopPage} />
                 <PrivateRoute exact path="/shop/categories" component={ShopCategoriesPage} />
                 <PrivateRoute exact path="/shop/skills" component={ShopSkillsPage} />
+                <PrivateRoute exact path="/vendor" component={VendorPanelPage} />
                 <PrivateRoute path="/shop/:id" component={ProductDetailPage} />
                 <PrivateRoute path="/cart" component={CartPage} />
                 <PrivateRoute path="/orders" component={OrdersPage} />

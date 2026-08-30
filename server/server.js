@@ -134,14 +134,18 @@ const API_CATALOG = {
         ],
         shop: [
             'GET /api/shop/home',
+            'GET /api/shop/sale',
             'GET /api/shop/categories',
             'GET /api/shop/skills',
             'GET /api/shop/age-bands',
             'GET /api/shop/products',
             'GET /api/shop/products/:id',
+            'GET /api/shop/products/:id/offers',
             'GET /api/shop/orders',
             'GET /api/shop/orders/:id',
-            'POST /api/shop/orders'
+            'POST /api/shop/orders',
+            'GET /api/shop/vendors/me',
+            'POST /api/shop/vendors/apply'
         ],
         reminders: [
             'POST /api/generate-reminders/:userId',
@@ -1288,6 +1292,20 @@ const isAdmin = (req, res, next) => {
     }).catch(next);
 };
 
+const requireVendor = (req, res, next) => {
+    Promise.resolve(resolveAuthUser(req)).then(async (user) => {
+        if (!user) return res.status(401).json({ message: 'لطفا وارد شوید' });
+        const vendor = await store.shop.getVendorByUser(user.id);
+        if (!vendor) return res.status(403).json({ message: 'حساب فروشندگی یافت نشد' });
+        if (vendor.status !== 'active' && !user.isAdmin) {
+            return res.status(403).json({ message: 'پنل فروشنده هنوز تأیید نشده است' });
+        }
+        req.user = user;
+        req.vendor = vendor;
+        next();
+    }).catch(next);
+};
+
 // --- Admin Routes ---
 app.get('/api/admin/users', isAdmin, async (req, res) => {
     res.json((await store.users.list()).map((u) => publicUser(u)));
@@ -1433,20 +1451,41 @@ app.get('/api/tickets/:id', async (req, res) => {
 });
 
 // --- Banner, News, Video, Podcast Routes (Content Management) ---
-app.get('/api/banners', async (req, res) => res.set('Cache-Control', 'no-store').json(await store.banners.list()));
+app.get('/api/banners', async (req, res) => {
+    const list = store.banners.listByPlacement
+        ? await store.banners.listByPlacement(req.query.placement)
+        : await store.banners.list();
+    res.set('Cache-Control', 'no-store').json(list);
+});
 app.post('/api/admin/banners', isAdmin, upload.single('image'), async (req, res) => {
-    const { title, link } = req.body;
+    const { title, link, placement, productId, subtitle, sortOrder } = req.body;
     if (!req.file) return res.status(400).json({ message: 'تصویر بنر الزامی است' });
-    const newBanner = await store.banners.create({ title, link, imageUrl: `/uploads/${req.file.filename}` });
+    const parsedProduct = productId ? Number(productId) : null;
+    const newBanner = await store.banners.create({
+        title,
+        link: link || (parsedProduct ? `/shop/${parsedProduct}` : ''),
+        imageUrl: `/uploads/${req.file.filename}`,
+        placement: placement === 'shop' ? 'shop' : 'home',
+        productId: parsedProduct,
+        subtitle,
+        sortOrder
+    });
     res.status(201).json(newBanner);
 });
 app.put('/api/admin/banners/:id', isAdmin, upload.single('image'), async (req, res) => {
     const current = (await store.banners.list()).find((b) => Number(b.id) === Number(req.params.id));
     if (!current) return res.status(404).json({ message: 'بنر یافت نشد' });
+    const parsedProduct = req.body.productId !== undefined
+        ? (req.body.productId ? Number(req.body.productId) : null)
+        : current.productId;
     const updated = await store.banners.update(req.params.id, {
         title: req.body.title !== undefined ? req.body.title : current.title,
-        link: req.body.link !== undefined ? req.body.link : current.link,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : current.imageUrl
+        link: req.body.link !== undefined ? req.body.link : (parsedProduct ? `/shop/${parsedProduct}` : current.link),
+        imageUrl: req.file ? `/uploads/${req.file.filename}` : current.imageUrl,
+        placement: req.body.placement || current.placement,
+        productId: parsedProduct,
+        subtitle: req.body.subtitle !== undefined ? req.body.subtitle : current.subtitle,
+        sortOrder: req.body.sortOrder !== undefined ? req.body.sortOrder : current.sortOrder
     });
     res.json(updated);
 });
@@ -1612,25 +1651,42 @@ app.get('/api/shop/age-bands', (req, res) => {
 });
 
 app.get('/api/shop/home', async (req, res) => {
-    const [newest, popular, allActive, skills, categories, vendor] = await Promise.all([
+    const [newest, popular, allActive, skills, categories, vendor, campaign, shopBanners] = await Promise.all([
         store.products.listActive({ sort: 'newest' }),
         store.products.listActive({ sort: 'popular' }),
         store.products.listActive({}),
         store.shop.listSkills(),
         store.productCategories.tree(),
-        store.shop.getInternalVendor()
+        store.shop.getInternalVendor(),
+        store.shop.campaign(),
+        store.banners.listByPlacement ? store.banners.listByPlacement('shop') : store.banners.list()
     ]);
     const onSale = (allActive || []).filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
     res.json({
-        mode: 'single_vendor',
+        mode: 'marketplace',
         vendor: vendor || { slug: 'tatkids', displayName: 'مجموعه تات کیدز', kind: 'internal' },
         ageBands: AGE_BANDS,
         skills,
         categories: categories.length ? categories : SHOP_CATEGORIES.map((name) => ({ name, children: [] })),
         newest: (newest || []).slice(0, 8),
         bestsellers: (popular || []).slice(0, 8),
-        onSale: onSale.slice(0, 8)
+        onSale: onSale.slice(0, 10),
+        campaign,
+        banners: shopBanners
     });
+});
+
+app.get('/api/shop/sale', async (req, res) => {
+    const products = await store.products.listActive({});
+    const onSale = (products || []).filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
+    res.json({
+        campaign: await store.shop.campaign(),
+        products: onSale
+    });
+});
+
+app.get('/api/shop/products/:id/offers', async (req, res) => {
+    res.json(await store.shop.listOffers(req.params.id));
 });
 
 app.get('/api/admin/product-categories', isAdmin, async (req, res) => {
@@ -1705,7 +1761,8 @@ app.get('/api/shop/products/:id', async (req, res) => {
     if (!product || product.active === false) {
         return res.status(404).json({ message: 'محصول یافت نشد' });
     }
-    res.json(product);
+    const offers = await store.shop.listOffers(product.id);
+    res.json({ ...product, offers });
 });
 
 app.get('/api/admin/products', isAdmin, async (req, res) => {
@@ -2206,6 +2263,75 @@ app.delete('/api/admin/messages/:id', isAdmin, async (req, res) => {
         return res.status(200).json({ message: 'پیام حذف شد' });
     }
     res.status(404).json({ message: 'پیام یافت نشد' });
+});
+
+app.get('/api/shop/vendors/me', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    res.json(await store.shop.getVendorByUser(user.id));
+});
+
+app.post('/api/shop/vendors/apply', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const displayName = String(req.body.displayName || '').trim();
+    if (displayName.length < 3) return res.status(400).json({ message: 'نام فروشگاه خیلی کوتاه است' });
+    const vendor = await store.shop.applyVendor({
+        userId: user.id,
+        displayName,
+        phone: req.body.phone || user.mobile || '',
+        docsNote: req.body.docsNote || ''
+    });
+    res.status(201).json(vendor);
+});
+
+app.get('/api/admin/vendors', isAdmin, async (req, res) => {
+    res.json(await store.shop.listVendors());
+});
+
+app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
+    const updated = await store.shop.updateVendor(req.params.id, {
+        displayName: req.body.displayName,
+        status: req.body.status,
+        commissionPct: req.body.commissionPct,
+        settlementCycle: req.body.settlementCycle,
+        phone: req.body.phone,
+        docsNote: req.body.docsNote
+    });
+    if (!updated) return res.status(404).json({ message: 'فروشنده یافت نشد' });
+    res.json(updated);
+});
+
+app.get('/api/vendor/offers', requireVendor, async (req, res) => {
+    const all = await store.products.listAll();
+    res.json((all || []).filter((p) => Number(p.vendorId) === Number(req.vendor.id)));
+});
+
+app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async (req, res) => {
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
+    if (!name || !String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
+    const parsedPrice = parsePrice(price);
+    if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
+    const parsedStock = stock === undefined || stock === '' ? 0 : parseInt(stock, 10);
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    const created = await store.products.create({
+        name: String(name).trim(),
+        description: description ? String(description).trim() : '',
+        category: category ? String(category).trim() : 'اسباب‌بازی',
+        price: parsedPrice,
+        stock: Number.isFinite(parsedStock) ? parsedStock : 0,
+        imageUrl: uploaded[0] || null,
+        active: true,
+        createdAt: new Date().toISOString(),
+        ageBand,
+        brand,
+        safetyWarning,
+        compareAtPrice,
+        skillIds: parseSkillIds(req.body),
+        vendorId: req.vendor.id
+    });
+    if (uploaded.length) await store.productImages.replace(created.id, uploaded);
+    res.status(201).json(await store.products.getById(created.id));
 });
 
 app.use((err, req, res, next) => {

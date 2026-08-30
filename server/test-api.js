@@ -119,7 +119,8 @@ async function run() {
 
         const shopHome = await request('GET', '/api/shop/home');
         assert.strictEqual(shopHome.status, 200);
-        assert.strictEqual(shopHome.data.mode, 'single_vendor');
+        assert.ok(shopHome.data.mode === 'marketplace' || shopHome.data.mode === 'single_vendor');
+        assert.ok(Array.isArray(shopHome.data.onSale));
         assert.ok(shopHome.data.vendor);
         assert.ok(Array.isArray(shopHome.data.newest));
 

@@ -51,3 +51,20 @@ export const stars = (value) => {
     const n = Math.round(Number(value) || 0);
     return '★'.repeat(Math.max(0, Math.min(5, n))) + '☆'.repeat(Math.max(0, 5 - n));
 };
+
+export const discountPercent = (price, compareAt) => {
+    if (!compareAt || !price || compareAt <= price) return 0;
+    return Math.round(((compareAt - price) / compareAt) * 100);
+};
+
+export const CATEGORY_VISUALS = [
+    { match: /تغذیه|غذا|میوه/, color: '#ea580c', icon: 'apple' },
+    { match: /اسباب|بازی|ساخت|چوب|حرکت/, color: '#0f766e', icon: 'puzzle' },
+    { match: /پوشاک|لباس|نوزاد|کودک/, color: '#db2777', icon: 'shirt' },
+    { match: /کتاب|داستان|آموزش/, color: '#2563eb', icon: 'book' },
+    { match: /بهداشت|حمام|پوست/, color: '#7c3aed', icon: 'heart' },
+    { match: /مهارت/, color: '#b45309', icon: 'brain' }
+];
+
+export const categoryVisual = (name) =>
+    CATEGORY_VISUALS.find((item) => item.match.test(String(name || ''))) || { color: '#0f766e', icon: 'store' };

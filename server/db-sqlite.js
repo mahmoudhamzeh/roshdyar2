@@ -287,11 +287,17 @@ function rowToPodcast(row) {
 }
 
 function rowToBanner(row) {
+    const productId = row.product_id != null ? Number(row.product_id) : null;
+    const link = row.link || (productId ? `/shop/${productId}` : '');
     return {
         id: row.id,
         title: row.title,
-        link: row.link,
-        imageUrl: row.image_url
+        subtitle: row.subtitle || '',
+        link,
+        imageUrl: row.image_url,
+        placement: row.placement || 'home',
+        productId,
+        sortOrder: Number(row.sort_order || 0)
     };
 }
 
@@ -1584,7 +1590,15 @@ const banners = {
         connect();
         const cached = cacheGet('banners');
         if (cached) return cached;
-        return cacheSet('banners', stmts.listBanners.all().map(rowToBanner));
+        const all = stmts.listBanners.all().map(rowToBanner)
+            .sort((a, b) => (a.sortOrder - b.sortOrder) || (a.id - b.id));
+        return cacheSet('banners', all);
+    },
+    listByPlacement(placement) {
+        const all = banners.list();
+        if (!placement || placement === 'all') return all;
+        const filtered = all.filter((b) => b.placement === placement);
+        return filtered.length ? filtered : all;
     },
     count() {
         connect();
@@ -1599,8 +1613,18 @@ const banners = {
             link: banner.link || null,
             image_url: banner.imageUrl || null
         });
+        db.prepare(`
+            UPDATE banners SET placement = ?, product_id = ?, sort_order = ?, subtitle = ?
+            WHERE id = ?
+        `).run(
+            banner.placement || 'home',
+            banner.productId ? Number(banner.productId) : null,
+            Number(banner.sortOrder || 0),
+            banner.subtitle || null,
+            id
+        );
         cacheInvalidate('banners');
-        return { ...banner, id };
+        return banners.list().find((item) => Number(item.id) === Number(id));
     },
     update(id, patch) {
         connect();
@@ -1608,16 +1632,21 @@ const banners = {
         if (!current) return null;
         const next = { ...current, ...patch, id: Number(id) };
         db.prepare(`
-            UPDATE banners SET title = @title, link = @link, image_url = @image_url
+            UPDATE banners SET title = @title, link = @link, image_url = @image_url,
+                placement = @placement, product_id = @product_id, sort_order = @sort_order, subtitle = @subtitle
             WHERE id = @id
         `).run({
             id: Number(id),
             title: next.title || null,
             link: next.link || null,
-            image_url: next.imageUrl || null
+            image_url: next.imageUrl || null,
+            placement: next.placement || 'home',
+            product_id: next.productId ? Number(next.productId) : null,
+            sort_order: Number(next.sortOrder || 0),
+            subtitle: next.subtitle || null
         });
         cacheInvalidate('banners');
-        return next;
+        return banners.list().find((item) => Number(item.id) === Number(id));
     },
     remove(id) {
         connect();
@@ -2348,6 +2377,30 @@ module.exports = {
         getInternalVendor() {
             connect();
             return shopStore.getInternalVendorSqlite(db);
+        },
+        campaign() {
+            connect();
+            return shopStore.listCampaignSqlite(db);
+        },
+        listOffers(productId) {
+            connect();
+            return shopStore.listOffersForProductSqlite(db, productId);
+        },
+        listVendors() {
+            connect();
+            return shopStore.listVendorsSqlite(db);
+        },
+        getVendorByUser(userId) {
+            connect();
+            return shopStore.getVendorByUserSqlite(db, userId);
+        },
+        applyVendor(payload) {
+            connect();
+            return shopStore.applyVendorSqlite(db, payload);
+        },
+        updateVendor(id, patch) {
+            connect();
+            return shopStore.updateVendorSqlite(db, id, patch);
         },
         ageBands: shopStore.AGE_BANDS,
         skills: shopStore.SKILLS

@@ -161,8 +161,82 @@ function mapVendorRow(row) {
         kind: row.kind,
         status: row.status,
         commissionPct: Number(row.commission_pct || 0),
-        settlementCycle: row.settlement_cycle
+        settlementCycle: row.settlement_cycle,
+        userId: row.user_id != null ? Number(row.user_id) : null,
+        phone: row.phone || '',
+        docsNote: row.docs_note || ''
     };
+}
+
+function slugifyVendor(name) {
+    const base = String(name || 'vendor')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9\u0600-\u06ff-]/g, '')
+        .slice(0, 40) || 'vendor';
+    return `${base}-${Date.now().toString(36)}`;
+}
+
+function seedShopExtrasSqlite(db) {
+    ['user_id', 'phone', 'docs_note'].forEach((col) => {
+        const type = col === 'user_id' ? 'INTEGER' : 'TEXT';
+        if (!sqliteHasColumn(db, 'shop_vendors', col)) {
+            db.exec(`ALTER TABLE shop_vendors ADD COLUMN ${col} ${type}`);
+        }
+    });
+    ['placement', 'subtitle'].forEach((col) => {
+        if (!sqliteHasColumn(db, 'banners', col)) {
+            db.exec(`ALTER TABLE banners ADD COLUMN ${col} TEXT`);
+        }
+    });
+    if (!sqliteHasColumn(db, 'banners', 'product_id')) {
+        db.exec('ALTER TABLE banners ADD COLUMN product_id INTEGER');
+    }
+    if (!sqliteHasColumn(db, 'banners', 'sort_order')) {
+        db.exec('ALTER TABLE banners ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0');
+    }
+    db.prepare("UPDATE banners SET placement = 'home' WHERE placement IS NULL OR placement = ''").run();
+
+    const campaign = db.prepare('SELECT * FROM shop_campaigns WHERE active = 1 ORDER BY id DESC LIMIT 1').get();
+    const now = Date.now();
+    if (!campaign || (campaign.ends_at && new Date(campaign.ends_at).getTime() < now)) {
+        const ends = new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
+        db.prepare(`
+            INSERT INTO shop_campaigns (title, kind, value, starts_at, ends_at, active)
+            VALUES (?, 'percent', 20, ?, ?, 1)
+        `).run('فروش ویژه', new Date(now).toISOString(), ends);
+    }
+
+    const saleCount = db.prepare(
+        'SELECT COUNT(*) AS n FROM shop_offers WHERE compare_at_price IS NOT NULL AND compare_at_price > price'
+    ).get().n;
+    if (saleCount === 0) {
+        db.prepare(`
+            UPDATE shop_offers
+            SET compare_at_price = CAST(price * 1.35 AS INTEGER)
+            WHERE id IN (SELECT id FROM shop_offers ORDER BY id LIMIT 4)
+        `).run();
+    }
+
+    const parents = db.prepare(
+        "SELECT id, name FROM product_categories WHERE parent_id IS NULL"
+    ).all();
+    const insertChild = db.prepare(
+        'INSERT INTO product_categories (name, parent_id, sort_order) VALUES (?, ?, ?)'
+    );
+    const childSeeds = {
+        'اسباب‌بازی': ['ساختنی', 'چوبی', 'حرکتی'],
+        'کتاب': ['داستان', 'آموزشی'],
+        'تغذیه': ['غذای کمکی', 'میان‌وعده'],
+        'پوشاک': ['نوزاد', 'کودک'],
+        'بهداشت': ['حمام', 'مراقبت پوست']
+    };
+    parents.forEach((parent) => {
+        const n = db.prepare('SELECT COUNT(*) AS n FROM product_categories WHERE parent_id = ?').get(parent.id).n;
+        if (n > 0) return;
+        (childSeeds[parent.name] || []).forEach((name, index) => insertChild.run(name, parent.id, index));
+    });
 }
 
 function attachSkillsToProducts(products, skillRows) {
@@ -250,6 +324,7 @@ function ensureShopSchemaSqlite(db) {
     }
     seedDefaultsSqlite(db);
     backfillSqlite(db);
+    seedShopExtrasSqlite(db);
 }
 
 function listSkillsSqlite(db) {
@@ -291,10 +366,74 @@ function enrichProductSqlite(db, asBool, product) {
     };
 }
 
+function listCampaignSqlite(db) {
+    return db.prepare('SELECT * FROM shop_campaigns WHERE active = 1 ORDER BY id DESC LIMIT 1').get() || null;
+}
+
+function listOffersForProductSqlite(db, productId) {
+    return db.prepare(`
+        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status
+        FROM shop_offers o
+        JOIN shop_vendors v ON v.id = o.vendor_id
+        WHERE o.product_id = ? AND o.status = 'active' AND v.status = 'active'
+        ORDER BY o.price ASC, o.id ASC
+    `).all(Number(productId)).map((row) => ({
+        id: Number(row.id),
+        productId: Number(row.product_id),
+        vendorId: Number(row.vendor_id),
+        vendorName: row.display_name,
+        vendorKind: row.kind,
+        price: Number(row.price),
+        compareAtPrice: row.compare_at_price != null ? Number(row.compare_at_price) : null,
+        stock: Number(row.stock || 0),
+        sku: row.sku || null
+    }));
+}
+
+function listVendorsSqlite(db) {
+    return db.prepare('SELECT * FROM shop_vendors ORDER BY id DESC').all().map(mapVendorRow);
+}
+
+function getVendorByUserSqlite(db, userId) {
+    return mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE user_id = ?').get(Number(userId)));
+}
+
+function applyVendorSqlite(db, { userId, displayName, phone, docsNote }) {
+    const existing = getVendorByUserSqlite(db, userId);
+    if (existing) return existing;
+    const info = db.prepare(`
+        INSERT INTO shop_vendors (slug, display_name, kind, status, commission_pct, settlement_cycle, user_id, phone, docs_note)
+        VALUES (?, ?, 'marketplace', 'pending', 8, 'weekly', ?, ?, ?)
+    `).run(slugifyVendor(displayName), String(displayName || '').trim(), Number(userId), phone || null, docsNote || null);
+    return mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(info.lastInsertRowid)));
+}
+
+function updateVendorSqlite(db, id, patch) {
+    const current = mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(id)));
+    if (!current) return null;
+    const next = { ...current, ...patch };
+    db.prepare(`
+        UPDATE shop_vendors
+        SET display_name = ?, status = ?, commission_pct = ?, settlement_cycle = ?, phone = ?, docs_note = ?
+        WHERE id = ?
+    `).run(
+        next.displayName,
+        next.status,
+        Number(next.commissionPct || 0),
+        next.settlementCycle || 'weekly',
+        next.phone || null,
+        next.docsNote || null,
+        Number(id)
+    );
+    return mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(id)));
+}
+
 function syncProductCommerceSqlite(db, productId, extra = {}) {
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(Number(productId));
     if (!product) return;
-    const vendor = db.prepare('SELECT * FROM shop_vendors WHERE slug = ?').get(INTERNAL_VENDOR.slug);
+    const vendor = extra.vendorId
+        ? db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(extra.vendorId))
+        : db.prepare('SELECT * FROM shop_vendors WHERE slug = ?').get(INTERNAL_VENDOR.slug);
     if (!vendor) return;
     const price = extra.price != null ? Number(extra.price) : Number(product.price);
     const stock = extra.stock != null ? Number(extra.stock) : Number(product.stock);
@@ -357,6 +496,14 @@ async function ensureShopSchemaPg(q, one, many) {
     await q(SHOP_TABLES_PG);
     await q('ALTER TABLE product_comments ADD COLUMN IF NOT EXISTS rating INTEGER');
     await q('ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1');
+    await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS user_id BIGINT');
+    await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS phone TEXT');
+    await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS docs_note TEXT');
+    await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS placement TEXT');
+    await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS product_id BIGINT');
+    await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0');
+    await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS subtitle TEXT');
+    await q("UPDATE banners SET placement = 'home' WHERE placement IS NULL OR placement = ''");
 
     const vendor = await one('SELECT * FROM shop_vendors WHERE slug = $1', [INTERNAL_VENDOR.slug]);
     if (!vendor) {
@@ -419,6 +566,27 @@ async function ensureShopSchemaPg(q, one, many) {
             }
         }
     }
+
+    const campaign = await one('SELECT * FROM shop_campaigns WHERE active = 1 ORDER BY id DESC LIMIT 1');
+    const now = Date.now();
+    if (!campaign || (campaign.ends_at && new Date(campaign.ends_at).getTime() < now)) {
+        const ends = new Date(now + 3 * 24 * 60 * 60 * 1000).toISOString();
+        await q(
+            `INSERT INTO shop_campaigns (title, kind, value, starts_at, ends_at, active)
+             VALUES ($1,'percent',20,$2,$3,1)`,
+            ['فروش ویژه', new Date(now).toISOString(), ends]
+        );
+    }
+    const saleCount = await one(
+        'SELECT COUNT(*)::int AS n FROM shop_offers WHERE compare_at_price IS NOT NULL AND compare_at_price > price'
+    );
+    if (saleCount && saleCount.n === 0) {
+        await q(`
+            UPDATE shop_offers
+            SET compare_at_price = FLOOR(price * 1.35)
+            WHERE id IN (SELECT id FROM shop_offers ORDER BY id LIMIT 4)
+        `);
+    }
 }
 
 function toPg(sql) {
@@ -464,10 +632,68 @@ async function enrichProductPg(many, asBool, product) {
     };
 }
 
+async function listCampaignPg(one) {
+    return one('SELECT * FROM shop_campaigns WHERE active = 1 ORDER BY id DESC LIMIT 1');
+}
+
+async function listOffersForProductPg(many, productId) {
+    return (await many(`
+        SELECT o.*, v.display_name, v.kind
+        FROM shop_offers o
+        JOIN shop_vendors v ON v.id = o.vendor_id
+        WHERE o.product_id = $1 AND o.status = 'active' AND v.status = 'active'
+        ORDER BY o.price ASC, o.id ASC
+    `, [Number(productId)])).map((row) => ({
+        id: Number(row.id),
+        productId: Number(row.product_id),
+        vendorId: Number(row.vendor_id),
+        vendorName: row.display_name,
+        vendorKind: row.kind,
+        price: Number(row.price),
+        compareAtPrice: row.compare_at_price != null ? Number(row.compare_at_price) : null,
+        stock: Number(row.stock || 0),
+        sku: row.sku || null
+    }));
+}
+
+async function listVendorsPg(many) {
+    return (await many('SELECT * FROM shop_vendors ORDER BY id DESC')).map(mapVendorRow);
+}
+
+async function getVendorByUserPg(one, userId) {
+    return mapVendorRow(await one('SELECT * FROM shop_vendors WHERE user_id = $1', [Number(userId)]));
+}
+
+async function applyVendorPg(q, one, { userId, displayName, phone, docsNote }) {
+    const existing = await getVendorByUserPg(one, userId);
+    if (existing) return existing;
+    const row = await one(
+        `INSERT INTO shop_vendors (slug, display_name, kind, status, commission_pct, settlement_cycle, user_id, phone, docs_note)
+         VALUES ($1,$2,'marketplace','pending',8,'weekly',$3,$4,$5) RETURNING *`,
+        [slugifyVendor(displayName), String(displayName || '').trim(), Number(userId), phone || null, docsNote || null]
+    );
+    return mapVendorRow(row);
+}
+
+async function updateVendorPg(q, one, id, patch) {
+    const current = mapVendorRow(await one('SELECT * FROM shop_vendors WHERE id = $1', [Number(id)]));
+    if (!current) return null;
+    const next = { ...current, ...patch };
+    const row = await one(
+        `UPDATE shop_vendors
+         SET display_name=$1, status=$2, commission_pct=$3, settlement_cycle=$4, phone=$5, docs_note=$6
+         WHERE id=$7 RETURNING *`,
+        [next.displayName, next.status, Number(next.commissionPct || 0), next.settlementCycle || 'weekly', next.phone || null, next.docsNote || null, Number(id)]
+    );
+    return mapVendorRow(row);
+}
+
 async function syncProductCommercePg(q, one, productId, extra = {}) {
     const product = await one('SELECT * FROM products WHERE id = $1', [Number(productId)]);
     if (!product) return;
-    const vendor = await one('SELECT * FROM shop_vendors WHERE slug = $1', [INTERNAL_VENDOR.slug]);
+    const vendor = extra.vendorId
+        ? await one('SELECT * FROM shop_vendors WHERE id = $1', [Number(extra.vendorId)])
+        : await one('SELECT * FROM shop_vendors WHERE slug = $1', [INTERNAL_VENDOR.slug]);
     if (!vendor) return;
     const price = extra.price != null ? Number(extra.price) : Number(product.price);
     const stock = extra.stock != null ? Number(extra.stock) : Number(product.stock);
@@ -537,11 +763,23 @@ module.exports = {
     enrichProductSqlite,
     syncProductCommerceSqlite,
     adjustOfferStockSqlite,
+    listCampaignSqlite,
+    listOffersForProductSqlite,
+    listVendorsSqlite,
+    getVendorByUserSqlite,
+    applyVendorSqlite,
+    updateVendorSqlite,
     ensureShopSchemaPg,
     listSkillsPg,
     getInternalVendorPg,
     listCatalogPg,
     enrichProductPg,
     syncProductCommercePg,
-    adjustOfferStockPg
+    adjustOfferStockPg,
+    listCampaignPg,
+    listOffersForProductPg,
+    listVendorsPg,
+    getVendorByUserPg,
+    applyVendorPg,
+    updateVendorPg
 };

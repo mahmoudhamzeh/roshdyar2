@@ -23,6 +23,7 @@ const ProductDetailPage = () => {
     const [comment, setComment] = useState('');
     const [comments, setComments] = useState([]);
     const [rating, setRating] = useState(5);
+    const [offerId, setOfferId] = useState(null);
 
     useEffect(() => {
         const fetchProduct = async () => {
@@ -36,6 +37,7 @@ const ProductDetailPage = () => {
                 setQuantity(1);
                 setActiveImage(0);
                 setComments(data.comments || []);
+                setOfferId(data.offerId || (data.offers && data.offers[0] && data.offers[0].id) || null);
             } catch (err) {
                 setError(err.message || 'خطا در دریافت محصول');
             } finally {
@@ -47,7 +49,18 @@ const ProductDetailPage = () => {
 
     const handleAddToCart = () => {
         if (!product || product.stock < 1) return;
-        addToCart(product, quantity);
+        const offer = (product.offers || []).find((item) => item.id === offerId);
+        addToCart({
+            ...product,
+            ...(offer ? {
+                offerId: offer.id,
+                vendorId: offer.vendorId,
+                vendorName: offer.vendorName,
+                price: offer.price,
+                stock: offer.stock,
+                compareAtPrice: offer.compareAtPrice
+            } : {})
+        }, quantity);
         setMessage('محصول به سبد اضافه شد');
         window.setTimeout(() => setMessage(''), 2200);
     };
@@ -96,8 +109,22 @@ const ProductDetailPage = () => {
                             <span className="product-detail-cat">{product.category}</span>
                             {product.ageBand && <span className="shop-age-badge">{ageBandLabel(product.ageBand)}</span>}
                             <h1>{product.name}</h1>
-                            {product.vendorName && (
-                                <p className="product-detail-vendor">فروشنده: {product.vendorName}</p>
+                            {(product.offers || []).length > 0 && (
+                                <div className="product-offers">
+                                    <p>فروشندگان این کالا</p>
+                                    {(product.offers || []).map((offer) => (
+                                        <label key={offer.id} className={offerId === offer.id ? 'is-active' : ''}>
+                                            <input
+                                                type="radio"
+                                                name="offer"
+                                                checked={offerId === offer.id}
+                                                onChange={() => setOfferId(offer.id)}
+                                            />
+                                            {offer.vendorName} · {formatPrice(offer.price)}
+                                            {offer.stock < 1 ? ' · ناموجود' : ''}
+                                        </label>
+                                    ))}
+                                </div>
                             )}
                             {product.ratingCount > 0 && (
                                 <p className="shop-rating">{stars(product.ratingAvg)} ({product.ratingCount})</p>

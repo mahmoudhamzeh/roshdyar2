@@ -293,11 +293,17 @@ function rowToPodcast(row) {
 }
 
 function rowToBanner(row) {
+    const productId = row.product_id != null ? Number(row.product_id) : null;
+    const link = row.link || (productId ? `/shop/${productId}` : '');
     return {
         id: Number(row.id),
         title: row.title,
-        link: row.link,
-        imageUrl: row.image_url
+        subtitle: row.subtitle || '',
+        link,
+        imageUrl: row.image_url,
+        placement: row.placement || 'home',
+        productId,
+        sortOrder: Number(row.sort_order || 0)
     };
 }
 
@@ -1558,15 +1564,31 @@ const banners = {
     async list() {
         const cached = cacheGet('banners');
         if (cached) return cached;
-        return cacheSet('banners', (await many('SELECT * FROM banners ORDER BY id')).map(rowToBanner));
+        const all = (await many('SELECT * FROM banners ORDER BY sort_order, id')).map(rowToBanner);
+        return cacheSet('banners', all);
+    },
+    async listByPlacement(placement) {
+        const all = await banners.list();
+        if (!placement || placement === 'all') return all;
+        const filtered = all.filter((b) => b.placement === placement);
+        return filtered.length ? filtered : all;
     },
     async count() {
         return (await one('SELECT COUNT(*)::int AS n FROM banners')).n;
     },
     async create(banner) {
         const row = await one(
-            'INSERT INTO banners (title, link, image_url) VALUES ($1,$2,$3) RETURNING *',
-            [banner.title || null, banner.link || null, banner.imageUrl || null]
+            `INSERT INTO banners (title, link, image_url, placement, product_id, sort_order, subtitle)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            [
+                banner.title || null,
+                banner.link || null,
+                banner.imageUrl || null,
+                banner.placement || 'home',
+                banner.productId ? Number(banner.productId) : null,
+                Number(banner.sortOrder || 0),
+                banner.subtitle || null
+            ]
         );
         cacheInvalidate('banners');
         return rowToBanner(row);
@@ -1576,11 +1598,21 @@ const banners = {
         if (!current) return null;
         const next = { ...current, ...patch, id: Number(id) };
         await q(
-            'UPDATE banners SET title=$1, link=$2, image_url=$3 WHERE id=$4',
-            [next.title || null, next.link || null, next.imageUrl || null, Number(id)]
+            `UPDATE banners SET title=$1, link=$2, image_url=$3, placement=$4, product_id=$5, sort_order=$6, subtitle=$7
+             WHERE id=$8`,
+            [
+                next.title || null,
+                next.link || null,
+                next.imageUrl || null,
+                next.placement || 'home',
+                next.productId ? Number(next.productId) : null,
+                Number(next.sortOrder || 0),
+                next.subtitle || null,
+                Number(id)
+            ]
         );
         cacheInvalidate('banners');
-        return next;
+        return banners.list().then((list) => list.find((item) => Number(item.id) === Number(id)));
     },
     async remove(id) {
         const result = await q('DELETE FROM banners WHERE id = $1', [Number(id)]);
@@ -2220,6 +2252,24 @@ module.exports = {
         },
         getInternalVendor() {
             return shopStore.getInternalVendorPg(one);
+        },
+        campaign() {
+            return shopStore.listCampaignPg(one);
+        },
+        listOffers(productId) {
+            return shopStore.listOffersForProductPg(many, productId);
+        },
+        listVendors() {
+            return shopStore.listVendorsPg(many);
+        },
+        getVendorByUser(userId) {
+            return shopStore.getVendorByUserPg(one, userId);
+        },
+        applyVendor(payload) {
+            return shopStore.applyVendorPg(q, one, payload);
+        },
+        updateVendor(id, patch) {
+            return shopStore.updateVendorPg(q, one, id, patch);
         },
         ageBands: shopStore.AGE_BANDS,
         skills: shopStore.SKILLS
