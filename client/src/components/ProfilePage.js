@@ -5,7 +5,7 @@ import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
 import TicketsPage from './TicketsPage';
 import MainNavbar from './MainNavbar';
-import { clearAuthSession } from '../api';
+import { clearAuthSession, getLoggedInUser } from '../api';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
@@ -20,7 +20,7 @@ const ProfilePage = () => {
     };
 
     const handleGenerateReminders = async () => {
-        const user = JSON.parse(localStorage.getItem('loggedInUser'));
+        const user = getLoggedInUser();
         if (!user) return;
 
         try {
@@ -88,6 +88,7 @@ const ProfilePage = () => {
             )}
 
             <nav className="profile-tabs" aria-label="بخش‌های پروفایل">
+                <p className="profile-tabs-title">منوی حساب</p>
                 {tabs.map((tab) => (
                     tab.href ? (
                         <Link key={tab.id} to={tab.href} className="profile-tab">
