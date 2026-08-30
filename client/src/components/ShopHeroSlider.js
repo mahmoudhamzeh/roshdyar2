@@ -1,53 +1,70 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
-import { Carousel as ResponsiveCarousel } from 'react-responsive-carousel';
-import 'react-responsive-carousel/lib/styles/carousel.min.css';
 import './ShopHeroSlider.css';
+
+const DEFAULT_SLIDES = [
+    {
+        id: 'default-1',
+        title: 'دنیای فروشگاه تات کیدز',
+        subtitle: 'خرید بر اساس سن و مهارت رشدی کودک',
+        link: '/shop/categories'
+    },
+    {
+        id: 'default-2',
+        title: 'فروش ویژه مادر و کودک',
+        subtitle: 'تخفیف‌های محدود روی اسباب‌بازی و کتاب',
+        link: '/shop?sort=popular'
+    }
+];
 
 const ShopHeroSlider = ({ banners = [] }) => {
     const history = useHistory();
-    if (!banners.length) return null;
+    const slides = banners.length ? banners : DEFAULT_SLIDES;
+    const [index, setIndex] = useState(0);
 
-    const go = (banner) => {
-        const url = banner.link || (banner.productId ? `/shop/${banner.productId}` : '');
+    useEffect(() => {
+        if (slides.length < 2) return undefined;
+        const id = window.setInterval(() => {
+            setIndex((current) => (current + 1) % slides.length);
+        }, 5000);
+        return () => window.clearInterval(id);
+    }, [slides.length]);
+
+    const current = slides[index] || slides[0];
+    const go = () => {
+        const url = current.link || (current.productId ? `/shop/${current.productId}` : '');
         if (!url) return;
         if (url.startsWith('/')) history.push(url);
         else window.open(url.startsWith('http') ? url : `https://${url}`, '_blank', 'noopener,noreferrer');
     };
 
     return (
-        <section className="shop-hero-slider animate-fade-up" aria-label="بنرهای فروشگاه">
-            <ResponsiveCarousel
-                showThumbs={false}
-                showStatus={false}
-                infiniteLoop
-                autoPlay
-                interval={5000}
-                emulateTouch
-                className="shop-hero-slider__carousel"
-            >
-                {banners.map((banner) => (
-                    <button
-                        key={banner.id}
-                        type="button"
-                        className="shop-hero-slider__slide"
-                        onClick={() => go(banner)}
-                    >
-                        {banner.imageUrl ? (
-                            <img src={banner.imageUrl} alt={banner.title || 'بنر فروشگاه'} />
-                        ) : (
-                            <div className="shop-hero-slider__fallback" aria-hidden="true" />
-                        )}
-                        {(banner.title || banner.subtitle) && (
-                            <div className="shop-hero-slider__copy">
-                                {banner.title && <h2>{banner.title}</h2>}
-                                {banner.subtitle && <p>{banner.subtitle}</p>}
-                                <span>مشاهده محصول</span>
-                            </div>
-                        )}
-                    </button>
-                ))}
-            </ResponsiveCarousel>
+        <section className="shop-hero-slider" aria-label="بنرهای فروشگاه">
+            <button type="button" className="shop-hero-slider__slide" onClick={go}>
+                {current.imageUrl ? (
+                    <img src={current.imageUrl} alt={current.title || 'بنر فروشگاه'} />
+                ) : (
+                    <div className="shop-hero-slider__fallback" />
+                )}
+                <div className="shop-hero-slider__copy">
+                    {current.title && <h2>{current.title}</h2>}
+                    {current.subtitle && <p>{current.subtitle}</p>}
+                    <span>مشاهده و خرید</span>
+                </div>
+            </button>
+            {slides.length > 1 && (
+                <div className="shop-hero-slider__dots">
+                    {slides.map((slide, i) => (
+                        <button
+                            key={slide.id}
+                            type="button"
+                            className={i === index ? 'is-active' : ''}
+                            aria-label={`اسلاید ${i + 1}`}
+                            onClick={() => setIndex(i)}
+                        />
+                    ))}
+                </div>
+            )}
         </section>
     );
 };
