@@ -59,7 +59,7 @@ const OrdersPage = () => {
     }, [fetchOrders]);
 
     return (
-        <div className="orders-page">
+        <div className="orders-page shop-world">
             <MainNavbar />
             <main className="orders-main">
                 <div className="orders-header animate-fade-up">

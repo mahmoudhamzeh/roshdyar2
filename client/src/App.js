@@ -19,6 +19,8 @@ import VaccinationStatusPage from './components/VaccinationStatusPage';
 import NewsPage from './components/NewsPage';
 import ArticleDetailPage from './components/ArticleDetailPage';
 import ShopPage from './components/ShopPage';
+import ShopCategoriesPage from './components/ShopCategoriesPage';
+import ShopSkillsPage from './components/ShopSkillsPage';
 import ProductDetailPage from './components/ProductDetailPage';
 import CartPage from './components/CartPage';
 import OrdersPage from './components/OrdersPage';
@@ -46,6 +48,8 @@ const App = () => {
                 <PrivateRoute path="/age-guidance/:childId" component={ChildGrowthPage} />
                 <PrivateRoute path="/profile" component={ProfilePage} />
                 <PrivateRoute exact path="/shop" component={ShopPage} />
+                <PrivateRoute exact path="/shop/categories" component={ShopCategoriesPage} />
+                <PrivateRoute exact path="/shop/skills" component={ShopSkillsPage} />
                 <PrivateRoute path="/shop/:id" component={ProductDetailPage} />
                 <PrivateRoute path="/cart" component={CartPage} />
                 <PrivateRoute path="/orders" component={OrdersPage} />

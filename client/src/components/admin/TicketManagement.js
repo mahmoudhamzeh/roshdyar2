@@ -72,8 +72,10 @@ const TicketManagement = () => {
                 {tickets.map(ticket => (
                     <div key={ticket.id} className={`ticket-item status-${ticket.status}`}>
                         <div className="ticket-summary">
+                            <span>شماره: {ticket.ticketNumber || `TK-${String(ticket.id).padStart(5, '0')}`}</span>
                             <span>کاربر: {ticket.userId}</span>
                             <h4>{ticket.subject}</h4>
+                            <p>{ticket.groupName} / {ticket.subgroup}</p>
                             <span className="ticket-status">{ticket.status}</span>
                         </div>
                         <button onClick={() => handleViewTicket(ticket)} className="btn-view">مشاهده</button>
@@ -84,11 +86,16 @@ const TicketManagement = () => {
             {selectedTicket && (
                 <div className="modal-overlay">
                     <div className="modal-content">
-                        <h2>تیکت: {selectedTicket.subject}</h2>
+                        <h2>تیکت {selectedTicket.ticketNumber || selectedTicket.id}</h2>
+                        <p><strong>موضوع:</strong> {selectedTicket.subject}</p>
                         <p><strong>کاربر:</strong> {selectedTicket.userId}</p>
+                        <p><strong>گروه:</strong> {selectedTicket.groupName} / {selectedTicket.subgroup}</p>
                         <p><strong>وضعیت:</strong> {selectedTicket.status}</p>
                         <div className="ticket-history">
                             <p>{selectedTicket.content || selectedTicket.message}</p>
+                            {(selectedTicket.attachments || []).map((url) => (
+                                <p key={url}><a href={url} target="_blank" rel="noreferrer">پیوست</a></p>
+                            ))}
                             {selectedTicket.replies && selectedTicket.replies.map((r, index) => (
                                 <p key={index} className="reply"><strong>پاسخ ادمین:</strong> {r.content}</p>
                             ))}

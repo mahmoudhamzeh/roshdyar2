@@ -29,6 +29,20 @@
   color: var(--danger);
 }
 
+.tickets-success {
+  color: #065f46;
+  background: var(--success-soft);
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+}
+
+.ticket-number {
+  display: block;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
+}
+
 .tickets-empty {
   color: var(--ink-muted);
 }
