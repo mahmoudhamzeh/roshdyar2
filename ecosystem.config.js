@@ -11,6 +11,7 @@ module.exports = {
             script: 'server.js',
             instances: useCluster ? instances : 1,
             exec_mode: useCluster ? 'cluster' : 'fork',
+            env_file: path.join(__dirname, 'server', '.env'),
             env: {
                 NODE_ENV: 'production'
             }

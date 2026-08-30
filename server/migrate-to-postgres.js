@@ -14,7 +14,7 @@ const fs = require('fs');
 const path = require('path');
 
 const envPath = path.join(__dirname, '.env');
-require('dotenv').config({ path: envPath });
+require('dotenv').config({ path: envPath, override: true });
 require('dotenv').config();
 
 function readDatabaseUrl() {

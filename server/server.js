@@ -1,4 +1,7 @@
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+require('dotenv').config({
+    path: require('path').join(__dirname, '.env'),
+    override: true
+});
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
@@ -2158,7 +2161,7 @@ async function startServer() {
     try {
         await store.connect();
         await ensureDefaultAdmin();
-        app.listen(port, () => console.log(`TatKids server is listening on port ${port}`));
+        app.listen(port, '0.0.0.0', () => console.log(`TatKids server is listening on port ${port}`));
     } catch (err) {
         console.error('Failed to start TatKids server:', err);
         process.exit(1);
