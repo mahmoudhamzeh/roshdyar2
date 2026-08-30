@@ -1,5 +1,6 @@
+const path = require('path');
 require('dotenv').config({
-    path: require('path').join(__dirname, '.env'),
+    path: path.join(__dirname, '.env'),
     override: true
 });
 require('dotenv').config();
@@ -7,7 +8,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const multer = require('multer');
-const path = require('path');
 const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
@@ -30,6 +30,7 @@ const {
 } = require('./child-growth-data');
 
 const app = express();
+app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
 const port = process.env.PORT || 5000;
 
 const uploadsDir = path.join(__dirname, 'uploads');
