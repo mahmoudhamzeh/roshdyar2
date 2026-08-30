@@ -3,16 +3,14 @@ import { formatPrice } from '../../utils/cart';
 import './ProductManagement.css';
 
 const API = '';
-const CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
-
 const emptyForm = {
     name: '',
     description: '',
-    category: 'تغذیه',
+    category: '',
     price: '',
     stock: '',
     active: true,
-    image: null,
+    images: [],
 };
 
 const getAdmin = () => {
@@ -29,6 +27,7 @@ const ProductManagement = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState(emptyForm);
+    const [categories, setCategories] = useState([]);
 
     const fetchProducts = async () => {
         setLoading(true);
@@ -40,6 +39,10 @@ const ProductManagement = () => {
             if (!res.ok) throw new Error('Failed to fetch products');
             const data = await res.json();
             setProducts(data);
+            const catRes = await fetch(`${API}/api/admin/product-categories`, {
+                headers: { 'x-user-id': admin.id }
+            });
+            if (catRes.ok) setCategories(await catRes.json());
         } catch (err) {
             console.error(err);
         } finally {
@@ -66,7 +69,7 @@ const ProductManagement = () => {
             price: String(product.price ?? ''),
             stock: String(product.stock ?? ''),
             active: product.active !== false,
-            image: null,
+            images: [],
         });
         setShowForm(true);
     };
@@ -81,7 +84,7 @@ const ProductManagement = () => {
         formData.append('price', form.price);
         formData.append('stock', form.stock);
         formData.append('active', String(form.active));
-        if (form.image) formData.append('image', form.image);
+        Array.from(form.images || []).forEach((file) => formData.append('images', file));
 
         try {
             const url = editingId
@@ -162,8 +165,14 @@ const ProductManagement = () => {
                         value={form.category}
                         onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
                     >
-                        {CATEGORIES.map((cat) => (
-                            <option key={cat} value={cat}>{cat}</option>
+                        <option value="">انتخاب گروه</option>
+                        {categories.map((group) => (
+                            <optgroup key={group.id} label={group.name}>
+                                <option value={group.name}>{group.name}</option>
+                                {(group.children || []).map((child) => (
+                                    <option key={child.id} value={child.name}>{child.name}</option>
+                                ))}
+                            </optgroup>
                         ))}
                     </select>
                     <div className="product-form-row">
@@ -196,11 +205,12 @@ const ProductManagement = () => {
                         />
                         فعال در فروشگاه
                     </label>
-                    <label>تصویر محصول (اختیاری)</label>
+                    <label>تصاویر محصول (چند فایل)</label>
                     <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => setForm((p) => ({ ...p, image: e.target.files[0] || null }))}
+                        multiple
+                        onChange={(e) => setForm((p) => ({ ...p, images: e.target.files }))}
                     />
                     <div className="product-form-actions">
                         <button type="submit">{editingId ? 'ذخیره تغییرات' : 'ایجاد محصول'}</button>

@@ -8,7 +8,6 @@ import { formatPrice, getCartCount } from '../utils/cart';
 import './ShopPage.css';
 
 const API = '';
-const CATEGORIES = ['همه', 'تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
 
 const ShopPage = () => {
     const [products, setProducts] = useState([]);
@@ -18,6 +17,7 @@ const ShopPage = () => {
     const [search, setSearch] = useState('');
     const [query, setQuery] = useState('');
     const [cartCount, setCartCount] = useState(getCartCount());
+    const [categories, setCategories] = useState(['همه']);
 
     useEffect(() => {
         const onCartUpdate = () => setCartCount(getCartCount());
@@ -27,6 +27,20 @@ const ShopPage = () => {
             window.removeEventListener('cart-updated', onCartUpdate);
             window.removeEventListener('storage', onCartUpdate);
         };
+    }, []);
+
+    useEffect(() => {
+        fetch('/api/shop/categories')
+            .then((res) => (res.ok ? res.json() : []))
+            .then((tree) => {
+                const names = ['همه'];
+                (Array.isArray(tree) ? tree : []).forEach((group) => {
+                    if (group.name) names.push(group.name);
+                    (group.children || []).forEach((child) => names.push(child.name));
+                });
+                setCategories(names);
+            })
+            .catch(() => setCategories(['همه']));
     }, []);
 
     useEffect(() => {
@@ -93,7 +107,7 @@ const ShopPage = () => {
                         <button type="submit">جستجو</button>
                     </form>
                     <div className="shop-categories" role="tablist" aria-label="دسته‌بندی‌ها">
-                        {CATEGORIES.map((cat) => (
+                        {categories.map((cat) => (
                             <button
                                 key={cat}
                                 type="button"

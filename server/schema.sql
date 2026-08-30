@@ -290,3 +290,33 @@ CREATE TABLE IF NOT EXISTS otp_codes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_otp_expires ON otp_codes(expires_at);
+
+CREATE TABLE IF NOT EXISTS product_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    parent_id INTEGER,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (parent_id) REFERENCES product_categories(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS product_images (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    image_url TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS product_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    user_id INTEGER,
+    body TEXT NOT NULL,
+    created_at TEXT,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images(product_id);
+CREATE INDEX IF NOT EXISTS idx_product_comments_product ON product_comments(product_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_product_categories_parent ON product_categories(parent_id);
