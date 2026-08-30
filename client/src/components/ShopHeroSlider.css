@@ -16,11 +16,18 @@
   min-height: 180px;
 }
 
-.shop-hero-slider__slide img {
+.shop-hero-slider__slide img,
+.shop-hero-slider__fallback {
   width: 100%;
   height: clamp(180px, 32vw, 320px);
   object-fit: cover;
   display: block;
+}
+
+.shop-hero-slider__fallback {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(253, 230, 138, 0.35), transparent 40%),
+    linear-gradient(135deg, #ea580c 0%, #0f766e 55%, #115e59 100%);
 }
 
 .shop-hero-slider__copy {

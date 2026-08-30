@@ -33,7 +33,11 @@ const ShopHeroSlider = ({ banners = [] }) => {
                         className="shop-hero-slider__slide"
                         onClick={() => go(banner)}
                     >
-                        <img src={banner.imageUrl} alt={banner.title || 'بنر فروشگاه'} />
+                        {banner.imageUrl ? (
+                            <img src={banner.imageUrl} alt={banner.title || 'بنر فروشگاه'} />
+                        ) : (
+                            <div className="shop-hero-slider__fallback" aria-hidden="true" />
+                        )}
                         {(banner.title || banner.subtitle) && (
                             <div className="shop-hero-slider__copy">
                                 {banner.title && <h2>{banner.title}</h2>}

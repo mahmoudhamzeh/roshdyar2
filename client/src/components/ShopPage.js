@@ -99,10 +99,10 @@ const ShopPage = () => {
                     banners={
                         (home?.banners || []).length
                             ? home.banners
-                            : (home?.onSale || []).filter((p) => p.imageUrl).slice(0, 4).map((product) => ({
+                            : (home?.onSale || []).slice(0, 4).map((product) => ({
                                 id: `sale-${product.id}`,
                                 title: product.name,
-                                subtitle: 'فروش ویژه تات کیدز',
+                                subtitle: 'فروش ویژه — خرید مستقیم محصول',
                                 imageUrl: product.imageUrl,
                                 productId: product.id,
                                 link: `/shop/${product.id}`
