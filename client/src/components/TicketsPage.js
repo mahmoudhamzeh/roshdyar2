@@ -2,10 +2,17 @@ import React, { useEffect, useState } from 'react';
 import './TicketsPage.css';
 
 const API = '';
+const FALLBACK_GROUPS = {
+    'حساب کاربری': ['ورود و ثبت‌نام', 'پروفایل', 'رمز عبور'],
+    'کودکان و پرونده': ['ثبت کودک', 'واکسیناسیون', 'نمودار رشد', 'پرونده سلامت'],
+    'فروشگاه': ['سفارش', 'پرداخت', 'محصول'],
+    'فنی': ['خطای سایت', 'پیشنهاد'],
+    'سایر': ['عمومی']
+};
 
 const TicketsPage = () => {
     const [tickets, setTickets] = useState([]);
-    const [groups, setGroups] = useState({});
+    const [groups, setGroups] = useState(FALLBACK_GROUPS);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -27,7 +34,10 @@ const TicketsPage = () => {
             ]);
             if (!listRes.ok) throw new Error('بارگذاری تیکت‌ها ناموفق بود');
             setTickets(await listRes.json());
-            if (groupRes.ok) setGroups(await groupRes.json());
+            if (groupRes.ok) {
+                const data = await groupRes.json();
+                if (data && typeof data === 'object' && !data.message) setGroups(data);
+            }
         } catch (err) {
             setError(err.message);
         } finally {
