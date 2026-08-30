@@ -86,7 +86,8 @@ fi
 echo "==> Health"
 curl -sS --max-time 8 http://127.0.0.1:5000/api/health || true
 echo
-echo "Put JWT_SECRET and DATABASE_URL in $APP_DIR/server/.env (not as a one-off shell variable)."
+echo "Put JWT_SECRET, DATABASE_URL, and Idekavan SMS_* values in $APP_DIR/server/.env."
+echo "SMS check: node $APP_DIR/server/sms-check.js"
 echo "Postgres migrate: bash $APP_DIR/scripts/migrate-postgres.sh"
 echo "https://tatkids.com/  → app home"
 echo "/register            → SMS login"

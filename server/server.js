@@ -28,6 +28,7 @@ const {
     recommendActivities,
     buildAgeGuidePayload
 } = require('./child-growth-data');
+const { deliverOtp } = require('./sms');
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -399,119 +400,6 @@ async function ensureDefaultAdmin() {
 function publicUser(user) {
     const { password, ...userToSend } = user;
     return userToSend;
-}
-
-function httpsJsonRequest(method, url, headers, bodyObj) {
-    const https = require('https');
-    const body = bodyObj === undefined ? null : JSON.stringify(bodyObj);
-    const u = new URL(url);
-    const reqHeaders = { Accept: 'application/json', ...(headers || {}) };
-    if (body !== null) {
-        reqHeaders['Content-Type'] = 'application/json';
-        reqHeaders['Content-Length'] = Buffer.byteLength(body);
-    }
-
-    return new Promise((resolve, reject) => {
-        const req = https.request(
-            {
-                hostname: u.hostname,
-                path: `${u.pathname}${u.search}`,
-                method,
-                headers: reqHeaders
-            },
-            (res) => {
-                let raw = '';
-                res.on('data', (chunk) => {
-                    raw += chunk;
-                });
-                res.on('end', () => {
-                    let data = raw;
-                    try {
-                        data = raw ? JSON.parse(raw) : null;
-                    } catch (_) {
-                        /* keep raw string */
-                    }
-                    resolve({ statusCode: res.statusCode, data, raw });
-                });
-            }
-        );
-        req.on('error', reject);
-        if (body !== null) req.write(body);
-        req.end();
-    });
-}
-
-function toSmsIrMobile(phone) {
-    // sms.ir examples commonly use 9xxxxxxxxx (without leading 0)
-    return phone.startsWith('0') ? phone.slice(1) : phone;
-}
-
-async function deliverOtp(phone, code) {
-    const apiKey = process.env.SMS_API_KEY;
-    const provider = String(process.env.SMS_PROVIDER || '').toLowerCase();
-    const lineNumber = process.env.SMS_LINE_NUMBER || process.env.SMS_LINE || '';
-    const templateId = process.env.SMS_TEMPLATE_ID;
-    const templateParam = process.env.SMS_TEMPLATE_PARAM || 'CODE';
-
-    if (!apiKey || provider === 'console' || provider === 'log') {
-        console.log(`[OTP] کد تأیید برای ${phone}: ${code} (معتبر به مدت ۵ دقیقه)`);
-        return { delivered: true, channel: 'log' };
-    }
-
-    if (provider === 'sms.ir' || provider === 'smsir') {
-        const mobile = toSmsIrMobile(phone);
-
-        // Preferred: Verify template (service line / high priority)
-        if (templateId) {
-            const response = await httpsJsonRequest(
-                'POST',
-                'https://api.sms.ir/v1/send/verify',
-                { 'x-api-key': apiKey, Accept: 'text/plain' },
-                {
-                    mobile,
-                    templateId: Number(templateId),
-                    parameters: [{ name: templateParam, value: String(code) }]
-                }
-            );
-            if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
-                return { delivered: true, channel: 'sms.ir-verify', data: response.data.data };
-            }
-            const errMsg =
-                (response.data && (response.data.message || response.data.Message)) ||
-                response.raw ||
-                `HTTP ${response.statusCode}`;
-            throw new Error(`sms.ir verify failed: ${errMsg}`);
-        }
-
-        // Fallback: bulk text SMS with configured line number
-        if (lineNumber) {
-            const messageText = `کد تأیید تات کیدز: ${code}\nاین کد تا ۵ دقیقه معتبر است.`;
-            const response = await httpsJsonRequest(
-                'POST',
-                'https://api.sms.ir/v1/send/bulk',
-                { 'x-api-key': apiKey, Accept: 'text/plain' },
-                {
-                    lineNumber: Number(lineNumber),
-                    messageText,
-                    mobiles: [mobile],
-                    sendDateTime: null
-                }
-            );
-            if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
-                return { delivered: true, channel: 'sms.ir-bulk', data: response.data.data };
-            }
-            const errMsg =
-                (response.data && (response.data.message || response.data.Message)) ||
-                response.raw ||
-                `HTTP ${response.statusCode}`;
-            throw new Error(`sms.ir bulk failed: ${errMsg}`);
-        }
-
-        throw new Error('SMS_TEMPLATE_ID یا SMS_LINE_NUMBER برای sms.ir تنظیم نشده است');
-    }
-
-    console.log(`[OTP] Unknown SMS_PROVIDER="${provider}". کد برای ${phone}: ${code}`);
-    return { delivered: true, channel: 'log' };
 }
 
 // --- Auth Routes ---
