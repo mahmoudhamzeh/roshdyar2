@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const { Pool, types } = require('pg');
+const shopStore = require('./shop-store');
+const { buildCategoryTree } = require('./shop-model');
 
 types.setTypeParser(20, (val) => Number(val));
 types.setTypeParser(1700, (val) => Number(val));
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const SCHEMA_PATH = path.join(__dirname, 'schema.pg.sql');
 const DEFAULT_SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
 
@@ -894,6 +896,7 @@ async function connect() {
             pool = next;
             const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');
             await pool.query(schemaSql);
+            await shopStore.ensureShopSchemaPg(q, one, many);
             await seedShopCategories();
             const version = await getSchemaVersion();
             if (version < SCHEMA_VERSION) {
@@ -901,6 +904,7 @@ async function connect() {
                 if (!importedSqlite) await seedFromJsonIfEmpty();
                 await setSchemaVersion(SCHEMA_VERSION);
             }
+            await shopStore.ensureShopSchemaPg(q, one, many);
             await pool.query('DELETE FROM otp_codes WHERE expires_at < $1', [Date.now()]);
             console.log(`Connected to PostgreSQL schema v${SCHEMA_VERSION}`);
             return pool;
@@ -1798,22 +1802,10 @@ const products = {
         return row ? hydrateProduct(rowToProduct(row)) : null;
     },
     async listAll() {
-        return (await many('SELECT * FROM products ORDER BY id DESC')).map(rowToProduct);
+        return shopStore.listCatalogPg(many, asBool, {}, { activeOnly: false });
     },
-    async listActive({ category, q: search } = {}) {
-        const params = [];
-        let sql = 'SELECT * FROM products WHERE active = 1';
-        if (category && category !== 'همه') {
-            params.push(category);
-            sql += ` AND category = $${params.length}`;
-        }
-        if (search && String(search).trim()) {
-            const term = `%${String(search).trim().toLowerCase()}%`;
-            params.push(term, term);
-            sql += ` AND (lower(name) LIKE $${params.length - 1} OR lower(description) LIKE $${params.length})`;
-        }
-        sql += ' ORDER BY id DESC';
-        return (await many(sql, params)).map(rowToProduct);
+    async listActive(filters = {}) {
+        return shopStore.listCatalogPg(many, asBool, filters);
     },
     async count() {
         return (await one('SELECT COUNT(*)::int AS n FROM products')).n;
@@ -1835,7 +1827,8 @@ const products = {
             ]
         );
         cacheInvalidate('products');
-        return rowToProduct(row);
+        await shopStore.syncProductCommercePg(q, one, row.id, product);
+        return products.getById(row.id);
     },
     async update(id, product) {
         const current = await products.getById(id);
@@ -1858,6 +1851,7 @@ const products = {
             ]
         );
         cacheInvalidate('products');
+        await shopStore.syncProductCommercePg(q, one, Number(id), next);
         return products.getById(id);
     },
     async remove(id) {
@@ -1905,6 +1899,7 @@ const orders = {
             }
             for (const item of items) {
                 await q('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.productId], client);
+                await shopStore.adjustOfferStockPg(q, item.productId, -item.quantity, client);
             }
             const createdAt = new Date().toISOString();
             const orderRow = await one(
@@ -1940,6 +1935,7 @@ const orders = {
                             [item.quantity, item.productId],
                             client
                         );
+                        await shopStore.adjustOfferStockPg(q, item.productId, item.quantity, client);
                     }
                 }
             }
@@ -2057,7 +2053,8 @@ function rowToCategory(row) {
         id: Number(row.id),
         name: row.name,
         parentId: row.parent_id == null ? null : Number(row.parent_id),
-        sortOrder: Number(row.sort_order || 0)
+        sortOrder: Number(row.sort_order || 0),
+        active: row.active == null ? true : asBool(row.active)
     };
 }
 
@@ -2066,12 +2063,9 @@ const productCategories = {
         await seedShopCategories();
         return (await many('SELECT * FROM product_categories ORDER BY sort_order, id')).map(rowToCategory);
     },
-    async tree() {
-        const all = await productCategories.list();
-        return all.filter((c) => !c.parentId).map((group) => ({
-            ...group,
-            children: all.filter((c) => c.parentId === group.id)
-        }));
+    async tree({ includeInactive } = {}) {
+        const all = (await productCategories.list()).filter((c) => includeInactive || c.active !== false);
+        return buildCategoryTree(all);
     },
     async create({ name, parentId, sortOrder }) {
         const row = await one(
@@ -2144,14 +2138,19 @@ const productComments = {
             userId: row.user_id == null ? null : Number(row.user_id),
             author: row.first_name || row.username || 'کاربر',
             body: row.body,
+            rating: row.rating != null ? Number(row.rating) : null,
             createdAt: row.created_at
         }));
     },
-    async create({ productId, userId, body }) {
+    async create({ productId, userId, body, rating }) {
         const createdAt = new Date().toISOString();
+        const parsedRating = Number(rating);
+        const safeRating = Number.isFinite(parsedRating) && parsedRating >= 1 && parsedRating <= 5
+            ? Math.round(parsedRating)
+            : null;
         const row = await one(
-            'INSERT INTO product_comments (product_id, user_id, body, created_at) VALUES ($1,$2,$3,$4) RETURNING *',
-            [Number(productId), userId ? Number(userId) : null, String(body || '').trim(), createdAt]
+            'INSERT INTO product_comments (product_id, user_id, body, rating, created_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+            [Number(productId), userId ? Number(userId) : null, String(body || '').trim(), safeRating, createdAt]
         );
         const list = await productComments.listByProduct(productId);
         return list.find((c) => c.id === Number(row.id));
@@ -2163,11 +2162,11 @@ async function hydrateProduct(product) {
     const images = await productImages.listByProduct(product.id);
     const comments = await productComments.listByProduct(product.id);
     const cover = product.imageUrl ? [{ id: 0, productId: product.id, imageUrl: product.imageUrl, sortOrder: -1 }] : [];
-    return {
+    return shopStore.enrichProductPg(many, asBool, {
         ...product,
         images: [...cover, ...images.filter((img) => img.imageUrl !== product.imageUrl)],
         comments
-    };
+    });
 }
 
 async function stats() {
@@ -2215,6 +2214,16 @@ module.exports = {
     productCategories,
     productImages,
     productComments,
+    shop: {
+        listSkills() {
+            return shopStore.listSkillsPg(many);
+        },
+        getInternalVendor() {
+            return shopStore.getInternalVendorPg(one);
+        },
+        ageBands: shopStore.AGE_BANDS,
+        skills: shopStore.SKILLS
+    },
     orders,
     otp,
     normalizePhone

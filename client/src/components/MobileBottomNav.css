@@ -69,6 +69,21 @@
     line-height: 1.2;
   }
 
+  .mobile-bottom-nav--shop {
+    background: rgba(255, 251, 235, 0.97);
+    border-top-color: #eadfbf;
+    box-shadow: 0 -6px 20px rgba(180, 83, 9, 0.08);
+  }
+
+  .mobile-bottom-nav--shop .mobile-bottom-nav__item.is-active {
+    color: #92400e;
+    background: #fde68a;
+  }
+
+  .mobile-bottom-nav--shop .mobile-bottom-nav__label {
+    font-size: 0.62rem;
+  }
+
   /* Space so content isn't hidden behind the bar */
   body.has-mobile-bottom-nav {
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));

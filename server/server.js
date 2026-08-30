@@ -12,6 +12,7 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
+const { AGE_BANDS, flattenCategories } = require('./shop-model');
 const rateLimit = require('express-rate-limit');
 const {
     hashPassword,
@@ -132,7 +133,10 @@ const API_CATALOG = {
             'GET /api/podcasts/:id'
         ],
         shop: [
+            'GET /api/shop/home',
             'GET /api/shop/categories',
+            'GET /api/shop/skills',
+            'GET /api/shop/age-bands',
             'GET /api/shop/products',
             'GET /api/shop/products/:id',
             'GET /api/shop/orders',
@@ -1579,13 +1583,58 @@ const parsePrice = (value) => {
     return Number.isFinite(n) && n >= 0 ? n : null;
 };
 
+const parseSkillIds = (body) => {
+    if (!body) return undefined;
+    if (Array.isArray(body.skillIds)) return body.skillIds;
+    if (typeof body.skillIds === 'string' && body.skillIds.trim()) {
+        try {
+            const parsed = JSON.parse(body.skillIds);
+            return Array.isArray(parsed) ? parsed : String(body.skillIds).split(',').filter(Boolean);
+        } catch (_) {
+            return String(body.skillIds).split(',').map((s) => s.trim()).filter(Boolean);
+        }
+    }
+    if (body['skillIds[]'] != null) return [].concat(body['skillIds[]']);
+    return undefined;
+};
+
 app.get('/api/shop/categories', async (req, res) => {
     const tree = await store.productCategories.tree();
     res.json(tree.length ? tree : SHOP_CATEGORIES.map((name) => ({ name, children: [] })));
 });
 
+app.get('/api/shop/skills', async (req, res) => {
+    res.json(await store.shop.listSkills());
+});
+
+app.get('/api/shop/age-bands', (req, res) => {
+    res.json(AGE_BANDS);
+});
+
+app.get('/api/shop/home', async (req, res) => {
+    const [newest, popular, allActive, skills, categories, vendor] = await Promise.all([
+        store.products.listActive({ sort: 'newest' }),
+        store.products.listActive({ sort: 'popular' }),
+        store.products.listActive({}),
+        store.shop.listSkills(),
+        store.productCategories.tree(),
+        store.shop.getInternalVendor()
+    ]);
+    const onSale = (allActive || []).filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
+    res.json({
+        mode: 'single_vendor',
+        vendor: vendor || { slug: 'tatkids', displayName: 'مجموعه تات کیدز', kind: 'internal' },
+        ageBands: AGE_BANDS,
+        skills,
+        categories: categories.length ? categories : SHOP_CATEGORIES.map((name) => ({ name, children: [] })),
+        newest: (newest || []).slice(0, 8),
+        bestsellers: (popular || []).slice(0, 8),
+        onSale: onSale.slice(0, 8)
+    });
+});
+
 app.get('/api/admin/product-categories', isAdmin, async (req, res) => {
-    res.json(await store.productCategories.tree());
+    res.json(await store.productCategories.tree({ includeInactive: true }));
 });
 
 app.post('/api/admin/product-categories', isAdmin, async (req, res) => {
@@ -1629,13 +1678,26 @@ app.post('/api/shop/products/:id/comments', async (req, res) => {
     const comment = await store.productComments.create({
         productId: product.id,
         userId: user.id,
-        body
+        body,
+        rating: req.body.rating
     });
     res.status(201).json(comment);
 });
 
 app.get('/api/shop/products', async (req, res) => {
-    res.json(paginateList(await store.products.listActive({ category: req.query.category, q: req.query.q }), req));
+    const filters = {
+        category: req.query.category,
+        q: req.query.q,
+        sort: req.query.sort,
+        age: req.query.age || req.query.ageBand,
+        skill: req.query.skill
+    };
+    if (req.query.categoryId) {
+        const tree = await store.productCategories.tree({ includeInactive: true });
+        const node = flattenCategories(tree).find((c) => String(c.id) === String(req.query.categoryId));
+        if (node) filters.category = node.name;
+    }
+    res.json(paginateList(await store.products.listActive(filters), req));
 });
 
 app.get('/api/shop/products/:id', async (req, res) => {
@@ -1651,7 +1713,7 @@ app.get('/api/admin/products', isAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, res) => {
-    const { name, description, category, price, stock } = req.body;
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
     }
@@ -1673,7 +1735,12 @@ app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, 
         stock: parsedStock,
         imageUrl: uploaded[0] || null,
         active: true,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ageBand,
+        brand,
+        safetyWarning,
+        compareAtPrice,
+        skillIds: parseSkillIds(req.body)
     });
     if (uploaded.length) {
         await store.productImages.replace(newProduct.id, uploaded);
@@ -1686,8 +1753,14 @@ app.put('/api/admin/products/:id', isAdmin, upload.array('images', 8), async (re
     const current = await store.products.getById(id);
     if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
 
-    const { name, description, category, price, stock, active } = req.body;
+    const { name, description, category, price, stock, active, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
     const updated = { ...current, updatedAt: new Date().toISOString() };
+    if (ageBand !== undefined) updated.ageBand = ageBand;
+    if (brand !== undefined) updated.brand = brand;
+    if (safetyWarning !== undefined) updated.safetyWarning = safetyWarning;
+    if (compareAtPrice !== undefined) updated.compareAtPrice = compareAtPrice;
+    const skillIds = parseSkillIds(req.body);
+    if (skillIds) updated.skillIds = skillIds;
 
     if (name !== undefined) {
         if (!String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });

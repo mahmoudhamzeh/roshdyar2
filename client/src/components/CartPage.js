@@ -100,7 +100,7 @@ const CartPage = () => {
     const total = getCartTotal(cart);
 
     return (
-        <div className="cart-page">
+        <div className="cart-page shop-world">
             <MainNavbar />
             <main className="cart-main">
                 <div className="cart-header animate-fade-up">

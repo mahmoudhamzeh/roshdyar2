@@ -33,6 +33,8 @@ export const addToCart = (product, quantity = 1) => {
     } else {
         cart.push({
             productId: product.id,
+            offerId: product.offerId || null,
+            vendorId: product.vendorId || null,
             name: product.name,
             price: product.price,
             imageUrl: product.imageUrl || null,

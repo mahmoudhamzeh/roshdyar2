@@ -6,14 +6,21 @@ import {
     faChild,
     faStore,
     faUser,
-    faShoppingCart
+    faShoppingCart,
+    faThLarge
 } from '@fortawesome/free-solid-svg-icons';
 import { getCartCount } from '../utils/cart';
 import './MobileBottomNav.css';
 
+const isShopWorldPath = (pathname) =>
+    pathname.startsWith('/shop') ||
+    pathname.startsWith('/cart') ||
+    pathname.startsWith('/orders');
+
 const MobileBottomNav = () => {
     const location = useLocation();
     const [cartCount, setCartCount] = useState(getCartCount());
+    const shopWorld = isShopWorldPath(location.pathname);
 
     useEffect(() => {
         const sync = () => setCartCount(getCartCount());
@@ -31,13 +38,13 @@ const MobileBottomNav = () => {
             location.pathname.startsWith('/register') ||
             location.pathname.startsWith('/admin') ||
             location.pathname.startsWith('/news');
-        if (hide) {
+        document.body.classList.toggle('has-mobile-bottom-nav', !hide);
+        document.body.classList.toggle('shop-world-nav', !hide && shopWorld);
+        return () => {
             document.body.classList.remove('has-mobile-bottom-nav');
-            return undefined;
-        }
-        document.body.classList.add('has-mobile-bottom-nav');
-        return () => document.body.classList.remove('has-mobile-bottom-nav');
-    }, [location.pathname]);
+            document.body.classList.remove('shop-world-nav');
+        };
+    }, [location.pathname, shopWorld]);
 
     if (
         location.pathname.startsWith('/login') ||
@@ -48,23 +55,58 @@ const MobileBottomNav = () => {
         return null;
     }
 
-    const items = [
+    const portalItems = [
         { to: '/dashboard', icon: faHome, label: 'خانه', exact: true },
         { to: '/my-children', icon: faChild, label: 'فرزندان' },
         { to: '/shop', icon: faStore, label: 'فروشگاه' },
-        { to: '/cart', icon: faShoppingCart, label: 'سبد', badge: cartCount },
         { to: '/profile', icon: faUser, label: 'پروفایل' }
     ];
 
+    const shopItems = [
+        {
+            key: 'tatkids-home',
+            to: '/dashboard',
+            icon: faHome,
+            label: 'خانه تات کیدز',
+            isActive: (_match, loc) => loc.pathname === '/dashboard'
+        },
+        {
+            key: 'shop-home',
+            to: '/shop',
+            icon: faStore,
+            label: 'خانه فروشگاه',
+            isActive: (_match, loc) => loc.pathname === '/shop' || /^\/shop\/\d+/.test(loc.pathname)
+        },
+        {
+            key: 'categories',
+            to: '/shop/categories',
+            icon: faThLarge,
+            label: 'دسته‌بندی'
+        },
+        {
+            key: 'cart',
+            to: '/cart',
+            icon: faShoppingCart,
+            label: 'سبد خرید',
+            badge: cartCount
+        }
+    ];
+
+    const items = shopWorld ? shopItems : portalItems;
+
     return (
-        <nav className="mobile-bottom-nav" aria-label="ناوبری اصلی موبایل">
+        <nav
+            className={`mobile-bottom-nav ${shopWorld ? 'mobile-bottom-nav--shop' : ''}`}
+            aria-label={shopWorld ? 'ناوبری فروشگاه' : 'ناوبری اصلی موبایل'}
+        >
             {items.map((item) => (
                 <NavLink
-                    key={item.to}
+                    key={item.key || item.to}
                     to={item.to}
                     exact={item.exact}
                     className="mobile-bottom-nav__item"
                     activeClassName="is-active"
+                    isActive={item.isActive}
                 >
                     <span className="mobile-bottom-nav__icon-wrap">
                         <FontAwesomeIcon icon={item.icon} />

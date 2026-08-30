@@ -1,5 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { flattenCategories } from '../../utils/shop';
 import './ProductManagement.css';
+
+const renderNodes = (nodes, onDelete, depth = 0) =>
+    (nodes || []).map((node) => (
+        <div key={node.id} className="category-tree-node" style={{ marginRight: depth ? '1rem' : 0 }}>
+            <p>
+                {node.name}
+                {' '}
+                <button type="button" className="btn-delete" onClick={() => onDelete(node.id)}>حذف</button>
+            </p>
+            {renderNodes(node.children, onDelete, depth + 1)}
+        </div>
+    ));
 
 const CategoryManagement = () => {
     const [tree, setTree] = useState([]);
@@ -41,16 +54,21 @@ const CategoryManagement = () => {
         load().catch((err) => setError(err.message));
     };
 
+    const flat = flattenCategories(tree);
+
     return (
         <div className="product-management">
             <h2>گروه و زیرگروه محصولات</h2>
+            <p>درخت دسته با عمق نامحدود؛ هر گره می‌تواند زیرگروه داشته باشد.</p>
             <form className="product-form" onSubmit={handleCreate}>
                 <input value={name} onChange={(e) => setName(e.target.value)} placeholder="نام گروه یا زیرگروه" required />
                 <label>زیرگروه از</label>
                 <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
                     <option value="">گروه اصلی</option>
-                    {tree.map((group) => (
-                        <option key={group.id} value={group.id}>{group.name}</option>
+                    {flat.map((node) => (
+                        <option key={node.id} value={node.id}>
+                            {'— '.repeat(node.depth || 0)}{node.name}
+                        </option>
                     ))}
                 </select>
                 <button type="submit">افزودن</button>
@@ -61,13 +79,7 @@ const CategoryManagement = () => {
                     <div key={group.id} className="product-admin-item">
                         <div>
                             <h3>{group.name}</h3>
-                            {(group.children || []).map((child) => (
-                                <p key={child.id}>
-                                    {child.name}
-                                    {' '}
-                                    <button type="button" className="btn-delete" onClick={() => handleDelete(child.id)}>حذف</button>
-                                </p>
-                            ))}
+                            {renderNodes(group.children, handleDelete, 1)}
                         </div>
                         <button type="button" className="btn-delete" onClick={() => handleDelete(group.id)}>حذف گروه</button>
                     </div>

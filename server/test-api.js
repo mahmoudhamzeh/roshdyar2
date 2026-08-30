@@ -81,7 +81,7 @@ async function run() {
 
     try {
         const health = await waitForHealth(child);
-        assert.strictEqual(health.schemaVersion, 2);
+        assert.strictEqual(health.schemaVersion, 3);
         assert.strictEqual(health.wal, true);
         assert.ok(health.counts.users >= 1);
 
@@ -111,6 +111,23 @@ async function run() {
         assert.ok(products.data.length >= 1);
         const product = products.data[0];
         const stockBefore = product.stock;
+        assert.ok(product.offerId || product.vendorName, 'catalog product should carry offer/vendor');
+
+        const skills = await request('GET', '/api/shop/skills');
+        assert.strictEqual(skills.status, 200);
+        assert.ok(Array.isArray(skills.data) && skills.data.length >= 5);
+
+        const shopHome = await request('GET', '/api/shop/home');
+        assert.strictEqual(shopHome.status, 200);
+        assert.strictEqual(shopHome.data.mode, 'single_vendor');
+        assert.ok(shopHome.data.vendor);
+        assert.ok(Array.isArray(shopHome.data.newest));
+
+        const sorted = await request('GET', '/api/shop/products?sort=price-asc');
+        assert.strictEqual(sorted.status, 200);
+        if (sorted.data.length >= 2) {
+            assert.ok(sorted.data[0].price <= sorted.data[1].price);
+        }
 
         const children = await request('GET', '/api/children', {
             headers: auth

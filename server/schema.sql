@@ -320,3 +320,69 @@ CREATE TABLE IF NOT EXISTS product_comments (
 CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_comments_product ON product_comments(product_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_product_categories_parent ON product_categories(parent_id);
+
+CREATE TABLE IF NOT EXISTS shop_vendors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'internal',
+    status TEXT NOT NULL DEFAULT 'active',
+    commission_pct REAL NOT NULL DEFAULT 0,
+    settlement_cycle TEXT NOT NULL DEFAULT 'weekly',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS shop_offers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL,
+    vendor_id INTEGER NOT NULL,
+    price REAL NOT NULL,
+    compare_at_price REAL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    sku TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(product_id, vendor_id),
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (vendor_id) REFERENCES shop_vendors(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS shop_skills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT UNIQUE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS shop_product_meta (
+    product_id INTEGER PRIMARY KEY,
+    age_band TEXT,
+    brand TEXT,
+    safety_warning TEXT,
+    video_url TEXT,
+    weight_g INTEGER,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS shop_product_skills (
+    product_id INTEGER NOT NULL,
+    skill_id INTEGER NOT NULL,
+    impact INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (product_id, skill_id),
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (skill_id) REFERENCES shop_skills(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS shop_campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'percent',
+    value REAL NOT NULL DEFAULT 0,
+    starts_at TEXT,
+    ends_at TEXT,
+    active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_shop_offers_product ON shop_offers(product_id, status);
+CREATE INDEX IF NOT EXISTS idx_shop_product_skills_skill ON shop_product_skills(skill_id);

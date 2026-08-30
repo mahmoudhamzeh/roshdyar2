@@ -88,6 +88,23 @@
   font-family: var(--font-display);
 }
 
+.product-detail-vendor {
+  margin: 0 0 0.5rem;
+  color: #7a6a4e;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.product-safety {
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
 .product-detail-desc {
   margin: 0 0 1rem;
   color: var(--ink-muted);

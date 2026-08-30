@@ -46,6 +46,12 @@
     color: #5b716e;
 }
 
+.product-skill-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+}
+
 .product-form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
