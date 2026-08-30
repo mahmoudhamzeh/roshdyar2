@@ -1,0 +1,103 @@
+.tickets-page {
+  direction: rtl;
+}
+
+.tickets-page h2 {
+  margin: 0 0 0.35rem;
+}
+
+.tickets-lead {
+  margin: 0 0 1rem;
+  color: var(--ink-muted);
+}
+
+.tickets-form {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.tickets-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.tickets-error {
+  color: var(--danger);
+}
+
+.tickets-empty {
+  color: var(--ink-muted);
+}
+
+.tickets-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.tickets-item button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  text-align: right;
+  font-family: inherit;
+  color: inherit;
+  min-height: var(--tap-min);
+}
+
+.ticket-pill {
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+
+.ticket-pill.status-answered {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.ticket-pill.status-closed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.tickets-detail {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.tickets-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tickets-reply {
+  margin-top: 0.85rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-wash);
+}
+
+@media (max-width: 768px) {
+  .tickets-item button {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

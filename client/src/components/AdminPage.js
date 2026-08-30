@@ -8,6 +8,7 @@ import BannerManagement from './admin/BannerManagement';
 import ArticleManagement from './admin/ArticleManagement';
 import TicketManagement from './admin/TicketManagement';
 import VideoManagement from './admin/VideoManagement';
+import PodcastManagement from './admin/PodcastManagement';
 import MessageManagement from './admin/MessageManagement';
 import ProductManagement from './admin/ProductManagement';
 import OrderManagement from './admin/OrderManagement';
@@ -31,6 +32,7 @@ const AdminPage = () => {
                     <NavLink to={`${url}/banners`} activeClassName="active">مدیریت بنرها</NavLink>
                     <NavLink to={`${url}/articles`} activeClassName="active">مدیریت مقالات</NavLink>
                     <NavLink to={`${url}/videos`} activeClassName="active">مدیریت ویدیوها</NavLink>
+                    <NavLink to={`${url}/podcasts`} activeClassName="active">مدیریت پادکست‌ها</NavLink>
                     <NavLink to={`${url}/tickets`} activeClassName="active">تیکت‌ها</NavLink>
                 </nav>
             </aside>
@@ -48,6 +50,7 @@ const AdminPage = () => {
                     <Route path={`${path}/banners`} component={BannerManagement} />
                     <Route path={`${path}/articles`} component={ArticleManagement} />
                     <Route path={`${path}/videos`} component={VideoManagement} />
+                    <Route path={`${path}/podcasts`} component={PodcastManagement} />
                     <Route path={`${path}/tickets`} component={TicketManagement} />
                 </Switch>
             </main>

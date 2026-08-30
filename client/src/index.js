@@ -3,6 +3,9 @@ import ReactDOM from 'react-dom';
 import 'normalize.css/normalize.css';
 import './index.css';
 import App from './App';
+import { installAuthFetch } from './api';
+
+installAuthFetch();
 
 ReactDOM.render(
   <React.StrictMode>

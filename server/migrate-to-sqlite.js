@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Migrate server/db.json into SQLite.
+ * Migrate server/db.json into relational SQLite tables.
  *
  * Usage:
  *   node migrate-to-sqlite.js

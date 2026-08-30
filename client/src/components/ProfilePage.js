@@ -3,7 +3,9 @@ import { Link, useHistory, useLocation } from 'react-router-dom';
 import UserInfo from './UserInfo';
 import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
+import TicketsPage from './TicketsPage';
 import MainNavbar from './MainNavbar';
+import { clearAuthSession } from '../api';
 import './ProfilePage.css';
 
 const ProfilePage = () => {
@@ -13,7 +15,7 @@ const ProfilePage = () => {
     const [activeTab, setActiveTab] = useState('userInfo');
 
     const handleLogout = () => {
-        localStorage.removeItem('loggedInUser');
+        clearAuthSession();
         history.push('/register');
     };
 
@@ -37,6 +39,7 @@ const ProfilePage = () => {
         { id: 'userInfo', label: 'اطلاعات' },
         { id: 'myChildren', label: 'کودکان من', href: '/my-children' },
         { id: 'messages', label: 'پیام‌ها' },
+        { id: 'tickets', label: 'پشتیبانی' },
         { id: 'orders', label: 'سفارش‌ها', href: '/orders' },
         { id: 'changePassword', label: 'رمز عبور' }
     ];
@@ -56,6 +59,8 @@ const ProfilePage = () => {
                         <MessagesPage />
                     </div>
                 );
+            case 'tickets':
+                return <TicketsPage />;
             case 'changePassword':
                 return <ChangePassword />;
             default:

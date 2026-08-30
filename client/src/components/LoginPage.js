@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useHistory } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
+import { setAuthSession } from '../api';
 import './LoginPage.css';
 import './RegisterPage.css';
 
@@ -92,7 +93,7 @@ const LoginPage = () => {
             const data = await response.json();
 
             if (response.status === 200) {
-                localStorage.setItem('loggedInUser', JSON.stringify(data.user));
+                setAuthSession(data.user, data.token);
                 history.push('/dashboard');
             } else {
                 showError(data.message || 'اطلاعات ورود نادرست است.');
