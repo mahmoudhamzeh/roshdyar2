@@ -1148,7 +1148,8 @@ const children = {
         return {
             milestones: extra.milestones && typeof extra.milestones === 'object' ? extra.milestones : {},
             completions: extra.completions && typeof extra.completions === 'object' ? extra.completions : {},
-            concerns: Array.isArray(extra.concerns) ? extra.concerns : []
+            concerns: Array.isArray(extra.concerns) ? extra.concerns : [],
+            safetyChecks: extra.safetyChecks && typeof extra.safetyChecks === 'object' ? extra.safetyChecks : {}
         };
     },
     async saveGrowthState(childId, patch) {
@@ -1159,7 +1160,8 @@ const children = {
             ...extra,
             milestones: patch.milestones !== undefined ? patch.milestones : extra.milestones || {},
             completions: patch.completions !== undefined ? patch.completions : extra.completions || {},
-            concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || []
+            concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || [],
+            safetyChecks: patch.safetyChecks !== undefined ? patch.safetyChecks : extra.safetyChecks || {}
         };
         await q('UPDATE children SET extra = $1 WHERE id = $2', [JSON.stringify(next), Number(childId)]);
         return children.getGrowthState(childId);
