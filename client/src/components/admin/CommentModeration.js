@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { formatRating, stars } from '../../utils/shop';
 import './ProductManagement.css';
 
@@ -14,7 +14,7 @@ const CommentModeration = () => {
     const [status, setStatus] = useState('pending');
     const [error, setError] = useState('');
 
-    const load = async (nextStatus = status) => {
+    const load = useCallback(async (nextStatus = status) => {
         const query = nextStatus && nextStatus !== 'all' ? `?status=${nextStatus}` : '?status=all';
         const res = await fetch(`/api/admin/shop/comments${query}`);
         if (!res.ok) {
@@ -23,11 +23,11 @@ const CommentModeration = () => {
         }
         setComments(await res.json());
         setError('');
-    };
+    }, [status]);
 
     useEffect(() => {
         load(status);
-    }, [status]);
+    }, [load, status]);
 
     const update = async (comment, nextStatus) => {
         const res = await fetch(`/api/admin/shop/comments/${comment.id}`, {
