@@ -143,6 +143,18 @@ async function run() {
         assert.strictEqual(ageGuide.status, 200, JSON.stringify(ageGuide.data));
         assert.ok(ageGuide.data.band);
         assert.ok(Array.isArray(ageGuide.data.milestones.items));
+        assert.ok(Array.isArray(ageGuide.data.expectSections) && ageGuide.data.expectSections.length >= 3);
+        assert.ok(Array.isArray(ageGuide.data.activities));
+        assert.ok(ageGuide.data.activities.length <= 3);
+        assert.ok(ageGuide.data.today);
+
+        const analyzed = await request('POST', `/api/children/${childId}/concerns/analyze`, {
+            headers: auth,
+            body: { concern: 'پسرم هنوز تنهایی راه نمیفته و فقط جیغ می‌زند' }
+        });
+        assert.strictEqual(analyzed.status, 201, JSON.stringify(analyzed.data));
+        assert.ok(analyzed.data.triage_status);
+        assert.ok(analyzed.data.status_badge);
 
         const growth = await request('GET', `/api/growth/${childId}`, { headers: auth });
         assert.strictEqual(growth.status, 200);
