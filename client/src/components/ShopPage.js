@@ -229,7 +229,7 @@ const ShopPage = () => {
                     <article className="shop-seller-card is-login">
                         <h2>ورود فروشندگان</h2>
                         <p>اگر قبلاً درخواست داده‌اید یا فروشگاهتان تأیید شده، از اینجا وارد پنل محصول، سفارش و مالی شوید.</p>
-                        <Link to="/login?next=/vendor">ورود به پنل فروشنده</Link>
+                        <Link to="/vendor">ورود به پنل فروشنده</Link>
                     </article>
                 </section>
             </main>
