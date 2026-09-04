@@ -212,7 +212,7 @@ const ChildGrowthPage = () => {
                                     <FontAwesomeIcon icon={SECTION_ICONS[section.id] || faLightbulb} />
                                     <span>
                                         <strong>{section.title}</strong>
-                                        <em>{section.teaser}</em>
+                                        {!open && <em>{section.teaser}</em>}
                                     </span>
                                 </button>
                                 {open && (
