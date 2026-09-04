@@ -26,8 +26,11 @@ const {
     MILESTONE_STATUS,
     getBandForAge,
     recommendActivities,
-    buildAgeGuidePayload
+    buildAgeGuidePayload,
+    calendarDayKey,
+    isCompletedOnDay
 } = require('./child-growth-data');
+const { analyzeConcernWithModel } = require('./child-growth-ai');
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -97,7 +100,9 @@ const API_CATALOG = {
             'POST /api/children/:childId/activities/:activityId/completion',
             'GET /api/children/:childId/growth-summary',
             'GET /api/children/:childId/concerns',
-            'POST /api/children/:childId/concerns'
+            'POST /api/children/:childId/concerns',
+            'POST /api/children/:childId/concerns/analyze',
+            'POST /api/children/:childId/safety/:itemId'
         ],
         growth: [
             'GET /api/growth/:childId',
@@ -935,18 +940,22 @@ app.get('/api/children/:childId/age-guide', async (req, res) => {
     const child = owned.child;
     const milestoneStatuses = await getChildMilestoneMap(req.params.childId);
     const completions = await getChildCompletionMap(req.params.childId);
+    const growthState = await store.children.getGrowthState(req.params.childId);
+    const today = calendarDayKey();
     const payload = buildAgeGuidePayload(
         { ...child, name: getChildDisplayName(child) },
         {
             milestoneStatuses,
             completions,
+            safetyChecks: (growthState && growthState.safetyChecks) || {},
+            today,
             growthSummary: await buildGrowthSummaryForChild(req.params.childId, child),
             parentConcern: req.query.concern || null
         }
     );
     payload.activities = (payload.activities || []).map((activity) => ({
         ...activity,
-        completed: Boolean(completions[activity.id]?.completed),
+        completed: isCompletedOnDay(completions[activity.id], today),
         completion: completions[activity.id] || null
     }));
     res.json(payload);
@@ -1006,16 +1015,20 @@ app.get('/api/children/:childId/activities', async (req, res) => {
         : guide.child.ageInMonths;
     const band = getBandForAge(contentAge);
     const completions = await getChildCompletionMap(req.params.childId);
+    const today = calendarDayKey();
     const recommended = recommendActivities(band, {
         milestoneStatuses: await getChildMilestoneMap(req.params.childId),
         completions,
-        parentConcern: req.query.concern || null
+        parentConcern: req.query.concern || null,
+        today,
+        dailyCount: 3
     });
     res.json({
         band: { id: band.id, title: band.title },
+        today,
         activities: recommended.map((activity) => ({
             ...activity,
-            completed: Boolean(completions[activity.id]?.completed),
+            completed: isCompletedOnDay(completions[activity.id], today),
             completion: completions[activity.id] || null
         }))
     });
@@ -1042,6 +1055,48 @@ app.get('/api/children/:childId/growth-summary', async (req, res) => {
     if (!owned) return;
     const child = owned.child;
     res.json(await buildGrowthSummaryForChild(req.params.childId, child));
+});
+
+app.post('/api/children/:childId/safety/:itemId', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const state = await store.children.getGrowthState(req.params.childId);
+    const safetyChecks = { ...(state.safetyChecks || {}) };
+    const done = req.body && req.body.done === false ? false : true;
+    safetyChecks[req.params.itemId] = {
+        done,
+        updatedAt: new Date().toISOString()
+    };
+    await store.children.saveGrowthState(req.params.childId, { safetyChecks });
+    res.json({ itemId: req.params.itemId, ...safetyChecks[req.params.itemId] });
+});
+
+app.post('/api/children/:childId/concerns/analyze', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const text = String(req.body && (req.body.concern || req.body.text || req.body.parent_concern) || '').trim();
+    if (text.length < 4) {
+        return res.status(400).json({ message: 'نگرانی را کمی کامل‌تر بنویسید' });
+    }
+    const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const analysis = await analyzeConcernWithModel({
+        name: getChildDisplayName(child),
+        gender: child.gender,
+        ageInMonths: guide.child.ageInMonths,
+        age_bracket: guide.band && guide.band.id
+    }, text);
+    const state = await store.children.getGrowthState(req.params.childId);
+    const entry = {
+        id: `c-${Date.now()}`,
+        topic: req.body && req.body.topic ? req.body.topic : 'متن آزاد',
+        text,
+        result: analysis.triage_status,
+        analysis,
+        createdAt: new Date().toISOString()
+    };
+    await store.children.saveGrowthState(req.params.childId, { concerns: [entry, ...(state.concerns || [])] });
+    res.status(201).json(analysis);
 });
 
 app.get('/api/children/:childId/concerns', async (req, res) => {

@@ -2,51 +2,41 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useHistory, useParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
-    faAppleAlt,
     faBed,
-    faChartLine,
     faCheck,
-    faCheckCircle,
     faChild,
-    faCircle,
-    faClipboardList,
-    faHeart,
-    faHeartbeat,
+    faComments,
     faLightbulb,
+    faPersonWalking,
     faPuzzlePiece,
-    faQuestionCircle,
-    faSeedling,
     faShieldAlt,
     faSpinner,
+    faUtensils,
+    faHeart,
 } from '@fortawesome/free-solid-svg-icons';
-import { analyzeGrowthMetric } from '../utils/growth-analyzer';
 import {
     DOMAINS,
-    MILESTONE_STATUS,
-    STATUS_LABELS,
-    TREND_LABELS,
+    analyzeConcern,
     completeActivity,
     fetchAgeGuide,
-    formatRelativeMeasurementDate,
-    submitConcern,
-    updateMilestoneStatus,
+    toggleSafetyTask,
 } from '../utils/child-growth';
 import './ChildGrowthPage.css';
 
-const TABS = [
-    { id: 'home', label: 'این ماه', icon: faSeedling },
-    { id: 'milestones', label: 'مهارت‌ها', icon: faClipboardList },
-    { id: 'activities', label: 'فعالیت‌ها', icon: faPuzzlePiece },
-    { id: 'health', label: 'سلامت', icon: faHeartbeat },
-    { id: 'nutrition', label: 'تغذیه', icon: faAppleAlt },
-    { id: 'sleep', label: 'خواب', icon: faBed },
-    { id: 'behavior', label: 'رفتار', icon: faHeart },
-    { id: 'safety', label: 'ایمنی', icon: faShieldAlt },
-    { id: 'concern', label: 'نگرانی من', icon: faQuestionCircle },
-];
+const SECTION_ICONS = {
+    speech: faComments,
+    motor: faPersonWalking,
+    food: faUtensils,
+    sleep: faBed,
+    mood: faHeart,
+};
 
-const CONCERN_TOPICS = [
-    'گفتار', 'حرکت', 'تغذیه', 'خواب', 'رفتار', 'قد', 'وزن', 'بینایی', 'شنوایی', 'موضوع دیگر',
+const QUICK_PROMPTS = [
+    'هنوز تنهایی راه نمی‌رود',
+    'کلمه نمی‌گوید و فقط جیغ می‌زند',
+    'شب‌ها مدام بیدار می‌شود',
+    'غذا را رد می‌کند',
+    'قشقرق شدید دارد',
 ];
 
 const ChildGrowthPage = () => {
@@ -56,14 +46,12 @@ const ChildGrowthPage = () => {
     const [childRaw, setChildRaw] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
-    const [tab, setTab] = useState('home');
-    const [selectedActivity, setSelectedActivity] = useState(null);
-    const [expandedProblem, setExpandedProblem] = useState(null);
+    const [openSection, setOpenSection] = useState('speech');
     const [busyKey, setBusyKey] = useState('');
-    const [concernTopic, setConcernTopic] = useState(null);
-    const [concernStep, setConcernStep] = useState(0);
-    const [concernAnswers, setConcernAnswers] = useState([]);
-    const [concernResult, setConcernResult] = useState(null);
+    const [selectedActivity, setSelectedActivity] = useState(null);
+    const [concernText, setConcernText] = useState('');
+    const [analysis, setAnalysis] = useState(null);
+    const [analyzeError, setAnalyzeError] = useState('');
 
     const loadGuide = useCallback(async () => {
         setIsLoading(true);
@@ -74,9 +62,8 @@ const ChildGrowthPage = () => {
                 fetch(`/api/children/${childId}`),
             ]);
             if (!childRes.ok) throw new Error('کودک یافت نشد');
-            const childData = await childRes.json();
             setGuide(guideData);
-            setChildRaw(childData);
+            setChildRaw(await childRes.json());
         } catch (err) {
             setError(err.message || 'خطا در دریافت اطلاعات');
             setGuide(null);
@@ -89,47 +76,14 @@ const ChildGrowthPage = () => {
         loadGuide();
     }, [loadGuide]);
 
-    const heightAnalysis = useMemo(
-        () => (childRaw ? analyzeGrowthMetric('height', childRaw) : null),
-        [childRaw]
-    );
-    const weightAnalysis = useMemo(
-        () => (childRaw ? analyzeGrowthMetric('weight', childRaw) : null),
-        [childRaw]
-    );
-
-    const domainGroups = useMemo(() => {
-        const items = guide?.milestones?.items || [];
-        return Object.values(DOMAINS)
-            .map((domain) => ({
-                ...domain,
-                items: items.filter((m) => m.domain === domain.id),
-            }))
-            .filter((g) => g.items.length > 0);
+    const progress = useMemo(() => {
+        if (!guide) return { done: 0, total: 0, pct: 0 };
+        const acts = guide.activities || [];
+        const safes = guide.safetyTasks || [];
+        const done = acts.filter((item) => item.completed).length + safes.filter((item) => item.done).length;
+        const total = acts.length + safes.length;
+        return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
     }, [guide]);
-
-    const handleMilestone = async (milestoneId, status) => {
-        setBusyKey(`m-${milestoneId}`);
-        try {
-            await updateMilestoneStatus(childId, milestoneId, status);
-            setGuide((prev) => {
-                if (!prev) return prev;
-                const items = prev.milestones.items.map((m) =>
-                    m.id === milestoneId ? { ...m, status } : m
-                );
-                const checked = items.filter((m) => m.status !== MILESTONE_STATUS.NOT_CHECKED).length;
-                const observed = items.filter((m) => m.status === MILESTONE_STATUS.OBSERVED).length;
-                return {
-                    ...prev,
-                    milestones: { ...prev.milestones, items, checked, observed },
-                };
-            });
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setBusyKey('');
-        }
-    };
 
     const handleCompleteActivity = async (activity) => {
         setBusyKey(`a-${activity.id}`);
@@ -139,8 +93,8 @@ const ChildGrowthPage = () => {
                 if (!prev) return prev;
                 return {
                     ...prev,
-                    activities: prev.activities.map((a) =>
-                        a.id === activity.id ? { ...a, completed: true } : a
+                    activities: prev.activities.map((item) =>
+                        item.id === activity.id ? { ...item, completed: true } : item
                     ),
                 };
             });
@@ -152,31 +106,43 @@ const ChildGrowthPage = () => {
         }
     };
 
-    const startConcern = (topic) => {
-        setConcernTopic(topic);
-        setConcernStep(0);
-        setConcernAnswers([]);
-        setConcernResult(null);
-        setTab('concern');
+    const handleSafety = async (task) => {
+        setBusyKey(`s-${task.id}`);
+        try {
+            const nextDone = !task.done;
+            await toggleSafetyTask(childId, task.id, nextDone);
+            setGuide((prev) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    safetyTasks: prev.safetyTasks.map((item) =>
+                        item.id === task.id ? { ...item, done: nextDone } : item
+                    ),
+                };
+            });
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setBusyKey('');
+        }
     };
 
-    const answerConcern = async (answer) => {
-        const next = [...concernAnswers, answer];
-        setConcernAnswers(next);
-        if (concernStep < 2) {
-            setConcernStep(concernStep + 1);
+    const handleAnalyze = async (text) => {
+        const concern = String(text || concernText).trim();
+        if (concern.length < 4) {
+            setAnalyzeError('نگرانی را کمی کامل‌تر بنویسید');
             return;
         }
-        let result = 'green';
-        if (answer === 'regression_yes') result = 'professional';
-        else if (next.includes('no_progress') || next.filter((a) => a === 'worried').length >= 1) {
-            result = 'yellow';
-        }
-        setConcernResult(result);
+        setBusyKey('ai');
+        setAnalyzeError('');
         try {
-            await submitConcern(childId, { topic: concernTopic, answers: next, result });
-        } catch {
-            /* non-blocking */
+            const result = await analyzeConcern(childId, concern);
+            setAnalysis(result);
+            setConcernText(concern);
+        } catch (err) {
+            setAnalyzeError(err.message);
+        } finally {
+            setBusyKey('');
         }
     };
 
@@ -201,471 +167,14 @@ const ChildGrowthPage = () => {
                     <div className="nav-placeholder" />
                 </nav>
                 <p className="cg-status">{error || 'اطلاعاتی یافت نشد.'}</p>
-                <div className="cg-center">
-                    <button type="button" className="cg-btn" onClick={loadGuide}>تلاش دوباره</button>
-                </div>
             </div>
         );
     }
 
-    const { child, band, monthlyFocus, milestones, activities, sleep, nutrition, health, behavior, safety, growthSummary, disclaimer } = guide;
-    const lastMeasure = growthSummary?.lastMeasurement;
-
-    const concernQuestions = [
-        {
-            text: `آیا درباره «${concernTopic}» اخیراً بیشتر نگران شده‌اید؟`,
-            yes: { value: 'worried', label: 'بله، نگرانم' },
-            no: { value: 'unsure', label: 'هنوز مطمئن نیستم' },
-        },
-        {
-            text: 'آیا در این موضوع نسبت به قبل پیشرفتی دیده‌اید؟',
-            yes: { value: 'progress', label: 'بله، پیشرفت داشته' },
-            no: { value: 'no_progress', label: 'خیر / مشخص نیست' },
-        },
-        {
-            text: 'آیا مهارتی هست که قبلاً داشته و اکنون از دست داده باشد؟',
-            yes: { value: 'regression_yes', label: 'بله' },
-            no: { value: 'regression_no', label: 'خیر' },
-        },
-    ];
-
-    const renderHome = () => (
-        <>
-            <section className="cg-block">
-                <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faSeedling} />
-                    <div>
-                        <h3>تمرکز این ماه</h3>
-                        <p>مهم‌ترین حوزه‌های رشدی این مرحله برای {child.name}</p>
-                    </div>
-                </header>
-                <div className="cg-focus-list">
-                    {monthlyFocus.map((item) => {
-                        const domain = DOMAINS[item.domain] || DOMAINS.COGNITIVE;
-                        return (
-                            <article key={`${item.domain}-${item.title}`} className={`cg-focus cg-tone-${domain.tone}`}>
-                                <div className="cg-focus-top">
-                                    <span className="cg-chip">{domain.labelFull}</span>
-                                </div>
-                                <h4>{item.title}</h4>
-                                <p className="cg-lead">{item.summary}</p>
-                                <p className="cg-detail">{item.detail}</p>
-                            </article>
-                        );
-                    })}
-                </div>
-            </section>
-
-            <section className="cg-block">
-                <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faPuzzlePiece} />
-                    <div>
-                        <h3>امروز چه کار کنیم؟</h3>
-                        <p>فعالیت‌های پیشنهادی متناسب با سن و وضعیت مهارت‌ها</p>
-                    </div>
-                </header>
-                <div className="cg-list">
-                    {activities.slice(0, 3).map((activity) => (
-                        <button
-                            type="button"
-                            key={activity.id}
-                            className={`cg-list-item${activity.completed ? ' is-done' : ''}`}
-                            onClick={() => setSelectedActivity(activity)}
-                        >
-                            <div>
-                                <strong>{activity.title}</strong>
-                                <span>
-                                    {activity.duration} دقیقه
-                                    {' · '}
-                                    {(activity.domains || []).map((d) => DOMAINS[d]?.label).filter(Boolean).join(' + ')}
-                                </span>
-                                {activity.shortDescription && <em>{activity.shortDescription}</em>}
-                                {activity.reasons?.length > 0 && (
-                                    <small>چرا پیشنهاد شد: {activity.reasons.slice(0, 2).join('، ')}</small>
-                                )}
-                            </div>
-                            <span className="cg-list-cta">{activity.completed ? 'انجام شد' : 'شروع'}</span>
-                        </button>
-                    ))}
-                </div>
-                <button type="button" className="cg-link-btn" onClick={() => setTab('activities')}>
-                    مشاهده همه فعالیت‌ها
-                </button>
-            </section>
-
-            <section className="cg-block">
-                <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faClipboardList} />
-                    <div>
-                        <h3>مهارت‌ها</h3>
-                        <p>
-                            {milestones.checked} از {milestones.total} مهارت بررسی شده
-                            {milestones.observed > 0 ? ` · ${milestones.observed} مشاهده‌شده` : ''}
-                        </p>
-                    </div>
-                </header>
-                <div className="cg-progress" aria-hidden="true">
-                    <div
-                        style={{
-                            width: `${milestones.total ? (milestones.checked / milestones.total) * 100 : 0}%`,
-                        }}
-                    />
-                </div>
-                <button type="button" className="cg-btn" onClick={() => setTab('milestones')}>
-                    مشاهده و ثبت مهارت‌ها
-                </button>
-            </section>
-
-            <section className="cg-block">
-                <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faChartLine} />
-                    <div>
-                        <h3>رشد جسمی</h3>
-                        <p>
-                            آخرین اندازه‌گیری:{' '}
-                            {formatRelativeMeasurementDate(lastMeasure?.date) || 'هنوز ثبت نشده'}
-                        </p>
-                    </div>
-                </header>
-                {!lastMeasure ? (
-                    <div className="cg-empty">
-                        <p>هنوز اندازه‌گیری جدیدی ثبت نکرده‌اید.</p>
-                        <Link to={`/growth-chart/${childId}`} className="cg-btn">ثبت قد و وزن</Link>
-                    </div>
-                ) : (
-                    <>
-                        <div className="cg-growth-grid">
-                            <div>
-                                <span>قد</span>
-                                <strong>{lastMeasure.height != null ? `${lastMeasure.height} سم` : '—'}</strong>
-                                <small>
-                                    {heightAnalysis?.percentile != null
-                                        ? `حدود صدک ${Math.round(heightAnalysis.percentile)}`
-                                        : growthSummary?.indicators?.heightForAge?.note}
-                                </small>
-                            </div>
-                            <div>
-                                <span>وزن</span>
-                                <strong>{lastMeasure.weight != null ? `${lastMeasure.weight} کگ` : '—'}</strong>
-                                <small>
-                                    {weightAnalysis?.percentile != null
-                                        ? `حدود صدک ${Math.round(weightAnalysis.percentile)}`
-                                        : growthSummary?.indicators?.weightForAge?.note}
-                                </small>
-                            </div>
-                        </div>
-                        <p className="cg-note">
-                            روند: {TREND_LABELS[growthSummary?.trend] || 'نامشخص'} — {growthSummary?.note}
-                        </p>
-                        <Link to={`/growth-chart/${childId}`} className="cg-btn is-soft">
-                            مشاهده نمودار کامل
-                        </Link>
-                    </>
-                )}
-            </section>
-
-            <section className="cg-block">
-                <div className="cg-quick-grid">
-                    {[
-                        { id: 'sleep', label: 'خواب', icon: faBed },
-                        { id: 'nutrition', label: 'تغذیه', icon: faAppleAlt },
-                        { id: 'behavior', label: 'رفتار', icon: faHeart },
-                        { id: 'safety', label: 'ایمنی', icon: faShieldAlt },
-                    ].map((item) => (
-                        <button type="button" key={item.id} onClick={() => setTab(item.id)}>
-                            <FontAwesomeIcon icon={item.icon} />
-                            {item.label}
-                        </button>
-                    ))}
-                </div>
-            </section>
-
-            <section className="cg-block cg-concern-teaser">
-                <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faQuestionCircle} />
-                    <div>
-                        <h3>چیزی نگرانتان کرده؟</h3>
-                        <p>چند سؤال کوتاه — بدون تشخیص پزشکی</p>
-                    </div>
-                </header>
-                <button type="button" className="cg-btn" onClick={() => setTab('concern')}>
-                    بررسی نگرانی
-                </button>
-            </section>
-        </>
-    );
-
-    const renderMilestones = () => (
-        <section className="cg-block">
-            <header className="cg-block-head">
-                <FontAwesomeIcon icon={faClipboardList} />
-                <div>
-                    <h3>مهارت‌های {band?.title}</h3>
-                    <p>وضعیت را بر اساس مشاهده خودتان ثبت کنید؛ این فهرست تشخیص نیست.</p>
-                </div>
-            </header>
-            {domainGroups.map((group) => (
-                <div key={group.id} className="cg-domain-group">
-                    <h4 className={`cg-tone-${group.tone}`}>{group.labelFull}</h4>
-                    <ul className="cg-milestone-list">
-                        {group.items.map((milestone) => {
-                            const status = milestone.status || MILESTONE_STATUS.NOT_CHECKED;
-                            return (
-                                <li key={milestone.id}>
-                                    <div className="cg-milestone-main">
-                                        <FontAwesomeIcon
-                                            icon={status === MILESTONE_STATUS.OBSERVED ? faCheckCircle : faCircle}
-                                            className={status === MILESTONE_STATUS.OBSERVED ? 'is-observed' : ''}
-                                        />
-                                        <div>
-                                            <strong>{milestone.title}</strong>
-                                            {milestone.description && <p>{milestone.description}</p>}
-                                        </div>
-                                    </div>
-                                    <div className="cg-status-row">
-                                        {[
-                                            MILESTONE_STATUS.OBSERVED,
-                                            MILESTONE_STATUS.NOT_YET_OBSERVED,
-                                            MILESTONE_STATUS.UNSURE,
-                                            MILESTONE_STATUS.NOT_CHECKED,
-                                        ].map((s) => (
-                                            <button
-                                                type="button"
-                                                key={s}
-                                                disabled={busyKey === `m-${milestone.id}`}
-                                                className={status === s ? 'is-active' : ''}
-                                                onClick={() => handleMilestone(milestone.id, s)}
-                                            >
-                                                {STATUS_LABELS[s]}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </div>
-            ))}
-        </section>
-    );
-
-    const renderActivities = () => (
-        <section className="cg-block">
-            <header className="cg-block-head">
-                <FontAwesomeIcon icon={faPuzzlePiece} />
-                <div>
-                    <h3>فعالیت‌های پیشنهادی امروز</h3>
-                    <p>قلب محصول: تمرین‌های کوتاه خانگی متناسب با سن {child.name}</p>
-                </div>
-            </header>
-            <div className="cg-list">
-                {activities.map((activity, index) => (
-                    <button
-                        type="button"
-                        key={activity.id}
-                        className={`cg-list-item${activity.completed ? ' is-done' : ''}`}
-                        onClick={() => setSelectedActivity(activity)}
-                    >
-                        <div>
-                            <strong>
-                                {index + 1}. {activity.title}
-                            </strong>
-                            <span>
-                                {activity.duration} دقیقه
-                                {activity.difficulty ? ` · ${activity.difficulty === 'easy' ? 'آسان' : 'متوسط'}` : ''}
-                                {' · '}
-                                {(activity.domains || []).map((d) => DOMAINS[d]?.label).filter(Boolean).join(' + ')}
-                            </span>
-                            {activity.goal && <em>هدف: {activity.goal}</em>}
-                        </div>
-                        <span className="cg-list-cta">{activity.completed ? 'انجام شد' : 'جزئیات'}</span>
-                    </button>
-                ))}
-            </div>
-        </section>
-    );
-
-    const renderTopicSection = (type, data, icon, title) => {
-        if (!data) {
-            return (
-                <section className="cg-block">
-                    <p className="cg-empty-text">محتوایی برای این بخش یافت نشد.</p>
-                </section>
-            );
-        }
-        const problems = data.problems || data.situations || [];
-        const priorities = data.priorities || data.topics || data.items || data.routine || [];
-        return (
-            <section className="cg-block">
-                <header className="cg-block-head">
-                    <FontAwesomeIcon icon={icon} />
-                    <div>
-                        <h3>{title}</h3>
-                        <p>{band?.title}</p>
-                    </div>
-                </header>
-                {data.overview && <p className="cg-overview">{data.overview}</p>}
-
-                {type === 'sleep' && data.routine?.length > 0 && (
-                    <>
-                        <h4 className="cg-subhead">روتین پیشنهادی</h4>
-                        <ol className="cg-steps">
-                            {data.routine.map((step) => (
-                                <li key={step.title}>
-                                    <strong>{step.title}</strong>
-                                    <span>{step.detail}</span>
-                                </li>
-                            ))}
-                        </ol>
-                    </>
-                )}
-
-                {priorities.length > 0 && type !== 'sleep' && (
-                    <>
-                        <h4 className="cg-subhead">چه چیزهایی مهم است؟</h4>
-                        <div className="cg-priority-list">
-                            {priorities.map((item) => (
-                                <article key={item.id || item.title}>
-                                    <h5>{item.title}</h5>
-                                    <p>{item.detail}</p>
-                                </article>
-                            ))}
-                        </div>
-                    </>
-                )}
-
-                {data.guidance?.length > 0 && (
-                    <>
-                        <h4 className="cg-subhead">راهنمای عملی</h4>
-                        <ul className="cg-bullets">
-                            {data.guidance.map((g) => (
-                                <li key={g}>{g}</li>
-                            ))}
-                        </ul>
-                    </>
-                )}
-
-                {problems.length > 0 && (
-                    <>
-                        <h4 className="cg-subhead">مشکل شما چیست؟</h4>
-                        <div className="cg-problem-grid">
-                            {problems.map((problem) => {
-                                const open = expandedProblem === `${type}-${problem.id}`;
-                                return (
-                                    <div key={problem.id} className={`cg-problem${open ? ' is-open' : ''}`}>
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setExpandedProblem(open ? null : `${type}-${problem.id}`)
-                                            }
-                                        >
-                                            {problem.title}
-                                        </button>
-                                        {open && (
-                                            <ul>
-                                                {(problem.guidance || []).map((g) => (
-                                                    <li key={g}>{g}</li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </>
-                )}
-            </section>
-        );
-    };
-
-    const renderConcern = () => (
-        <section className="cg-block">
-            <header className="cg-block-head">
-                <FontAwesomeIcon icon={faQuestionCircle} />
-                <div>
-                    <h3>چیزی درباره کودک نگرانتان کرده؟</h3>
-                    <p>این بخش تشخیص نمی‌دهد؛ فقط کمک می‌کند زمان مشورت با متخصص را بهتر تشخیص دهید.</p>
-                </div>
-            </header>
-            {!concernTopic ? (
-                <div className="cg-problem-grid">
-                    {CONCERN_TOPICS.map((topic) => (
-                        <button type="button" key={topic} className="cg-problem-btn" onClick={() => startConcern(topic)}>
-                            {topic}
-                        </button>
-                    ))}
-                </div>
-            ) : concernResult ? (
-                <div className={`cg-result level-${concernResult}`}>
-                    <FontAwesomeIcon
-                        icon={
-                            concernResult === 'professional'
-                                ? faQuestionCircle
-                                : concernResult === 'yellow'
-                                  ? faLightbulb
-                                  : faCheckCircle
-                        }
-                    />
-                    {concernResult === 'green' && (
-                        <p>
-                            در پاسخ‌های شما مورد فوری مشخصی دیده نمی‌شود. می‌توانید مهارت‌های مرتبط را در ماه‌های
-                            آینده دنبال کنید.
-                        </p>
-                    )}
-                    {concernResult === 'yellow' && (
-                        <p>
-                            بهتر است این موضوع را بیشتر مشاهده کنید و در صورت ادامه نگرانی با پزشک کودک مطرح کنید.
-                        </p>
-                    )}
-                    {concernResult === 'professional' && (
-                        <p>
-                            با توجه به پاسخ شما (از دست رفتن مهارت قبلی)، بهتر است این موضوع را با پزشک/متخصص کودک
-                            مطرح کنید.
-                        </p>
-                    )}
-                    <div className="cg-inline-actions">
-                        <button type="button" className="cg-btn is-soft" onClick={() => { setConcernTopic(null); setConcernResult(null); }}>
-                            موضوع دیگر
-                        </button>
-                        <button type="button" className="cg-btn" onClick={() => setTab('milestones')}>
-                            مشاهده مهارت‌ها
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div className="cg-concern-flow">
-                    <p className="cg-note">موضوع: {concernTopic}</p>
-                    <p className="cg-overview">{concernQuestions[concernStep].text}</p>
-                    <div className="cg-inline-actions">
-                        <button
-                            type="button"
-                            className="cg-btn"
-                            onClick={() => answerConcern(concernQuestions[concernStep].yes.value)}
-                        >
-                            {concernQuestions[concernStep].yes.label}
-                        </button>
-                        <button
-                            type="button"
-                            className="cg-btn is-soft"
-                            onClick={() => answerConcern(concernQuestions[concernStep].no.value)}
-                        >
-                            {concernQuestions[concernStep].no.label}
-                        </button>
-                    </div>
-                    <button
-                        type="button"
-                        className="cg-link-btn"
-                        onClick={() => { setConcernTopic(null); setConcernStep(0); }}
-                    >
-                        انصراف
-                    </button>
-                </div>
-            )}
-        </section>
-    );
+    const { child, band, expectSections, activities, safetyTasks, redFlags, disclaimer } = guide;
 
     return (
-        <div className="child-growth-page">
+        <div className="child-growth-page cg-simple">
             <nav className="page-nav-final">
                 <button type="button" className="back-btn" onClick={() => history.push('/dashboard')}>
                     &rarr; <span>خانه</span>
@@ -676,60 +185,170 @@ const ChildGrowthPage = () => {
 
             <header className="cg-hero">
                 <div className="cg-hero-avatar" aria-hidden="true">
-                    {childRaw?.avatar ? (
-                        <img
-                            src={childRaw.avatar.startsWith('/uploads') ? childRaw.avatar : childRaw.avatar}
-                            alt=""
-                        />
-                    ) : (
-                        <FontAwesomeIcon icon={faChild} />
-                    )}
+                    {childRaw?.avatar ? <img src={childRaw.avatar} alt="" /> : <FontAwesomeIcon icon={faChild} />}
                 </div>
                 <div className="cg-hero-text">
-                    <p className="cg-kicker">این ماه کودک من</p>
+                    <p className="cg-kicker">کودک من در این ماه</p>
                     <h2>{child.name}</h2>
-                    <p className="cg-age">{child.ageLabel}</p>
-                    {child.isPremature && child.ageInMonths < 24 && (
-                        <p className="cg-corrected">
-                            سن اصلاح‌شده برای محتوا:{' '}
-                            {child.correctedAgeInMonths != null ? `${child.correctedAgeInMonths} ماه` : '—'}
-                            <span>بر اساس سن بارداری ثبت‌شده — جنبه آموزشی</span>
-                        </p>
-                    )}
-                    <p className="cg-band">
-                        {band?.title}
-                        {band?.subtitle ? ` — ${band.subtitle}` : ''}
-                    </p>
+                    <p className="cg-age">{child.ageLabel} · {band?.title}</p>
+                    <p className="cg-band">{band?.subtitle}</p>
                 </div>
             </header>
 
-            <div className="cg-tabs" role="tablist" aria-label="بخش‌های رشد کودک من">
-                {TABS.map((item) => (
-                    <button
-                        type="button"
-                        key={item.id}
-                        role="tab"
-                        aria-selected={tab === item.id}
-                        className={tab === item.id ? 'is-active' : ''}
-                        onClick={() => setTab(item.id)}
-                    >
-                        <FontAwesomeIcon icon={item.icon} />
-                        <span>{item.label}</span>
-                    </button>
-                ))}
-            </div>
+            <section className="cg-block">
+                <header className="cg-block-head">
+                    <FontAwesomeIcon icon={faLightbulb} />
+                    <div>
+                        <h3>۱. کودک من در این ماه چه تغییری می‌کند؟</h3>
+                        <p>۵ کارت کوتاه؛ جزئیات فقط وقتی باز می‌شود که بخواهید.</p>
+                    </div>
+                </header>
+                <div className="cg-accordion">
+                    {(expectSections || []).map((section) => {
+                        const open = openSection === section.id;
+                        return (
+                            <article key={section.id} className={`cg-acc ${open ? 'is-open' : ''}`}>
+                                <button type="button" onClick={() => setOpenSection(open ? '' : section.id)}>
+                                    <FontAwesomeIcon icon={SECTION_ICONS[section.id] || faLightbulb} />
+                                    <span>
+                                        <strong>{section.title}</strong>
+                                        <em>{section.teaser}</em>
+                                    </span>
+                                </button>
+                                {open && (
+                                    <div className="cg-acc-body">
+                                        {section.items.map((item) => (
+                                            <p key={item.title}>
+                                                <strong>{item.title}.</strong> {item.summary || item.detail}
+                                            </p>
+                                        ))}
+                                    </div>
+                                )}
+                            </article>
+                        );
+                    })}
+                </div>
+            </section>
 
-            <div className="cg-tab-panel" role="tabpanel">
-                {tab === 'home' && renderHome()}
-                {tab === 'milestones' && renderMilestones()}
-                {tab === 'activities' && renderActivities()}
-                {tab === 'health' && renderTopicSection('health', health, faHeartbeat, 'سلامت در این مرحله')}
-                {tab === 'nutrition' && renderTopicSection('nutrition', nutrition, faAppleAlt, 'تغذیه این مرحله')}
-                {tab === 'sleep' && renderTopicSection('sleep', sleep, faBed, 'خواب در این مرحله')}
-                {tab === 'behavior' && renderTopicSection('behavior', behavior, faHeart, 'رفتار و احساسات')}
-                {tab === 'safety' && renderTopicSection('safety', safety, faShieldAlt, 'ایمنی متناسب با سن')}
-                {tab === 'concern' && renderConcern()}
-            </div>
+            <section className="cg-block">
+                <header className="cg-block-head">
+                    <FontAwesomeIcon icon={faPuzzlePiece} />
+                    <div>
+                        <h3>۲. کارهای امروز و این ماه</h3>
+                        <p>هر روز سه بازی تازه؛ کارهای دیروز تکرار نمی‌شوند.</p>
+                    </div>
+                </header>
+                <div className="cg-progress" aria-label={`پیشرفت امروز ${progress.pct} درصد`}>
+                    <div style={{ width: `${progress.pct}%` }} />
+                </div>
+                <p className="cg-note">{progress.done} از {progress.total} کار امروز · {progress.pct}٪</p>
+                <div className="cg-list">
+                    {(activities || []).map((activity, index) => (
+                        <button
+                            type="button"
+                            key={activity.id}
+                            className={`cg-list-item${activity.completed ? ' is-done' : ''}`}
+                            onClick={() => setSelectedActivity(activity)}
+                        >
+                            <div>
+                                <strong>{index + 1}. {activity.title}</strong>
+                                <span>
+                                    {activity.duration} دقیقه
+                                    {' · '}
+                                    {(activity.domains || []).map((d) => DOMAINS[d]?.label).filter(Boolean).join(' + ')}
+                                </span>
+                                {activity.goal && <em>{activity.goal}</em>}
+                            </div>
+                            <span className="cg-list-cta">{activity.completed ? 'انجام شد' : 'شروع'}</span>
+                        </button>
+                    ))}
+                </div>
+                {(safetyTasks || []).length > 0 && (
+                    <div className="cg-safety-list">
+                        {(safetyTasks || []).map((task) => (
+                            <label key={task.id} className={task.done ? 'is-done' : ''}>
+                                <input
+                                    type="checkbox"
+                                    checked={Boolean(task.done)}
+                                    disabled={busyKey === `s-${task.id}`}
+                                    onChange={() => handleSafety(task)}
+                                />
+                                <span>
+                                    <strong>ایمنی: {task.title}</strong>
+                                    <em>{task.detail}</em>
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                )}
+                <Link to={`/growth-chart/${childId}`} className="cg-link-btn">مشاهده نمودار قد و وزن</Link>
+            </section>
+
+            <section className="cg-block cg-ai">
+                <header className="cg-block-head">
+                    <FontAwesomeIcon icon={faShieldAlt} />
+                    <div>
+                        <h3>۳. از چی نگران باشم؟ دستیار هوشمند</h3>
+                        <p>سن {child.name} ملاک پاسخ است؛ این بخش تشخیص پزشکی نیست.</p>
+                    </div>
+                </header>
+                {(redFlags || []).length > 0 && (
+                    <div className="cg-flags">
+                        {redFlags.map((flag) => (
+                            <article key={flag.id} className={`cg-flag is-${flag.level}`}>
+                                <strong>{flag.title}</strong>
+                                <span>{flag.detail}</span>
+                            </article>
+                        ))}
+                    </div>
+                )}
+                <div className="cg-prompts">
+                    {QUICK_PROMPTS.map((prompt) => (
+                        <button type="button" key={prompt} onClick={() => { setConcernText(prompt); handleAnalyze(prompt); }}>
+                            {prompt}
+                        </button>
+                    ))}
+                </div>
+                <textarea
+                    className="cg-concern-box"
+                    rows="3"
+                    value={concernText}
+                    onChange={(e) => setConcernText(e.target.value)}
+                    placeholder="نگرانی‌تان را با یک جمله بنویسید؛ مثلاً هنوز تنهایی راه نمی‌رود."
+                />
+                <button type="button" className="cg-btn" disabled={busyKey === 'ai'} onClick={() => handleAnalyze()}>
+                    {busyKey === 'ai' ? 'در حال تحلیل...' : 'تحلیل نگرانی'}
+                </button>
+                {analyzeError && <p className="cg-error">{analyzeError}</p>}
+                {analysis && (
+                    <div className={`cg-ai-result is-${analysis.status_badge && analysis.status_badge.color}`}>
+                        <p className="cg-ai-badge">{analysis.status_badge && analysis.status_badge.text}</p>
+                        <p className="cg-overview">{analysis.summary_verdict}</p>
+                        {analysis.analysis && (analysis.analysis.motor_explanation || analysis.analysis.speech_explanation) && (
+                            <ul className="cg-bullets">
+                                {analysis.analysis.motor_explanation && <li>{analysis.analysis.motor_explanation}</li>}
+                                {analysis.analysis.speech_explanation && <li>{analysis.analysis.speech_explanation}</li>}
+                            </ul>
+                        )}
+                        <h4 className="cg-subhead">الان در خانه چه کار کنم؟</h4>
+                        <ol className="cg-steps">
+                            {(analysis.home_actions || []).map((action) => (
+                                <li key={action.title}>
+                                    <strong>{action.title}</strong>
+                                    <span>{action.description}</span>
+                                </li>
+                            ))}
+                        </ol>
+                        {analysis.recommended_action && (
+                            <p className="cg-note">
+                                {analysis.recommended_action.needs_doctor_visit
+                                    ? 'این مورد را با پزشک کودک مطرح کنید.'
+                                    : 'الان نیاز فوری به مراجعه نیست؛ اگر نگران ماندید با متخصص مشورت کنید.'}
+                            </p>
+                        )}
+                    </div>
+                )}
+            </section>
 
             <p className="cg-disclaimer">
                 <FontAwesomeIcon icon={faLightbulb} /> {disclaimer}
@@ -737,41 +356,25 @@ const ChildGrowthPage = () => {
 
             {selectedActivity && (
                 <div className="cg-modal-overlay" role="presentation" onClick={() => setSelectedActivity(null)}>
-                    <div
-                        className="cg-modal"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={selectedActivity.title}
-                        onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="cg-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
                         <h3>{selectedActivity.title}</h3>
                         <p className="cg-note">⏱ {selectedActivity.duration} دقیقه</p>
-                        {selectedActivity.goal && (
-                            <p><strong>هدف:</strong> {selectedActivity.goal}</p>
-                        )}
-                        {selectedActivity.materials && (
-                            <p><strong>وسایل:</strong> {selectedActivity.materials}</p>
-                        )}
-                        <h4>چطور بازی کنیم؟</h4>
+                        {selectedActivity.goal && <p><strong>هدف:</strong> {selectedActivity.goal}</p>}
                         <ol>
                             {(selectedActivity.instructions || []).map((step) => (
                                 <li key={step}>{step}</li>
                             ))}
                         </ol>
-                        {selectedActivity.tip && <p className="cg-tip">💡 {selectedActivity.tip}</p>}
-                        {selectedActivity.safety && <p className="cg-safety">⚠️ {selectedActivity.safety}</p>}
                         <div className="cg-modal-actions">
                             <button
                                 type="button"
                                 className="cg-btn"
-                                disabled={busyKey === `a-${selectedActivity.id}`}
+                                disabled={busyKey === `a-${selectedActivity.id}` || selectedActivity.completed}
                                 onClick={() => handleCompleteActivity(selectedActivity)}
                             >
-                                <FontAwesomeIcon icon={faCheck} /> شروع / انجام شد
+                                <FontAwesomeIcon icon={faCheck} /> انجام شد
                             </button>
-                            <button type="button" className="cg-btn is-soft" onClick={() => setSelectedActivity(null)}>
-                                بستن
-                            </button>
+                            <button type="button" className="cg-btn is-soft" onClick={() => setSelectedActivity(null)}>بستن</button>
                         </div>
                     </div>
                 </div>

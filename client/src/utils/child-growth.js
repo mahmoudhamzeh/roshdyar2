@@ -75,6 +75,27 @@ export async function completeActivity(childId, activityId, duration = null) {
     return res.json();
 }
 
+export async function toggleSafetyTask(childId, itemId, done = true) {
+    const res = await fetch(`/api/children/${childId}/safety/${itemId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ done }),
+    });
+    if (!res.ok) throw new Error('خطا در ثبت ایمنی');
+    return res.json();
+}
+
+export async function analyzeConcern(childId, concern, topic = 'متن آزاد') {
+    const res = await fetch(`/api/children/${childId}/concerns/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ concern, topic }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'خطا در تحلیل نگرانی');
+    return data;
+}
+
 export async function submitConcern(childId, payload) {
     const res = await fetch(`/api/children/${childId}/concerns`, {
         method: 'POST',
