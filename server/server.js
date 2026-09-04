@@ -32,7 +32,7 @@ const {
     isCompletedOnDay
 } = require('./child-growth-data');
 const { deliverOtp } = require('./sms');
-const { analyzeConcernWithModel } = require('./child-growth-ai');
+const { analyzeConcernWithModel, chatGrowthAssistant } = require('./child-growth-ai');
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -104,6 +104,8 @@ const API_CATALOG = {
             'GET /api/children/:childId/concerns',
             'POST /api/children/:childId/concerns',
             'POST /api/children/:childId/concerns/analyze',
+            'GET /api/children/:childId/concerns/chat',
+            'POST /api/children/:childId/concerns/chat',
             'POST /api/children/:childId/safety/:itemId'
         ],
         growth: [
@@ -1001,6 +1003,61 @@ app.post('/api/children/:childId/concerns/analyze', async (req, res) => {
     };
     await store.children.saveGrowthState(req.params.childId, { concerns: [entry, ...(state.concerns || [])] });
     res.status(201).json(analysis);
+});
+
+app.get('/api/children/:childId/concerns/chat', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const state = await store.children.getGrowthState(req.params.childId);
+    res.json({ messages: state.chat || [] });
+});
+
+app.post('/api/children/:childId/concerns/chat', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const text = String(req.body && (req.body.message || req.body.text || req.body.concern) || '').trim();
+    if (text.length < 2) {
+        return res.status(400).json({ message: 'پیام را بنویسید' });
+    }
+    const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const summary = await buildGrowthSummaryForChild(req.params.childId, child);
+    const last = summary && summary.lastMeasurement;
+    const state = await store.children.getGrowthState(req.params.childId);
+    const incoming = Array.isArray(req.body && req.body.history) ? req.body.history : (state.chat || []);
+    const history = incoming
+        .filter((item) => item && item.content)
+        .slice(-16)
+        .map((item) => ({
+            role: item.role === 'assistant' ? 'assistant' : 'user',
+            content: String(item.content).slice(0, 1200)
+        }));
+    const userMessage = { role: 'user', content: text, at: new Date().toISOString() };
+    const nutrition = guide.nutrition && (guide.nutrition.overview || '');
+    const sleep = guide.sleep && (guide.sleep.overview || '');
+    const result = await chatGrowthAssistant(
+        {
+            name: getChildDisplayName(child),
+            gender: child.gender,
+            ageInMonths: guide.child.ageInMonths
+        },
+        [...history, userMessage],
+        {
+            bandTitle: guide.band && guide.band.title,
+            nutrition,
+            sleep,
+            heightLabel: last && last.height != null ? `قد ${last.height} سم` : '',
+            weightLabel: last && last.weight != null ? `وزن ${last.weight} کگ` : ''
+        }
+    );
+    const assistantMessage = {
+        role: 'assistant',
+        content: result.reply,
+        at: new Date().toISOString()
+    };
+    const messages = [...history, userMessage, assistantMessage].slice(-24);
+    await store.children.saveGrowthState(req.params.childId, { chat: messages });
+    res.status(201).json({ reply: result.reply, source: result.source, messages });
 });
 
 app.get('/api/children/:childId/concerns', async (req, res) => {

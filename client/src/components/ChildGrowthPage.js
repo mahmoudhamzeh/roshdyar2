@@ -1,92 +1,83 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useHistory, useParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
+    faAllergies,
     faBed,
     faChartLine,
     faCheck,
-    faCheckCircle,
     faChild,
-    faCircle,
-    faClipboardList,
     faComments,
     faHeart,
-    faLightbulb,
+    faNotesMedical,
+    faPaperPlane,
     faPersonWalking,
     faPuzzlePiece,
-    faQuestionCircle,
-    faShieldAlt,
+    faRobot,
     faSpinner,
+    faSyringe,
     faUtensils,
 } from '@fortawesome/free-solid-svg-icons';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
 import {
-    DOMAINS,
-    MILESTONE_STATUS,
-    STATUS_LABELS,
-    TREND_LABELS,
-    analyzeConcern,
     completeActivity,
     fetchAgeGuide,
-    formatRelativeMeasurementDate,
-    toggleSafetyTask,
-    updateMilestoneStatus,
+    fetchGrowthChat,
+    sendGrowthChat,
 } from '../utils/child-growth';
+import { buildOverallStatus, collectHealthTags, metricCaption, statusPhrase } from '../utils/child-snapshot';
 import './ChildGrowthPage.css';
 
 const DOMAIN_TILES = [
-    { id: 'speech', title: 'کلام', color: '#0284c7', icon: faComments, domains: ['LANGUAGE', 'COGNITIVE'] },
-    { id: 'motor', title: 'حرکت', color: '#d97706', icon: faPersonWalking, domains: ['MOTOR'] },
-    { id: 'food', title: 'تغذیه', color: '#c2410c', icon: faUtensils, domains: ['INDEPENDENCE'], source: 'nutrition' },
-    { id: 'sleep', title: 'خواب', color: '#6d28d9', icon: faBed, domains: [], source: 'sleep' },
-    { id: 'mood', title: 'رفتار', color: '#be185d', icon: faHeart, domains: ['SOCIAL'], source: 'behavior' },
+    { id: 'speech', title: 'کلام', color: '#0284c7', icon: faComments },
+    { id: 'motor', title: 'حرکت', color: '#d97706', icon: faPersonWalking },
+    { id: 'food', title: 'تغذیه', color: '#c2410c', icon: faUtensils },
+    { id: 'sleep', title: 'خواب', color: '#6d28d9', icon: faBed },
+    { id: 'mood', title: 'رفتار', color: '#be185d', icon: faHeart },
 ];
 
-const QUICK_PROMPTS = [
+const CHAT_CHIPS = [
+    'قد و وزنش مناسب است؟',
+    'در این سن چه چیزی بخورد؟',
+    'شب‌ها بدخواب است',
     'هنوز تنهایی راه نمی‌رود',
-    'کلمه نمی‌گوید و جیغ می‌زند',
-    'شب‌ها زیاد بیدار می‌شود',
-    'غذا را رد می‌کند',
-    'قشقرق شدید دارد',
-];
-
-const STATUS_CHOICES = [
-    MILESTONE_STATUS.OBSERVED,
-    MILESTONE_STATUS.NOT_YET_OBSERVED,
-    MILESTONE_STATUS.UNSURE,
 ];
 
 const ChildGrowthPage = () => {
     const { childId } = useParams();
     const history = useHistory();
+    const chatEndRef = useRef(null);
     const [guide, setGuide] = useState(null);
     const [childRaw, setChildRaw] = useState(null);
+    const [vaccines, setVaccines] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [openSection, setOpenSection] = useState('speech');
+    const [eduTab, setEduTab] = useState('food');
     const [busyKey, setBusyKey] = useState('');
     const [selectedActivity, setSelectedActivity] = useState(null);
-    const [concernText, setConcernText] = useState('');
-    const [analysis, setAnalysis] = useState(null);
-    const [analyzeError, setAnalyzeError] = useState('');
-    const [expandedExpect, setExpandedExpect] = useState(false);
+    const [messages, setMessages] = useState([]);
+    const [draft, setDraft] = useState('');
+    const [chatError, setChatError] = useState('');
 
     const loadGuide = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
-            const [guideData, childRes, growthRes] = await Promise.all([
+            const [guideData, childRes, growthRes, vaxRes, chatRes] = await Promise.all([
                 fetchAgeGuide(childId),
                 fetch(`/api/children/${childId}`),
                 fetch(`/api/growth/${childId}`),
+                fetch(`/api/vaccination-status/${childId}`),
+                fetchGrowthChat(childId),
             ]);
             if (!childRes.ok) throw new Error('کودک یافت نشد');
             const childData = await childRes.json();
-            if (growthRes.ok) {
-                childData.growthData = await growthRes.json();
-            }
+            if (growthRes.ok) childData.growthData = await growthRes.json();
             setGuide(guideData);
             setChildRaw(childData);
+            setVaccines(vaxRes.ok ? await vaxRes.json() : []);
+            setMessages(chatRes.messages || []);
         } catch (err) {
             setError(err.message || 'خطا در دریافت اطلاعات');
             setGuide(null);
@@ -107,52 +98,35 @@ const ChildGrowthPage = () => {
         () => (childRaw ? analyzeGrowthMetric('weight', childRaw) : null),
         [childRaw]
     );
+    const illnesses = useMemo(() => collectHealthTags(childRaw?.special_illnesses), [childRaw]);
+    const allergies = useMemo(() => collectHealthTags(childRaw?.allergies), [childRaw]);
+    const overdueVaccines = useMemo(
+        () => vaccines.filter((item) => item.status === 'overdue').length,
+        [vaccines]
+    );
+    const doneVaccines = useMemo(
+        () => vaccines.filter((item) => item.status === 'done').length,
+        [vaccines]
+    );
 
-    const lastMeasure = useMemo(() => {
-        if (guide?.growthSummary?.lastMeasurement) return guide.growthSummary.lastMeasurement;
-        const records = childRaw?.growthData;
-        if (!Array.isArray(records) || !records.length) return null;
-        return [...records].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
-    }, [guide, childRaw]);
+    const overall = useMemo(
+        () => buildOverallStatus({
+            childName: guide?.child?.name || 'کودک',
+            height: heightAnalysis,
+            weight: weightAnalysis,
+            illnesses,
+            allergies,
+            overdueVaccines,
+        }),
+        [guide, heightAnalysis, weightAnalysis, illnesses, allergies, overdueVaccines]
+    );
 
-    const progress = useMemo(() => {
-        if (!guide) return { done: 0, total: 0, pct: 0 };
-        const acts = guide.activities || [];
-        const done = acts.filter((item) => item.completed).length;
-        const total = acts.length;
-        return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
-    }, [guide]);
-
-    const activeTile = DOMAIN_TILES.find((item) => item.id === openSection) || DOMAIN_TILES[0];
     const activeSection = (guide?.expectSections || []).find((item) => item.id === openSection)
         || (guide?.expectSections || [])[0];
-    const topicBlock = activeTile?.source ? guide?.[activeTile.source] : null;
-    const sectionMilestones = useMemo(() => {
-        const items = guide?.milestones?.items || [];
-        const ids = activeTile?.domains || [];
-        if (!ids.length) return [];
-        return items.filter((item) => ids.includes(item.domain)).slice(0, 4);
-    }, [guide, activeTile]);
 
-    const handleMilestone = async (milestoneId, status) => {
-        setBusyKey(`m-${milestoneId}`);
-        try {
-            await updateMilestoneStatus(childId, milestoneId, status);
-            setGuide((prev) => {
-                if (!prev) return prev;
-                const items = prev.milestones.items.map((item) =>
-                    item.id === milestoneId ? { ...item, status } : item
-                );
-                const checked = items.filter((item) => item.status !== MILESTONE_STATUS.NOT_CHECKED).length;
-                const observed = items.filter((item) => item.status === MILESTONE_STATUS.OBSERVED).length;
-                return { ...prev, milestones: { ...prev.milestones, items, checked, observed } };
-            });
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setBusyKey('');
-        }
-    };
+    useEffect(() => {
+        if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, [messages]);
 
     const handleCompleteActivity = async (activity) => {
         setBusyKey(`a-${activity.id}`);
@@ -172,37 +146,22 @@ const ChildGrowthPage = () => {
         }
     };
 
-    const handleSafety = async (task) => {
-        setBusyKey(`s-${task.id}`);
-        try {
-            const nextDone = !task.done;
-            await toggleSafetyTask(childId, task.id, nextDone);
-            setGuide((prev) => prev && ({
-                ...prev,
-                safetyTasks: prev.safetyTasks.map((item) =>
-                    item.id === task.id ? { ...item, done: nextDone } : item
-                ),
-            }));
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setBusyKey('');
-        }
-    };
-
-    const handleAnalyze = async (text) => {
-        const concern = String(text || concernText).trim();
-        if (concern.length < 4) {
-            setAnalyzeError('یک جمله کامل‌تر بنویسید');
+    const sendChat = async (text) => {
+        const message = String(text || draft).trim();
+        if (message.length < 2) {
+            setChatError('یک جمله بنویسید');
             return;
         }
-        setBusyKey('ai');
-        setAnalyzeError('');
+        setBusyKey('chat');
+        setChatError('');
+        setDraft('');
+        const pending = [...messages, { role: 'user', content: message }];
+        setMessages(pending);
         try {
-            setAnalysis(await analyzeConcern(childId, concern));
-            setConcernText(concern);
+            const result = await sendGrowthChat(childId, message, pending);
+            setMessages(result.messages || [...pending, { role: 'assistant', content: result.reply }]);
         } catch (err) {
-            setAnalyzeError(err.message);
+            setChatError(err.message);
         } finally {
             setBusyKey('');
         }
@@ -238,118 +197,94 @@ const ChildGrowthPage = () => {
         );
     }
 
-    const { child, band, expectSections, activities, safetyTasks, redFlags, disclaimer, milestones, growthSummary } = guide;
+    const { child, band, activities, nutrition, sleep, disclaimer } = guide;
+    const welcome = `سلام، من دستیار رشد ${child.name} هستم. از وضعیت کلی، غذا، خواب یا نگرانی‌تان بپرسید.`;
+    const shownMessages = messages.length ? messages : [{ role: 'assistant', content: welcome }];
+    const foodTips = (nutrition?.priorities || nutrition?.guidance || []).slice(0, 3);
+    const sleepTips = (sleep?.routine || []).slice(0, 3);
 
     return (
         <div className="child-growth-page">
             {pageNav}
 
-            <header className="cg-hero">
+            <header className={`cg-hero is-${overall.tone}`}>
                 <div className="cg-hero-avatar" aria-hidden="true">
                     {childRaw?.avatar ? <img src={childRaw.avatar} alt="" /> : <FontAwesomeIcon icon={faChild} />}
                 </div>
-                <div className="cg-hero-text">
-                    <p className="cg-kicker">{band?.title}</p>
+                <div>
+                    <p className="cg-kicker">{band?.title} · {child.ageLabel}</p>
                     <h2>{child.name}</h2>
-                    <p className="cg-age">{child.ageLabel}</p>
-                    {band?.subtitle && <p className="cg-band">{band.subtitle}</p>}
+                    <strong>{overall.title}</strong>
+                    <p>{overall.detail}</p>
                 </div>
             </header>
 
             <section className="cg-block">
                 <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faLightbulb} />
-                    <div>
-                        <h3>این ماه چه تغییری می‌کند؟</h3>
-                        <p>یک حوزه را انتخاب کنید؛ جزئیات فقط همان‌جا باز می‌شود.</p>
-                    </div>
+                    <h3>۱. وضعیت کلی</h3>
+                    <p>قد، وزن، بیماری ثبت‌شده و واکسن در یک نگاه.</p>
                 </header>
-                <div className="cg-domains" role="tablist" aria-label="حوزه‌های رشد">
-                    {DOMAIN_TILES.map((visual) => {
-                        const active = openSection === visual.id;
-                        return (
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                key={visual.id}
-                                className={`cg-domain ${active ? 'is-active' : ''}`}
-                                onClick={() => {
-                                    setOpenSection(visual.id);
-                                    setExpandedExpect(false);
-                                }}
-                            >
-                                <span className="cg-domain-icon" style={{ background: visual.color }}>
-                                    <FontAwesomeIcon icon={visual.icon} />
-                                </span>
-                                <em>{visual.title}</em>
-                            </button>
-                        );
-                    })}
+                <div className="cg-stat-grid">
+                    <article className={`cg-stat is-${statusPhrase(heightAnalysis?.status).tone}`}>
+                        <span>قد</span>
+                        <strong>{heightAnalysis?.value != null ? `${heightAnalysis.value} سم` : '—'}</strong>
+                        <small>{metricCaption(heightAnalysis)}</small>
+                    </article>
+                    <article className={`cg-stat is-${statusPhrase(weightAnalysis?.status).tone}`}>
+                        <span>وزن</span>
+                        <strong>{weightAnalysis?.value != null ? `${weightAnalysis.value} کگ` : '—'}</strong>
+                        <small>{metricCaption(weightAnalysis)}</small>
+                    </article>
+                    <article className={`cg-stat is-${illnesses.length || allergies.length ? 'watch' : 'ok'}`}>
+                        <span><FontAwesomeIcon icon={illnesses.length ? faNotesMedical : faAllergies} /> سلامت</span>
+                        <strong>{illnesses.length || allergies.length ? 'ثبت شده' : 'موردی نیست'}</strong>
+                        <small>
+                            {illnesses.length ? `بیماری: ${illnesses.join('، ')}` : 'بیماری خاصی ثبت نشده'}
+                            {allergies.length ? ` · آلرژی: ${allergies.join('، ')}` : ''}
+                        </small>
+                    </article>
+                    <article className={`cg-stat is-${overdueVaccines ? 'watch' : 'ok'}`}>
+                        <span><FontAwesomeIcon icon={faSyringe} /> واکسن</span>
+                        <strong>{overdueVaccines ? `${overdueVaccines} عقب‌افتاده` : 'به‌روز'}</strong>
+                        <small>{doneVaccines} از {vaccines.length || 0} ثبت شده</small>
+                    </article>
+                </div>
+                <div className="cg-inline-links">
+                    <Link to={`/growth-chart/${childId}`}><FontAwesomeIcon icon={faChartLine} /> نمودار قد و وزن</Link>
+                    <Link to={`/vaccination/${childId}`}>کارت واکسن</Link>
+                    <Link to={`/health-profile/${childId}`}>پرونده سلامت</Link>
+                </div>
+            </section>
+
+            <section className="cg-block">
+                <header className="cg-block-head">
+                    <h3>۲. در این سن چه کار می‌کند؟</h3>
+                    <p>یک حوزه را بزنید؛ فقط همان باز می‌شود.</p>
+                </header>
+                <div className="cg-domains" role="tablist">
+                    {DOMAIN_TILES.map((visual) => (
+                        <button
+                            type="button"
+                            key={visual.id}
+                            className={`cg-domain ${openSection === visual.id ? 'is-active' : ''}`}
+                            onClick={() => setOpenSection(visual.id)}
+                        >
+                            <span className="cg-domain-icon" style={{ background: visual.color }}>
+                                <FontAwesomeIcon icon={visual.icon} />
+                            </span>
+                            <em>{visual.title}</em>
+                        </button>
+                    ))}
                 </div>
                 {activeSection && (
                     <div className="cg-domain-detail">
                         <h4>{activeSection.title}</h4>
-                        {(activeSection.items || []).slice(0, expandedExpect ? 3 : 1).map((item) => (
-                            <article key={item.title} className="cg-focus">
-                                <strong>{item.title}</strong>
-                                <p>{expandedExpect ? (item.detail || item.summary) : item.summary}</p>
-                            </article>
-                        ))}
-                        {topicBlock?.overview && expandedExpect && (
-                            <p className="cg-overview">{topicBlock.overview}</p>
-                        )}
-                        {(activeSection.items || []).length > 1 && (
-                            <button
-                                type="button"
-                                className="cg-text-btn"
-                                onClick={() => setExpandedExpect((prev) => !prev)}
-                            >
-                                {expandedExpect ? 'نمایش کمتر' : 'خواندن جزئیات'}
-                            </button>
-                        )}
-                    </div>
-                )}
-                {sectionMilestones.length > 0 && (
-                    <div className="cg-milestone-box">
-                        <div className="cg-milestone-head">
-                            <FontAwesomeIcon icon={faClipboardList} />
-                            <span>
-                                مهارت‌های {activeTile.title}
-                                {milestones?.total ? ` · ${milestones.checked} از ${milestones.total} بررسی‌شده` : ''}
-                            </span>
-                        </div>
-                        <ul className="cg-milestone-list">
-                            {sectionMilestones.map((milestone) => {
-                                const status = milestone.status || MILESTONE_STATUS.NOT_CHECKED;
-                                return (
-                                    <li key={milestone.id}>
-                                        <div className="cg-milestone-main">
-                                            <FontAwesomeIcon
-                                                icon={status === MILESTONE_STATUS.OBSERVED ? faCheckCircle : faCircle}
-                                                className={status === MILESTONE_STATUS.OBSERVED ? 'is-observed' : ''}
-                                            />
-                                            <div>
-                                                <strong>{milestone.title}</strong>
-                                                {milestone.description && <p>{milestone.description}</p>}
-                                            </div>
-                                        </div>
-                                        <div className="cg-status-row">
-                                            {STATUS_CHOICES.map((choice) => (
-                                                <button
-                                                    type="button"
-                                                    key={choice}
-                                                    disabled={busyKey === `m-${milestone.id}`}
-                                                    className={status === choice ? 'is-active' : ''}
-                                                    onClick={() => handleMilestone(milestone.id, choice)}
-                                                >
-                                                    {STATUS_LABELS[choice]}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </li>
-                                );
-                            })}
+                        <ul>
+                            {(activeSection.items || []).slice(0, 2).map((item) => (
+                                <li key={item.title}>
+                                    <strong>{item.title}.</strong> {item.summary}
+                                </li>
+                            ))}
                         </ul>
                     </div>
                 )}
@@ -357,173 +292,107 @@ const ChildGrowthPage = () => {
 
             <section className="cg-block">
                 <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faPuzzlePiece} />
-                    <div>
-                        <h3>کار امروز</h3>
-                        <p>هر روز سه بازی تازه. تیک امروز برای فردا عوض می‌شود.</p>
-                    </div>
-                    <span className="cg-progress-chip">{progress.pct}٪</span>
+                    <h3>۳. آموزش این سن</h3>
+                    <p>چی بخورد، چه بازی کند، خوابش چطور باشد.</p>
                 </header>
-                <div className="cg-progress" aria-label={`پیشرفت امروز ${progress.pct} درصد`}>
-                    <div style={{ width: `${progress.pct}%` }} />
-                </div>
-                <p className="cg-note">{progress.done} از {progress.total} بازی امروز</p>
-                <div className="cg-list">
-                    {(activities || []).map((activity, index) => (
+                <div className="cg-edu-tabs">
+                    {[
+                        { id: 'food', label: 'غذا', icon: faUtensils },
+                        { id: 'play', label: 'بازی امروز', icon: faPuzzlePiece },
+                        { id: 'sleep', label: 'خواب', icon: faBed },
+                    ].map((tab) => (
                         <button
                             type="button"
-                            key={activity.id}
-                            className={`cg-list-item${activity.completed ? ' is-done' : ''}`}
-                            onClick={() => setSelectedActivity(activity)}
+                            key={tab.id}
+                            className={eduTab === tab.id ? 'is-on' : ''}
+                            onClick={() => setEduTab(tab.id)}
                         >
-                            <div>
-                                <strong>{index + 1}. {activity.title}</strong>
-                                <span>
-                                    {activity.duration} دقیقه
-                                    {(activity.domains || []).length
-                                        ? ` · ${(activity.domains || []).map((d) => DOMAINS[d]?.label).filter(Boolean).join(' + ')}`
-                                        : ''}
-                                </span>
-                            </div>
-                            <span className="cg-list-cta">{activity.completed ? 'انجام شد' : 'شروع'}</span>
+                            <FontAwesomeIcon icon={tab.icon} /> {tab.label}
                         </button>
                     ))}
                 </div>
-                {(safetyTasks || []).length > 0 && (
-                    <div className="cg-safety-list">
-                        {(safetyTasks || []).map((task) => (
-                            <label key={task.id} className={task.done ? 'is-done' : ''}>
-                                <input
-                                    type="checkbox"
-                                    checked={Boolean(task.done)}
-                                    disabled={busyKey === `s-${task.id}`}
-                                    onChange={() => handleSafety(task)}
-                                />
-                                <span>
-                                    <strong>
-                                        <FontAwesomeIcon icon={faShieldAlt} /> {task.title}
-                                    </strong>
-                                    {task.detail && <em>{task.detail}</em>}
-                                </span>
-                            </label>
+                {eduTab === 'food' && (
+                    <div className="cg-edu-body">
+                        {nutrition?.overview && <p>{nutrition.overview}</p>}
+                        <ul>
+                            {(foodTips.length ? foodTips : [{ title: 'غذای خانواده', detail: 'لقمه‌های نرم و متنوع روی میز خانواده.' }]).map((item) => (
+                                <li key={item.title || item}>
+                                    <strong>{item.title || 'نکته'}.</strong> {item.detail || item}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+                {eduTab === 'play' && (
+                    <div className="cg-list">
+                        {(activities || []).map((activity) => (
+                            <button
+                                type="button"
+                                key={activity.id}
+                                className={`cg-list-item${activity.completed ? ' is-done' : ''}`}
+                                onClick={() => setSelectedActivity(activity)}
+                            >
+                                <div>
+                                    <strong>{activity.title}</strong>
+                                    <span>{activity.duration} دقیقه</span>
+                                </div>
+                                <em>{activity.completed ? 'انجام شد' : 'شروع'}</em>
+                            </button>
                         ))}
                     </div>
                 )}
-                <div className="cg-growth-box">
-                    <div className="cg-growth-grid">
-                        <div>
-                            <span>قد</span>
-                            <strong>{lastMeasure?.height != null ? `${lastMeasure.height} سم` : '—'}</strong>
-                            <small>
-                                {heightAnalysis?.percentile != null
-                                    ? `حدود صدک ${Math.round(heightAnalysis.percentile)}`
-                                    : 'هنوز ثبت نشده'}
-                            </small>
-                        </div>
-                        <div>
-                            <span>وزن</span>
-                            <strong>{lastMeasure?.weight != null ? `${lastMeasure.weight} کگ` : '—'}</strong>
-                            <small>
-                                {weightAnalysis?.percentile != null
-                                    ? `حدود صدک ${Math.round(weightAnalysis.percentile)}`
-                                    : 'هنوز ثبت نشده'}
-                            </small>
-                        </div>
+                {eduTab === 'sleep' && (
+                    <div className="cg-edu-body">
+                        {sleep?.overview && <p>{sleep.overview}</p>}
+                        <ul>
+                            {(sleepTips.length ? sleepTips : [{ title: 'روتین ثابت', detail: 'هر شب همان سه کار کوتاه را تکرار کنید.' }]).map((item) => (
+                                <li key={item.title}>
+                                    <strong>{item.title}.</strong> {item.detail}
+                                </li>
+                            ))}
+                        </ul>
                     </div>
-                    <p className="cg-note">
-                        آخرین اندازه‌گیری: {formatRelativeMeasurementDate(lastMeasure?.date) || 'ثبت نشده'}
-                        {growthSummary?.trend ? ` · روند ${TREND_LABELS[growthSummary.trend] || ''}` : ''}
-                    </p>
-                    <Link to={`/growth-chart/${childId}`} className="cg-link-btn">
-                        <FontAwesomeIcon icon={faChartLine} /> نمودار کامل قد و وزن
-                    </Link>
-                </div>
+                )}
             </section>
 
-            <section className="cg-block cg-ai">
+            <section className="cg-block cg-chat">
                 <header className="cg-block-head">
-                    <FontAwesomeIcon icon={faQuestionCircle} />
-                    <div>
-                        <h3>نگرانم؛ کمکم کن</h3>
-                        <p>سن {child.name} ملاک پاسخ است. این بخش تشخیص پزشکی نیست.</p>
-                    </div>
+                    <h3><FontAwesomeIcon icon={faRobot} /> دستیار هوشمند</h3>
+                    <p>با او حرف بزنید؛ سن {child.name} ملاک پاسخ است.</p>
                 </header>
-                {(redFlags || []).length > 0 && (
-                    <details className="cg-flags-box">
-                        <summary>چه موقع باید حواسم باشد؟</summary>
-                        <div>
-                            {redFlags.slice(0, 4).map((flag) => (
-                                <p key={flag.id}><strong>{flag.title}:</strong> {flag.detail}</p>
-                            ))}
+                <div className="cg-chat-log" aria-live="polite">
+                    {shownMessages.map((item, index) => (
+                        <div key={`${item.role}-${index}`} className={`cg-bubble is-${item.role}`}>
+                            {item.content}
                         </div>
-                    </details>
-                )}
+                    ))}
+                    <div ref={chatEndRef} />
+                </div>
                 <div className="cg-prompts">
-                    {QUICK_PROMPTS.map((prompt) => (
-                        <button
-                            type="button"
-                            key={prompt}
-                            className={concernText === prompt ? 'is-on' : ''}
-                            onClick={() => handleAnalyze(prompt)}
-                        >
-                            {prompt}
+                    {CHAT_CHIPS.map((chip) => (
+                        <button type="button" key={chip} disabled={busyKey === 'chat'} onClick={() => sendChat(chip)}>
+                            {chip}
                         </button>
                     ))}
                 </div>
-                <textarea
-                    className="cg-concern-box"
-                    rows="3"
-                    value={concernText}
-                    onChange={(e) => setConcernText(e.target.value)}
-                    placeholder="نگرانی را با یک جمله بنویسید"
-                />
-                <button type="button" className="cg-btn" disabled={busyKey === 'ai'} onClick={() => handleAnalyze()}>
-                    {busyKey === 'ai' ? 'در حال تحلیل...' : 'تحلیل نگرانی'}
-                </button>
-                {analyzeError && <p className="cg-error">{analyzeError}</p>}
-                {analysis && (
-                    <div className={`cg-ai-card is-${analysis.status_badge && analysis.status_badge.color}`}>
-                        <span className="cg-ai-badge">{analysis.status_badge && analysis.status_badge.text}</span>
-                        <p className="cg-overview">{analysis.summary_verdict}</p>
-                        <ol className="cg-steps">
-                            {(analysis.analysis?.motor_explanation || analysis.analysis?.speech_explanation) && (
-                                <li>
-                                    <strong>وضعیت</strong>
-                                    <span>
-                                        {[analysis.analysis.motor_explanation, analysis.analysis.speech_explanation]
-                                            .filter(Boolean)
-                                            .join(' ')}
-                                    </span>
-                                </li>
-                            )}
-                            <li>
-                                <strong>الان در خانه</strong>
-                                <span>
-                                    {(analysis.home_actions || []).length
-                                        ? analysis.home_actions.map((action) => action.title).join(' · ')
-                                        : 'بازی‌های امروز را ادامه دهید.'}
-                                </span>
-                            </li>
-                            <li>
-                                <strong>قدم بعد</strong>
-                                <span>
-                                    {analysis.recommended_action && analysis.recommended_action.needs_doctor_visit
-                                        ? 'این مورد را با پزشک کودک مطرح کنید.'
-                                        : 'الان مراجعه فوری لازم نیست؛ اگر نگران ماندید مشورت کنید.'}
-                                </span>
-                            </li>
-                        </ol>
-                        {(analysis.home_actions || []).length > 0 && (
-                            <ul className="cg-bullets">
-                                {analysis.home_actions.map((action) => (
-                                    <li key={action.title}>
-                                        <strong>{action.title}.</strong> {action.description}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                )}
+                <form
+                    className="cg-chat-form"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        sendChat();
+                    }}
+                >
+                    <input
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        placeholder="سؤال خود را بنویسید"
+                        disabled={busyKey === 'chat'}
+                    />
+                    <button type="submit" disabled={busyKey === 'chat'} aria-label="ارسال">
+                        {busyKey === 'chat' ? <FontAwesomeIcon icon={faSpinner} spin /> : <FontAwesomeIcon icon={faPaperPlane} />}
+                    </button>
+                </form>
+                {chatError && <p className="cg-error">{chatError}</p>}
             </section>
 
             <p className="cg-disclaimer">{disclaimer}</p>
@@ -548,9 +417,7 @@ const ChildGrowthPage = () => {
                             >
                                 <FontAwesomeIcon icon={faCheck} /> انجام شد
                             </button>
-                            <button type="button" className="cg-btn is-soft" onClick={() => setSelectedActivity(null)}>
-                                بستن
-                            </button>
+                            <button type="button" className="cg-btn is-soft" onClick={() => setSelectedActivity(null)}>بستن</button>
                         </div>
                     </div>
                 </div>

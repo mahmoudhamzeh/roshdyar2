@@ -7,7 +7,7 @@ const {
     calendarDayKey,
     isCompletedOnDay
 } = require('./child-growth-data');
-const { analyzeConcernLocal } = require('./child-growth-ai');
+const { analyzeConcernLocal, chatGrowthAssistantLocal } = require('./child-growth-ai');
 
 const band = getBandForAge(13);
 assert.ok(band && band.activities && band.activities.length >= 3, '12-15 band needs activities');
@@ -79,6 +79,19 @@ const urgent = analyzeConcernLocal(
 );
 assert.strictEqual(urgent.triage_status, 'CONSULT_SPECIALIST');
 assert.strictEqual(urgent.recommended_action.needs_doctor_visit, true);
+
+const foodChat = chatGrowthAssistantLocal(
+    { name: 'محمد', gender: 'boy', ageInMonths: 13 },
+    [{ role: 'user', content: 'چی بخوره؟' }],
+    { bandTitle: '۱۲ تا ۱۵ ماهگی', nutrition: 'غذای خانواده با لقمه‌های نرم.' }
+);
+assert.ok(foodChat.includes('لقمه‌های نرم'));
+
+const walkChat = chatGrowthAssistantLocal(
+    { name: 'محمد', gender: 'boy', ageInMonths: 13 },
+    [{ role: 'user', content: 'هنوز تنهایی راه نمی‌رود' }]
+);
+assert.ok(walkChat.includes('۱۸ ماهگی') || walkChat.includes('طبیعی'));
 
 console.log('child growth unit tests passed');
 console.log('day key sample', calendarDayKey(new Date('2026-09-02T08:00:00.000Z')));
