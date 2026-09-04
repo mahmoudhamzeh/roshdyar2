@@ -496,8 +496,14 @@ function prepareStatements() {
             VALUES (@user_id, @total, @shipping_address, @phone, @notes, @status, @created_at, @updated_at)
         `),
         insertOrderItem: db.prepare(`
-            INSERT INTO order_items (order_id, product_id, name, price, quantity, line_total)
-            VALUES (@order_id, @product_id, @name, @price, @quantity, @line_total)
+            INSERT INTO order_items (
+                order_id, product_id, name, price, quantity, line_total,
+                offer_id, vendor_id, vendor_name, commission_pct, commission_amount, line_status
+            )
+            VALUES (
+                @order_id, @product_id, @name, @price, @quantity, @line_total,
+                @offer_id, @vendor_id, @vendor_name, @commission_pct, @commission_amount, @line_status
+            )
         `),
         updateOrderStatus: db.prepare(
             'UPDATE orders SET status = @status, updated_at = @updated_at WHERE id = @id'
@@ -641,13 +647,7 @@ function replaceVaccinationRecords(childId, records) {
 
 function hydrateOrders(orderRows) {
     return orderRows.map((row) => {
-        const items = stmts.listOrderItems.all(row.id).map((item) => ({
-            productId: item.product_id,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            lineTotal: item.line_total
-        }));
+        const items = stmts.listOrderItems.all(row.id).map(shopStore.mapOrderItemRow);
         return rowToOrder(row, items);
     });
 }
@@ -887,7 +887,13 @@ function importState(raw) {
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
-                    line_total: item.lineTotal
+                    line_total: item.lineTotal,
+                    offer_id: item.offerId || null,
+                    vendor_id: item.vendorId || null,
+                    vendor_name: item.vendorName || null,
+                    commission_pct: item.commissionPct || 0,
+                    commission_amount: item.commissionAmount || 0,
+                    line_status: item.lineStatus || 'pending'
                 });
             }
         }
@@ -1205,7 +1211,8 @@ const children = {
             milestones: extra.milestones && typeof extra.milestones === 'object' ? extra.milestones : {},
             completions: extra.completions && typeof extra.completions === 'object' ? extra.completions : {},
             concerns: Array.isArray(extra.concerns) ? extra.concerns : [],
-            safetyChecks: extra.safetyChecks && typeof extra.safetyChecks === 'object' ? extra.safetyChecks : {}
+            safetyChecks: extra.safetyChecks && typeof extra.safetyChecks === 'object' ? extra.safetyChecks : {},
+            chat: Array.isArray(extra.chat) ? extra.chat : []
         };
     },
     saveGrowthState(childId, patch) {
@@ -1218,7 +1225,8 @@ const children = {
             milestones: patch.milestones !== undefined ? patch.milestones : extra.milestones || {},
             completions: patch.completions !== undefined ? patch.completions : extra.completions || {},
             concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || [],
-            safetyChecks: patch.safetyChecks !== undefined ? patch.safetyChecks : extra.safetyChecks || {}
+            safetyChecks: patch.safetyChecks !== undefined ? patch.safetyChecks : extra.safetyChecks || {},
+            chat: patch.chat !== undefined ? patch.chat : extra.chat || []
         };
         db.prepare('UPDATE children SET extra = ? WHERE id = ?').run(JSON.stringify(next), Number(childId));
         return children.getGrowthState(childId);
@@ -2015,22 +2023,44 @@ const orders = {
     create({ userId, items, total, shippingAddress, phone, notes }) {
         connect();
         return db.transaction(() => {
-            for (const item of items) {
+            const resolved = items.map((item) => {
                 const product = stmts.getProduct.get(item.productId);
                 if (!product || !asBool(product.active)) {
                     const err = new Error(`product-missing:${item.productId}`);
                     err.code = 'PRODUCT_MISSING';
                     throw err;
                 }
-                if (product.stock < item.quantity) {
+                const offer = item.offerId
+                    ? shopStore.getOfferByIdSqlite(db, item.offerId)
+                    : shopStore.cheapestOfferForProductSqlite(db, item.productId);
+                const stock = offer ? offer.stock : product.stock;
+                if (stock < item.quantity) {
                     const err = new Error(product.name);
                     err.code = 'OUT_OF_STOCK';
                     throw err;
                 }
-            }
-            for (const item of items) {
-                stmts.adjustStock.run(-item.quantity, item.productId);
-                shopStore.adjustOfferStockSqlite(db, item.productId, -item.quantity);
+                const price = item.price != null ? Number(item.price) : (offer ? offer.price : product.price);
+                const lineTotal = item.lineTotal != null ? Number(item.lineTotal) : price * item.quantity;
+                const commissionPct = offer ? Number(offer.commissionPct || 0) : 0;
+                const commissionAmount = Math.round((lineTotal * commissionPct) / 100);
+                return {
+                    product,
+                    offer,
+                    quantity: item.quantity,
+                    name: item.name || product.name,
+                    price,
+                    lineTotal,
+                    commissionPct,
+                    commissionAmount
+                };
+            });
+            for (const item of resolved) {
+                stmts.adjustStock.run(-item.quantity, item.product.id);
+                if (item.offer) {
+                    shopStore.adjustOfferStockByIdSqlite(db, item.offer.id, -item.quantity);
+                } else {
+                    shopStore.adjustOfferStockSqlite(db, item.product.id, -item.quantity);
+                }
             }
             const createdAt = new Date().toISOString();
             const info = stmts.insertOrder.run({
@@ -2044,14 +2074,48 @@ const orders = {
                 updated_at: null
             });
             const orderId = Number(info.lastInsertRowid);
-            for (const item of items) {
-                stmts.insertOrderItem.run({
+            for (const item of resolved) {
+                const line = stmts.insertOrderItem.run({
                     order_id: orderId,
-                    product_id: item.productId,
+                    product_id: item.product.id,
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
-                    line_total: item.lineTotal
+                    line_total: item.lineTotal,
+                    offer_id: item.offer ? item.offer.id : null,
+                    vendor_id: item.offer ? item.offer.vendorId : null,
+                    vendor_name: item.offer ? item.offer.vendorName : null,
+                    commission_pct: item.commissionPct,
+                    commission_amount: item.commissionAmount,
+                    line_status: 'pending'
+                });
+                const orderItemId = Number(line.lastInsertRowid);
+                shopStore.insertLedgerSqlite(db, {
+                    kind: 'sale',
+                    orderId,
+                    orderItemId,
+                    vendorId: item.offer ? item.offer.vendorId : null,
+                    amount: item.lineTotal,
+                    note: `فروش ${item.name}`,
+                    createdAt
+                });
+                shopStore.insertLedgerSqlite(db, {
+                    kind: 'commission',
+                    orderId,
+                    orderItemId,
+                    vendorId: item.offer ? item.offer.vendorId : null,
+                    amount: item.commissionAmount,
+                    note: `کمیسیون ${item.commissionPct}٪`,
+                    createdAt
+                });
+                shopStore.insertLedgerSqlite(db, {
+                    kind: 'vendor_hold',
+                    orderId,
+                    orderItemId,
+                    vendorId: item.offer ? item.offer.vendorId : null,
+                    amount: item.lineTotal - item.commissionAmount,
+                    note: 'نگهداری امانی تا تحویل و پایان مهلت مرجوعی',
+                    createdAt
                 });
             }
             return orders.getById(orderId);
@@ -2063,11 +2127,25 @@ const orders = {
             const current = orders.getById(id);
             if (!current) return null;
             if (status === 'cancelled' && current.status !== 'cancelled') {
+                const now = new Date().toISOString();
                 for (const item of current.items || []) {
                     if (item.productId) {
                         stmts.adjustStock.run(item.quantity, item.productId);
-                        shopStore.adjustOfferStockSqlite(db, item.productId, item.quantity);
+                        if (item.offerId) {
+                            shopStore.adjustOfferStockByIdSqlite(db, item.offerId, item.quantity);
+                        } else {
+                            shopStore.adjustOfferStockSqlite(db, item.productId, item.quantity);
+                        }
                     }
+                    shopStore.insertLedgerSqlite(db, {
+                        kind: 'refund',
+                        orderId: current.id,
+                        orderItemId: item.id,
+                        vendorId: item.vendorId,
+                        amount: -(item.lineTotal || 0),
+                        note: 'لغو سفارش و آزادسازی موجودی',
+                        createdAt: now
+                    });
                 }
             }
             stmts.updateOrderStatus.run({
@@ -2281,24 +2359,50 @@ const productImages = {
     }
 };
 
+const COMMENT_SELECT = `
+    SELECT c.*, u.username, u.first_name, u.last_name, p.name AS product_name,
+        (SELECT COUNT(*) FROM product_comment_votes v WHERE v.comment_id = c.id AND v.vote = 1) AS like_count,
+        (SELECT COUNT(*) FROM product_comment_votes v WHERE v.comment_id = c.id AND v.vote = -1) AS dislike_count
+    FROM product_comments c
+    LEFT JOIN users u ON u.id = c.user_id
+    LEFT JOIN products p ON p.id = c.product_id
+`;
+
+function attachMyVoteSqlite(rows, voterId) {
+    if (!voterId || !rows.length) {
+        return rows.map((row) => shopStore.mapCommentRow(row));
+    }
+    const ids = rows.map((row) => Number(row.id));
+    const placeholders = ids.map(() => '?').join(',');
+    const votes = db.prepare(
+        `SELECT comment_id, vote FROM product_comment_votes WHERE user_id = ? AND comment_id IN (${placeholders})`
+    ).all(Number(voterId), ...ids);
+    const mine = new Map(votes.map((row) => [Number(row.comment_id), Number(row.vote)]));
+    return rows.map((row) => shopStore.mapCommentRow(row, { myVote: mine.get(Number(row.id)) || 0 }));
+}
+
 const productComments = {
-    listByProduct(productId) {
+    getById(id, { voterId } = {}) {
         connect();
-        return db.prepare(`
-            SELECT c.*, u.username, u.first_name, u.last_name
-            FROM product_comments c
-            LEFT JOIN users u ON u.id = c.user_id
-            WHERE c.product_id = ?
-            ORDER BY c.id DESC
-        `).all(Number(productId)).map((row) => ({
-            id: Number(row.id),
-            productId: Number(row.product_id),
-            userId: row.user_id == null ? null : Number(row.user_id),
-            author: shopStore.publicCommentAuthor(row),
-            body: row.body,
-            rating: row.rating != null ? Number(row.rating) : null,
-            createdAt: row.created_at
-        }));
+        const row = db.prepare(`${COMMENT_SELECT} WHERE c.id = ?`).get(Number(id));
+        if (!row) return null;
+        return attachMyVoteSqlite([row], voterId)[0];
+    },
+    listByProduct(productId, { status = 'approved', voterId } = {}) {
+        connect();
+        const rows = status
+            ? db.prepare(`${COMMENT_SELECT} WHERE c.product_id = ? AND c.status = ? ORDER BY c.id DESC`)
+                .all(Number(productId), status)
+            : db.prepare(`${COMMENT_SELECT} WHERE c.product_id = ? ORDER BY c.id DESC`)
+                .all(Number(productId));
+        return attachMyVoteSqlite(rows, voterId);
+    },
+    listAdmin({ status } = {}) {
+        connect();
+        const rows = status
+            ? db.prepare(`${COMMENT_SELECT} WHERE c.status = ? ORDER BY c.id DESC`).all(status)
+            : db.prepare(`${COMMENT_SELECT} ORDER BY c.id DESC`).all();
+        return rows.map((row) => shopStore.mapCommentRow(row));
     },
     create({ productId, userId, body, rating }) {
         connect();
@@ -2308,9 +2412,38 @@ const productComments = {
             ? Math.round(parsedRating)
             : null;
         const info = db.prepare(
-            'INSERT INTO product_comments (product_id, user_id, body, rating, created_at) VALUES (?, ?, ?, ?, ?)'
+            "INSERT INTO product_comments (product_id, user_id, body, rating, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)"
         ).run(Number(productId), userId ? Number(userId) : null, String(body || '').trim(), safeRating, createdAt);
-        return productComments.listByProduct(productId).find((c) => c.id === Number(info.lastInsertRowid));
+        return productComments.getById(Number(info.lastInsertRowid));
+    },
+    updateStatus(id, status) {
+        connect();
+        const allowed = ['pending', 'approved', 'rejected'];
+        if (!allowed.includes(status)) return null;
+        db.prepare('UPDATE product_comments SET status = ? WHERE id = ?').run(status, Number(id));
+        return productComments.getById(id);
+    },
+    vote({ commentId, userId, vote }) {
+        connect();
+        const comment = productComments.getById(commentId);
+        if (!comment || comment.status !== 'approved') return null;
+        const next = Number(vote);
+        if (![1, -1, 0].includes(next)) {
+            const err = new Error('invalid-vote');
+            err.code = 'INVALID_VOTE';
+            throw err;
+        }
+        if (next === 0) {
+            db.prepare('DELETE FROM product_comment_votes WHERE comment_id = ? AND user_id = ?')
+                .run(Number(commentId), Number(userId));
+        } else {
+            db.prepare(`
+                INSERT INTO product_comment_votes (comment_id, user_id, vote, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(comment_id, user_id) DO UPDATE SET vote = excluded.vote
+            `).run(Number(commentId), Number(userId), next, new Date().toISOString());
+        }
+        return productComments.getById(commentId, { voterId: userId });
     }
 };
 
@@ -2322,7 +2455,7 @@ function hydrateProduct(product) {
     return shopStore.enrichProductSqlite(db, asBool, {
         ...product,
         images: merged,
-        comments: productComments.listByProduct(product.id)
+        comments: productComments.listByProduct(product.id, { status: 'approved' })
     });
 }
 
@@ -2387,6 +2520,10 @@ module.exports = {
         listOffers(productId) {
             connect();
             return shopStore.listOffersForProductSqlite(db, productId);
+        },
+        getOffer(offerId) {
+            connect();
+            return shopStore.getOfferByIdSqlite(db, offerId);
         },
         listVendors() {
             connect();

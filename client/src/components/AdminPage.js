@@ -14,12 +14,14 @@ import ProductManagement from './admin/ProductManagement';
 import CategoryManagement from './admin/CategoryManagement';
 import VendorManagement from './admin/VendorManagement';
 import OrderManagement from './admin/OrderManagement';
+import CommentModeration from './admin/CommentModeration';
 
 const SHOP_LINKS = [
     { to: 'products', label: 'محصولات' },
     { to: 'product-categories', label: 'گروه و زیرگروه' },
     { to: 'vendors', label: 'فروشندگان' },
     { to: 'orders', label: 'سفارش‌ها' },
+    { to: 'comments', label: 'نظرات' },
     { to: 'banners', label: 'بنر فروشگاه' }
 ];
 
@@ -67,6 +69,7 @@ const AdminPage = () => {
                     <Route path={`${path}/product-categories`} component={CategoryManagement} />
                     <Route path={`${path}/vendors`} component={VendorManagement} />
                     <Route path={`${path}/orders`} component={OrderManagement} />
+                    <Route path={`${path}/comments`} component={CommentModeration} />
                     <Route path={`${path}/banners`} component={BannerManagement} />
                     <Route path={`${path}/articles`} component={ArticleManagement} />
                     <Route path={`${path}/videos`} component={VideoManagement} />

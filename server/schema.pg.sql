@@ -297,6 +297,8 @@ CREATE TABLE IF NOT EXISTS product_comments (
     product_id BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
     user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
     body TEXT NOT NULL,
+    rating INTEGER,
+    status TEXT NOT NULL DEFAULT 'approved',
     created_at TEXT
 );
 

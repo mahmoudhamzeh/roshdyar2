@@ -413,13 +413,7 @@ async function hydrateOrders(orderRows, client) {
             'SELECT * FROM order_items WHERE order_id = $1',
             [row.id],
             client
-        )).map((item) => ({
-            productId: Number(item.product_id),
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
-            lineTotal: item.line_total
-        }));
+        )).map(shopStore.mapOrderItemRow);
         result.push(rowToOrder(row, items));
     }
     return result;
@@ -763,9 +757,25 @@ async function importState(raw, client) {
         const orderId = order.id || inserted.id;
         for (const item of order.items || []) {
             await q(
-                `INSERT INTO order_items (order_id, product_id, name, price, quantity, line_total)
-                 VALUES ($1,$2,$3,$4,$5,$6)`,
-                [orderId, item.productId, item.name, item.price, item.quantity, item.lineTotal],
+                `INSERT INTO order_items (
+                    order_id, product_id, name, price, quantity, line_total,
+                    offer_id, vendor_id, vendor_name, commission_pct, commission_amount, line_status
+                )
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                [
+                    orderId,
+                    item.productId,
+                    item.name,
+                    item.price,
+                    item.quantity,
+                    item.lineTotal,
+                    item.offerId || null,
+                    item.vendorId || null,
+                    item.vendorName || null,
+                    item.commissionPct || 0,
+                    item.commissionAmount || 0,
+                    item.lineStatus || 'pending'
+                ],
                 client
             );
         }
@@ -1160,7 +1170,8 @@ const children = {
             milestones: extra.milestones && typeof extra.milestones === 'object' ? extra.milestones : {},
             completions: extra.completions && typeof extra.completions === 'object' ? extra.completions : {},
             concerns: Array.isArray(extra.concerns) ? extra.concerns : [],
-            safetyChecks: extra.safetyChecks && typeof extra.safetyChecks === 'object' ? extra.safetyChecks : {}
+            safetyChecks: extra.safetyChecks && typeof extra.safetyChecks === 'object' ? extra.safetyChecks : {},
+            chat: Array.isArray(extra.chat) ? extra.chat : []
         };
     },
     async saveGrowthState(childId, patch) {
@@ -1172,7 +1183,8 @@ const children = {
             milestones: patch.milestones !== undefined ? patch.milestones : extra.milestones || {},
             completions: patch.completions !== undefined ? patch.completions : extra.completions || {},
             concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || [],
-            safetyChecks: patch.safetyChecks !== undefined ? patch.safetyChecks : extra.safetyChecks || {}
+            safetyChecks: patch.safetyChecks !== undefined ? patch.safetyChecks : extra.safetyChecks || {},
+            chat: patch.chat !== undefined ? patch.chat : extra.chat || []
         };
         await q('UPDATE children SET extra = $1 WHERE id = $2', [JSON.stringify(next), Number(childId)]);
         return children.getGrowthState(childId);
@@ -1918,6 +1930,7 @@ const orders = {
     },
     async create({ userId, items, total, shippingAddress, phone, notes }) {
         return withTx(async (client) => {
+            const resolved = [];
             for (const item of items) {
                 const product = await one('SELECT * FROM products WHERE id = $1 FOR UPDATE', [item.productId], client);
                 if (!product || !asBool(product.active)) {
@@ -1925,15 +1938,37 @@ const orders = {
                     err.code = 'PRODUCT_MISSING';
                     throw err;
                 }
-                if (product.stock < item.quantity) {
+                const offer = item.offerId
+                    ? await shopStore.getOfferByIdPg(one, item.offerId)
+                    : await shopStore.cheapestOfferForProductPg(many, item.productId);
+                const stock = offer ? offer.stock : product.stock;
+                if (stock < item.quantity) {
                     const err = new Error(product.name);
                     err.code = 'OUT_OF_STOCK';
                     throw err;
                 }
+                const price = item.price != null ? Number(item.price) : (offer ? offer.price : product.price);
+                const lineTotal = item.lineTotal != null ? Number(item.lineTotal) : price * item.quantity;
+                const commissionPct = offer ? Number(offer.commissionPct || 0) : 0;
+                const commissionAmount = Math.round((lineTotal * commissionPct) / 100);
+                resolved.push({
+                    product,
+                    offer,
+                    quantity: item.quantity,
+                    name: item.name || product.name,
+                    price,
+                    lineTotal,
+                    commissionPct,
+                    commissionAmount
+                });
             }
-            for (const item of items) {
-                await q('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.productId], client);
-                await shopStore.adjustOfferStockPg(q, item.productId, -item.quantity, client);
+            for (const item of resolved) {
+                await q('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.product.id], client);
+                if (item.offer) {
+                    await shopStore.adjustOfferStockByIdPg(q, item.offer.id, -item.quantity, client);
+                } else {
+                    await shopStore.adjustOfferStockPg(q, item.product.id, -item.quantity, client);
+                }
             }
             const createdAt = new Date().toISOString();
             const orderRow = await one(
@@ -1942,13 +1977,51 @@ const orders = {
                 [Number(userId), total, shippingAddress, phone, notes || '', createdAt],
                 client
             );
-            for (const item of items) {
-                await q(
-                    `INSERT INTO order_items (order_id, product_id, name, price, quantity, line_total)
-                     VALUES ($1,$2,$3,$4,$5,$6)`,
-                    [orderRow.id, item.productId, item.name, item.price, item.quantity, item.lineTotal],
+            for (const item of resolved) {
+                const line = await one(
+                    `INSERT INTO order_items (
+                        order_id, product_id, name, price, quantity, line_total,
+                        offer_id, vendor_id, vendor_name, commission_pct, commission_amount, line_status
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending') RETURNING id`,
+                    [
+                        orderRow.id,
+                        item.product.id,
+                        item.name,
+                        item.price,
+                        item.quantity,
+                        item.lineTotal,
+                        item.offer ? item.offer.id : null,
+                        item.offer ? item.offer.vendorId : null,
+                        item.offer ? item.offer.vendorName : null,
+                        item.commissionPct,
+                        item.commissionAmount
+                    ],
                     client
                 );
+                const ledgerBase = {
+                    orderId: orderRow.id,
+                    orderItemId: line.id,
+                    vendorId: item.offer ? item.offer.vendorId : null,
+                    createdAt
+                };
+                await shopStore.insertLedgerPg(q, {
+                    ...ledgerBase,
+                    kind: 'sale',
+                    amount: item.lineTotal,
+                    note: `فروش ${item.name}`
+                }, client);
+                await shopStore.insertLedgerPg(q, {
+                    ...ledgerBase,
+                    kind: 'commission',
+                    amount: item.commissionAmount,
+                    note: `کمیسیون ${item.commissionPct}٪`
+                }, client);
+                await shopStore.insertLedgerPg(q, {
+                    ...ledgerBase,
+                    kind: 'vendor_hold',
+                    amount: item.lineTotal - item.commissionAmount,
+                    note: 'نگهداری امانی تا تحویل و پایان مهلت مرجوعی'
+                }, client);
             }
             return (await hydrateOrders([orderRow], client))[0];
         });
@@ -1962,6 +2035,7 @@ const orders = {
             const current = currentRows[0];
             if (!current) return null;
             if (status === 'cancelled' && current.status !== 'cancelled') {
+                const now = new Date().toISOString();
                 for (const item of current.items || []) {
                     if (item.productId) {
                         await q(
@@ -1969,8 +2043,21 @@ const orders = {
                             [item.quantity, item.productId],
                             client
                         );
-                        await shopStore.adjustOfferStockPg(q, item.productId, item.quantity, client);
+                        if (item.offerId) {
+                            await shopStore.adjustOfferStockByIdPg(q, item.offerId, item.quantity, client);
+                        } else {
+                            await shopStore.adjustOfferStockPg(q, item.productId, item.quantity, client);
+                        }
                     }
+                    await shopStore.insertLedgerPg(q, {
+                        kind: 'refund',
+                        orderId: current.id,
+                        orderItemId: item.id,
+                        vendorId: item.vendorId,
+                        amount: -(item.lineTotal || 0),
+                        note: 'لغو سفارش و آزادسازی موجودی',
+                        createdAt: now
+                    }, client);
                 }
             }
             await q(
@@ -2158,23 +2245,45 @@ const productImages = {
     }
 };
 
+const COMMENT_SELECT_PG = `
+    SELECT c.*, u.username, u.first_name, u.last_name, p.name AS product_name,
+        (SELECT COUNT(*) FROM product_comment_votes v WHERE v.comment_id = c.id AND v.vote = 1) AS like_count,
+        (SELECT COUNT(*) FROM product_comment_votes v WHERE v.comment_id = c.id AND v.vote = -1) AS dislike_count
+    FROM product_comments c
+    LEFT JOIN users u ON u.id = c.user_id
+    LEFT JOIN products p ON p.id = c.product_id
+`;
+
+async function attachMyVotePg(rows, voterId) {
+    if (!voterId || !rows.length) {
+        return rows.map((row) => shopStore.mapCommentRow(row));
+    }
+    const ids = rows.map((row) => Number(row.id));
+    const votes = await many(
+        'SELECT comment_id, vote FROM product_comment_votes WHERE user_id = $1 AND comment_id = ANY($2::bigint[])',
+        [Number(voterId), ids]
+    );
+    const mine = new Map(votes.map((row) => [Number(row.comment_id), Number(row.vote)]));
+    return rows.map((row) => shopStore.mapCommentRow(row, { myVote: mine.get(Number(row.id)) || 0 }));
+}
+
 const productComments = {
-    async listByProduct(productId) {
-        return (await many(`
-            SELECT c.*, u.username, u.first_name, u.last_name
-            FROM product_comments c
-            LEFT JOIN users u ON u.id = c.user_id
-            WHERE c.product_id = $1
-            ORDER BY c.id DESC
-        `, [Number(productId)])).map((row) => ({
-            id: Number(row.id),
-            productId: Number(row.product_id),
-            userId: row.user_id == null ? null : Number(row.user_id),
-            author: shopStore.publicCommentAuthor(row),
-            body: row.body,
-            rating: row.rating != null ? Number(row.rating) : null,
-            createdAt: row.created_at
-        }));
+    async getById(id, { voterId } = {}) {
+        const row = await one(`${COMMENT_SELECT_PG} WHERE c.id = $1`, [Number(id)]);
+        if (!row) return null;
+        return (await attachMyVotePg([row], voterId))[0];
+    },
+    async listByProduct(productId, { status = 'approved', voterId } = {}) {
+        const rows = status
+            ? await many(`${COMMENT_SELECT_PG} WHERE c.product_id = $1 AND c.status = $2 ORDER BY c.id DESC`, [Number(productId), status])
+            : await many(`${COMMENT_SELECT_PG} WHERE c.product_id = $1 ORDER BY c.id DESC`, [Number(productId)]);
+        return attachMyVotePg(rows, voterId);
+    },
+    async listAdmin({ status } = {}) {
+        const rows = status
+            ? await many(`${COMMENT_SELECT_PG} WHERE c.status = $1 ORDER BY c.id DESC`, [status])
+            : await many(`${COMMENT_SELECT_PG} ORDER BY c.id DESC`);
+        return rows.map((row) => shopStore.mapCommentRow(row));
     },
     async create({ productId, userId, body, rating }) {
         const createdAt = new Date().toISOString();
@@ -2183,18 +2292,43 @@ const productComments = {
             ? Math.round(parsedRating)
             : null;
         const row = await one(
-            'INSERT INTO product_comments (product_id, user_id, body, rating, created_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+            "INSERT INTO product_comments (product_id, user_id, body, rating, status, created_at) VALUES ($1,$2,$3,$4,'pending',$5) RETURNING *",
             [Number(productId), userId ? Number(userId) : null, String(body || '').trim(), safeRating, createdAt]
         );
-        const list = await productComments.listByProduct(productId);
-        return list.find((c) => c.id === Number(row.id));
+        return productComments.getById(row.id);
+    },
+    async updateStatus(id, status) {
+        const allowed = ['pending', 'approved', 'rejected'];
+        if (!allowed.includes(status)) return null;
+        await q('UPDATE product_comments SET status = $1 WHERE id = $2', [status, Number(id)]);
+        return productComments.getById(id);
+    },
+    async vote({ commentId, userId, vote }) {
+        const comment = await productComments.getById(commentId);
+        if (!comment || comment.status !== 'approved') return null;
+        const next = Number(vote);
+        if (![1, -1, 0].includes(next)) {
+            const err = new Error('invalid-vote');
+            err.code = 'INVALID_VOTE';
+            throw err;
+        }
+        if (next === 0) {
+            await q('DELETE FROM product_comment_votes WHERE comment_id = $1 AND user_id = $2', [Number(commentId), Number(userId)]);
+        } else {
+            await q(`
+                INSERT INTO product_comment_votes (comment_id, user_id, vote, created_at)
+                VALUES ($1,$2,$3,$4)
+                ON CONFLICT (comment_id, user_id) DO UPDATE SET vote = EXCLUDED.vote
+            `, [Number(commentId), Number(userId), next, new Date().toISOString()]);
+        }
+        return productComments.getById(commentId, { voterId: userId });
     }
 };
 
 async function hydrateProduct(product) {
     if (!product) return null;
     const images = await productImages.listByProduct(product.id);
-    const comments = await productComments.listByProduct(product.id);
+    const comments = await productComments.listByProduct(product.id, { status: 'approved' });
     const cover = product.imageUrl ? [{ id: 0, productId: product.id, imageUrl: product.imageUrl, sortOrder: -1 }] : [];
     return shopStore.enrichProductPg(many, asBool, {
         ...product,
@@ -2260,6 +2394,9 @@ module.exports = {
         },
         listOffers(productId) {
             return shopStore.listOffersForProductPg(many, productId);
+        },
+        getOffer(offerId) {
+            return shopStore.getOfferByIdPg(one, offerId);
         },
         listVendors() {
             return shopStore.listVendorsPg(many);

@@ -96,6 +96,23 @@ export async function analyzeConcern(childId, concern, topic = 'متن آزاد'
     return data;
 }
 
+export async function sendGrowthChat(childId, message, history = []) {
+    const res = await fetch(`/api/children/${childId}/concerns/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, history }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.message || 'خطا در گفتگو با دستیار');
+    return data;
+}
+
+export async function fetchGrowthChat(childId) {
+    const res = await fetch(`/api/children/${childId}/concerns/chat`);
+    if (!res.ok) return { messages: [] };
+    return res.json();
+}
+
 export async function submitConcern(childId, payload) {
     const res = await fetch(`/api/children/${childId}/concerns`, {
         method: 'POST',

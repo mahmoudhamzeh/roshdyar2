@@ -312,6 +312,8 @@ CREATE TABLE IF NOT EXISTS product_comments (
     product_id INTEGER NOT NULL,
     user_id INTEGER,
     body TEXT NOT NULL,
+    rating INTEGER,
+    status TEXT NOT NULL DEFAULT 'approved',
     created_at TEXT,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL

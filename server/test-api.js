@@ -198,7 +198,31 @@ async function run() {
         });
         assert.strictEqual(adminComment.status, 201, JSON.stringify(adminComment.data));
         assert.strictEqual(adminComment.data.author, 'Amin');
+        assert.strictEqual(adminComment.data.status, 'pending');
+        assert.ok(adminComment.data.pending);
         assert.ok(!/\d{8,}/.test(String(adminComment.data.author || '')));
+
+        const hiddenComments = await request('GET', `/api/shop/products/${product.id}/comments`);
+        assert.strictEqual(hiddenComments.status, 200);
+        assert.ok(!(hiddenComments.data || []).some((item) => item.id === adminComment.data.id));
+
+        const approve = await request('PATCH', `/api/admin/shop/comments/${adminComment.data.id}`, {
+            headers: auth,
+            body: { status: 'approved' }
+        });
+        assert.strictEqual(approve.status, 200, JSON.stringify(approve.data));
+        assert.strictEqual(approve.data.status, 'approved');
+
+        const publicComments = await request('GET', `/api/shop/products/${product.id}/comments`);
+        assert.ok((publicComments.data || []).some((item) => item.id === adminComment.data.id));
+
+        const liked = await request('POST', `/api/shop/comments/${adminComment.data.id}/vote`, {
+            headers: auth,
+            body: { vote: 1 }
+        });
+        assert.strictEqual(liked.status, 200, JSON.stringify(liked.data));
+        assert.strictEqual(liked.data.likeCount, 1);
+        assert.strictEqual(liked.data.myVote, 1);
 
         const stats = await request('GET', '/api/admin/stats', {
             headers: auth
@@ -272,7 +296,10 @@ async function run() {
         });
         assert.strictEqual(phoneComment.status, 201, JSON.stringify(phoneComment.data));
         assert.strictEqual(phoneComment.data.author, 'کاربر تات کیدز');
+        assert.strictEqual(phoneComment.data.status, 'pending');
         assert.ok(!/\d{8,}/.test(String(phoneComment.data.author || '')));
+        const stillHidden = await request('GET', `/api/shop/products/${product.id}/comments`);
+        assert.ok(!(stillHidden.data || []).some((item) => item.id === phoneComment.data.id));
 
         const categories = await request('GET', '/api/shop/categories');
         assert.strictEqual(categories.status, 200);

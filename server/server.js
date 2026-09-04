@@ -32,7 +32,7 @@ const {
     isCompletedOnDay
 } = require('./child-growth-data');
 const { deliverOtp } = require('./sms');
-const { analyzeConcernWithModel } = require('./child-growth-ai');
+const { analyzeConcernWithModel, chatGrowthAssistant } = require('./child-growth-ai');
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -104,6 +104,8 @@ const API_CATALOG = {
             'GET /api/children/:childId/concerns',
             'POST /api/children/:childId/concerns',
             'POST /api/children/:childId/concerns/analyze',
+            'GET /api/children/:childId/concerns/chat',
+            'POST /api/children/:childId/concerns/chat',
             'POST /api/children/:childId/safety/:itemId'
         ],
         growth: [
@@ -138,6 +140,9 @@ const API_CATALOG = {
             'GET /api/podcasts/:id'
         ],
         shop: [
+            'GET /api/shop/products/:id/comments',
+            'POST /api/shop/products/:id/comments',
+            'POST /api/shop/comments/:id/vote',
             'GET /api/shop/home',
             'GET /api/shop/sale',
             'GET /api/shop/categories',
@@ -146,6 +151,9 @@ const API_CATALOG = {
             'GET /api/shop/products',
             'GET /api/shop/products/:id',
             'GET /api/shop/products/:id/offers',
+            'GET /api/shop/products/:id/comments',
+            'POST /api/shop/products/:id/comments',
+            'POST /api/shop/comments/:id/vote',
             'GET /api/shop/orders',
             'GET /api/shop/orders/:id',
             'POST /api/shop/orders',
@@ -197,6 +205,8 @@ const API_CATALOG = {
             'DELETE /api/admin/products/:id',
             'GET /api/admin/orders',
             'PUT /api/admin/orders/:id',
+            'GET /api/admin/shop/comments',
+            'PATCH /api/admin/shop/comments/:id',
             'GET /api/admin/messages',
             'POST /api/admin/messages',
             'DELETE /api/admin/messages/:id'
@@ -995,6 +1005,61 @@ app.post('/api/children/:childId/concerns/analyze', async (req, res) => {
     res.status(201).json(analysis);
 });
 
+app.get('/api/children/:childId/concerns/chat', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const state = await store.children.getGrowthState(req.params.childId);
+    res.json({ messages: state.chat || [] });
+});
+
+app.post('/api/children/:childId/concerns/chat', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const text = String(req.body && (req.body.message || req.body.text || req.body.concern) || '').trim();
+    if (text.length < 2) {
+        return res.status(400).json({ message: 'پیام را بنویسید' });
+    }
+    const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const summary = await buildGrowthSummaryForChild(req.params.childId, child);
+    const last = summary && summary.lastMeasurement;
+    const state = await store.children.getGrowthState(req.params.childId);
+    const incoming = Array.isArray(req.body && req.body.history) ? req.body.history : (state.chat || []);
+    const history = incoming
+        .filter((item) => item && item.content)
+        .slice(-16)
+        .map((item) => ({
+            role: item.role === 'assistant' ? 'assistant' : 'user',
+            content: String(item.content).slice(0, 1200)
+        }));
+    const userMessage = { role: 'user', content: text, at: new Date().toISOString() };
+    const nutrition = guide.nutrition && (guide.nutrition.overview || '');
+    const sleep = guide.sleep && (guide.sleep.overview || '');
+    const result = await chatGrowthAssistant(
+        {
+            name: getChildDisplayName(child),
+            gender: child.gender,
+            ageInMonths: guide.child.ageInMonths
+        },
+        [...history, userMessage],
+        {
+            bandTitle: guide.band && guide.band.title,
+            nutrition,
+            sleep,
+            heightLabel: last && last.height != null ? `قد ${last.height} سم` : '',
+            weightLabel: last && last.weight != null ? `وزن ${last.weight} کگ` : ''
+        }
+    );
+    const assistantMessage = {
+        role: 'assistant',
+        content: result.reply,
+        at: new Date().toISOString()
+    };
+    const messages = [...history, userMessage, assistantMessage].slice(-24);
+    await store.children.saveGrowthState(req.params.childId, { chat: messages });
+    res.status(201).json({ reply: result.reply, source: result.source, messages });
+});
+
 app.get('/api/children/:childId/concerns', async (req, res) => {
     const owned = await requireOwnedChild(req, res);
     if (!owned) return;
@@ -1776,7 +1841,11 @@ app.delete('/api/admin/product-categories/:id', isAdmin, async (req, res) => {
 });
 
 app.get('/api/shop/products/:id/comments', async (req, res) => {
-    res.json(await store.productComments.listByProduct(req.params.id));
+    const user = await resolveAuthUser(req);
+    res.json(await store.productComments.listByProduct(req.params.id, {
+        status: 'approved',
+        voterId: user && user.id
+    }));
 });
 
 app.post('/api/shop/products/:id/comments', async (req, res) => {
@@ -1792,7 +1861,47 @@ app.post('/api/shop/products/:id/comments', async (req, res) => {
         body,
         rating: req.body.rating
     });
-    res.status(201).json(comment);
+    res.status(201).json({
+        ...comment,
+        pending: true,
+        message: 'نظر شما ثبت شد و پس از تأیید کارشناس نمایش داده می‌شود'
+    });
+});
+
+app.post('/api/shop/comments/:id/vote', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    try {
+        const updated = await store.productComments.vote({
+            commentId: req.params.id,
+            userId: user.id,
+            vote: req.body.vote
+        });
+        if (!updated) return res.status(404).json({ message: 'نظر یافت نشد یا هنوز تأیید نشده است' });
+        res.json(updated);
+    } catch (err) {
+        if (err.code === 'INVALID_VOTE') {
+            return res.status(400).json({ message: 'رأی نامعتبر است' });
+        }
+        throw err;
+    }
+});
+
+app.get('/api/admin/shop/comments', isAdmin, async (req, res) => {
+    const status = req.query.status && String(req.query.status) !== 'all'
+        ? String(req.query.status)
+        : undefined;
+    res.json(await store.productComments.listAdmin({ status }));
+});
+
+app.patch('/api/admin/shop/comments/:id', isAdmin, async (req, res) => {
+    const status = String(req.body.status || '').trim();
+    if (!['approved', 'rejected', 'pending'].includes(status)) {
+        return res.status(400).json({ message: 'وضعیت نظر نامعتبر است' });
+    }
+    const updated = await store.productComments.updateStatus(req.params.id, status);
+    if (!updated) return res.status(404).json({ message: 'نظر یافت نشد' });
+    res.json(updated);
 });
 
 app.get('/api/shop/products', async (req, res) => {
@@ -1954,6 +2063,7 @@ app.post('/api/shop/orders', async (req, res) => {
     for (const item of items) {
         const productId = parseInt(item.productId, 10);
         const quantity = parseInt(item.quantity, 10);
+        const offerId = item.offerId != null && item.offerId !== '' ? parseInt(item.offerId, 10) : null;
         if (!productId || !Number.isFinite(quantity) || quantity < 1) {
             return res.status(400).json({ message: 'آیتم سفارش نامعتبر است' });
         }
@@ -1961,15 +2071,29 @@ app.post('/api/shop/orders', async (req, res) => {
         if (!product || product.active === false) {
             return res.status(400).json({ message: `محصول با شناسه ${productId} یافت نشد` });
         }
-        if (product.stock < quantity) {
+        let offer = offerId && store.shop.getOffer
+            ? await store.shop.getOffer(offerId)
+            : null;
+        if (!offer) {
+            const offers = await store.shop.listOffers(productId);
+            offer = (offers || [])[0] || null;
+        }
+        if (offer && Number(offer.productId) !== Number(product.id)) {
+            return res.status(400).json({ message: 'پیشنهاد فروش با این محصول هم‌خوان نیست' });
+        }
+        const unitPrice = offer ? offer.price : product.price;
+        const available = offer ? offer.stock : product.stock;
+        if (available < quantity) {
             return res.status(400).json({ message: `موجودی «${product.name}» کافی نیست` });
         }
-        const lineTotal = product.price * quantity;
+        const lineTotal = unitPrice * quantity;
         total += lineTotal;
         orderItems.push({
             productId: product.id,
+            offerId: offer ? offer.id : null,
+            vendorId: offer ? offer.vendorId : null,
             name: product.name,
-            price: product.price,
+            price: unitPrice,
             quantity,
             lineTotal
         });

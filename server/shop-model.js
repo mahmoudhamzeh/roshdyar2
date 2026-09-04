@@ -155,12 +155,16 @@ function buildCatalogSql(filters = {}, { activeOnly = true } = {}) {
             (
                 SELECT AVG(c.rating * 1.0)
                 FROM product_comments c
-                WHERE c.product_id = p.id AND c.rating IS NOT NULL
+                WHERE c.product_id = p.id
+                  AND c.rating IS NOT NULL
+                  AND COALESCE(c.status, 'approved') = 'approved'
             ) AS rating_avg,
             (
                 SELECT COUNT(*)
                 FROM product_comments c
-                WHERE c.product_id = p.id AND c.rating IS NOT NULL
+                WHERE c.product_id = p.id
+                  AND c.rating IS NOT NULL
+                  AND COALESCE(c.status, 'approved') = 'approved'
             ) AS rating_count,
             (
                 SELECT COALESCE(SUM(oi.quantity), 0)

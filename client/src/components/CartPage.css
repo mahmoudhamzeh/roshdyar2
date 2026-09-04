@@ -48,6 +48,27 @@
   gap: 0.85rem;
 }
 
+.cart-vendor-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.cart-vendor-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  color: var(--brand-deep);
+}
+
+.cart-shipping-note {
+  margin: -0.4rem 0 0.75rem;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+}
+
 .cart-item {
   display: grid;
   grid-template-columns: 72px 1fr auto auto;
