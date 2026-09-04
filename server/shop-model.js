@@ -239,7 +239,8 @@ function mapCatalogRow(row, asBool) {
         safetyWarning: row.safety_warning || null,
         ratingAvg: row.rating_avg != null ? Number(row.rating_avg) : 0,
         ratingCount: Number(row.rating_count || 0),
-        soldCount: Number(row.sold_count || 0)
+        soldCount: Number(row.sold_count || 0),
+        reviewStatus: row.review_status || 'approved'
     };
 }
 

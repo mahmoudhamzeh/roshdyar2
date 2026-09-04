@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useHistory, useLocation } from 'react-router-dom';
+import { Link, useHistory, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faSearch } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
@@ -12,6 +12,7 @@ import CategoryCascade from './CategoryCascade';
 import { AGE_BANDS, SORT_OPTIONS, ageBandFromBirthDate } from '../utils/shop';
 import './ShopPage.css';
 import './ShopWorld.css';
+import './VendorPanelPage.css';
 
 const API = '';
 
@@ -218,6 +219,19 @@ const ShopPage = () => {
                         </div>
                     </section>
                 )}
+
+                <section className="shop-seller-cta animate-fade-up">
+                    <article className="shop-seller-card">
+                        <h2>فروشنده شوید</h2>
+                        <p>اگر فروشگاه یا شرکت دارید، ثبت‌نام حقیقی/حقوقی کنید، مدارک و شبا بفرستید و روی ویترین مشترک تات کیدز بفروشید.</p>
+                        <Link to="/vendor">شروع ثبت‌نام فروشنده</Link>
+                    </article>
+                    <article className="shop-seller-card is-login">
+                        <h2>ورود فروشندگان</h2>
+                        <p>اگر قبلاً درخواست داده‌اید یا فروشگاهتان تأیید شده، از اینجا وارد پنل محصول، سفارش و مالی شوید.</p>
+                        <Link to="/login?next=/vendor">ورود به پنل فروشنده</Link>
+                    </article>
+                </section>
             </main>
             <Footer />
         </div>

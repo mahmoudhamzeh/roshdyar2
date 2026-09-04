@@ -19,7 +19,7 @@ function assertTables(db) {
         'users', 'children', 'growth_records', 'vaccination_records',
         'products', 'orders', 'order_items', 'messages', 'message_recipients', 'otp_codes',
         'shop_vendors', 'shop_offers', 'shop_skills', 'shop_product_meta',
-        'product_comment_votes', 'shop_ledger'
+        'product_comment_votes', 'shop_ledger', 'shop_vendor_docs'
     ]) {
         assert.ok(names.includes(table), `missing table ${table}`);
     }
