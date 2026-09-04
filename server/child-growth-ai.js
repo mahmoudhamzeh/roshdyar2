@@ -159,6 +159,101 @@ function analyzeConcernLocal(child, concernText) {
     };
 }
 
+function analysisToChatReply(analysis) {
+    const lines = [analysis.summary_verdict];
+    const home = (analysis.home_actions || []).slice(0, 3);
+    if (home.length) {
+        lines.push(`الان در خانه:\n${home.map((item, index) => `${index + 1}. ${item.title}: ${item.description}`).join('\n')}`);
+    }
+    if (analysis.recommended_action && analysis.recommended_action.needs_doctor_visit) {
+        lines.push('این مورد را زود با پزشک کودک مطرح کنید. این پیام تشخیص پزشکی نیست.');
+    } else {
+        lines.push('این راهنما آموزشی است و جای معاینه پزشک را نمی‌گیرد.');
+    }
+    return lines.filter(Boolean).join('\n\n');
+}
+
+function lastUserText(messages) {
+    const list = Array.isArray(messages) ? messages : [];
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+        if (list[i] && list[i].role === 'user' && String(list[i].content || '').trim()) {
+            return String(list[i].content).trim();
+        }
+    }
+    return '';
+}
+
+function chatGrowthAssistantLocal(child, messages, context) {
+    const name = (child && (child.name || child.firstName)) || 'کودک';
+    const months = monthsOf(child);
+    const ctx = context || {};
+    const last = lastUserText(messages);
+    if (!last) {
+        return `سلام، من دستیار رشد ${name} هستم. سنش حدود ${months} ماهگی است. از قد و وزن، غذا، خواب یا نگرانی‌تان بپرسید.`;
+    }
+    if (/چی بخور|تغذیه|غذا|شیر/.test(last) && ctx.nutrition) {
+        return `برای ${name} در ${ctx.bandTitle || `${months} ماهگی`}: ${ctx.nutrition}\n\nاگر آلرژی یا بیماری ثبت شده، هر تغییر غذا را با پزشک هماهنگ کنید.`;
+    }
+    if (/خواب|بیدار|چرت/.test(last) && ctx.sleep) {
+        return `خواب این سن برای ${name}: ${ctx.sleep}\n\nروتین کوتاه و ثابت شب معمولاً بهتر از حرف زیاد جواب می‌دهد.`;
+    }
+    if (/قد|وزن|صدک/.test(last)) {
+        const height = ctx.heightLabel || 'قد هنوز ثبت نشده';
+        const weight = ctx.weightLabel || 'وزن هنوز ثبت نشده';
+        return `آخرین اندازه‌گیری ${name}: ${height} و ${weight}. از یک عدد به‌تنهایی نتیجه پزشکی گرفته نمی‌شود؛ نمودار کامل را در صفحه رشد ببینید.`;
+    }
+    return analysisToChatReply(analyzeConcernLocal(child, last));
+}
+
+async function chatGrowthAssistant(child, messages, context) {
+    const apiKey = process.env.OPENAI_API_KEY || process.env.GROWTH_AI_KEY;
+    const localReply = chatGrowthAssistantLocal(child, messages, context);
+    if (!apiKey) return { reply: localReply, source: 'local' };
+
+    const endpoint = process.env.GROWTH_AI_URL || 'https://api.openai.com/v1/chat/completions';
+    const model = process.env.GROWTH_AI_MODEL || 'gpt-4o-mini';
+    const history = (Array.isArray(messages) ? messages : [])
+        .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && item.content)
+        .slice(-12)
+        .map((item) => ({ role: item.role, content: String(item.content).slice(0, 1200) }));
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model,
+                temperature: 0.3,
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'شما دستیار رشد تات‌کیدز هستید. کوتاه، آرام و فارسی جواب بدهید. تشخیص بیماری ندهید. اگر نشانه خطرناک بود به پزشک ارجاع دهید. از سن و وضعیت کودک در پاسخ استفاده کنید.'
+                    },
+                    {
+                        role: 'user',
+                        content: `زمینه کودک: ${JSON.stringify({
+                            name: child && child.name,
+                            gender: child && child.gender,
+                            age_in_months: monthsOf(child),
+                            context: context || {}
+                        })}`
+                    },
+                    ...history
+                ]
+            })
+        });
+        if (!res.ok) return { reply: localReply, source: 'local' };
+        const data = await res.json();
+        const reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (!reply) return { reply: localReply, source: 'local' };
+        return { reply: String(reply).trim(), source: 'model' };
+    } catch (_err) {
+        return { reply: localReply, source: 'local' };
+    }
+}
+
 async function analyzeConcernWithModel(child, concernText) {
     const apiKey = process.env.OPENAI_API_KEY || process.env.GROWTH_AI_KEY;
     if (!apiKey) return analyzeConcernLocal(child, concernText);
@@ -212,5 +307,7 @@ async function analyzeConcernWithModel(child, concernText) {
 module.exports = {
     TRIAGE,
     analyzeConcernLocal,
-    analyzeConcernWithModel
+    analyzeConcernWithModel,
+    chatGrowthAssistantLocal,
+    chatGrowthAssistant
 };
