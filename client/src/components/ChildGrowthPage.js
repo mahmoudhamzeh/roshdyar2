@@ -118,9 +118,8 @@ const ChildGrowthPage = () => {
     const progress = useMemo(() => {
         if (!guide) return { done: 0, total: 0, pct: 0 };
         const acts = guide.activities || [];
-        const safes = guide.safetyTasks || [];
-        const done = acts.filter((item) => item.completed).length + safes.filter((item) => item.done).length;
-        const total = acts.length + safes.length;
+        const done = acts.filter((item) => item.completed).length;
+        const total = acts.length;
         return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
     }, [guide]);
 
@@ -368,7 +367,7 @@ const ChildGrowthPage = () => {
                 <div className="cg-progress" aria-label={`پیشرفت امروز ${progress.pct} درصد`}>
                     <div style={{ width: `${progress.pct}%` }} />
                 </div>
-                <p className="cg-note">{progress.done} از {progress.total} کار امروز</p>
+                <p className="cg-note">{progress.done} از {progress.total} بازی امروز</p>
                 <div className="cg-list">
                     {(activities || []).map((activity, index) => (
                         <button
