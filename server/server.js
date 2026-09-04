@@ -2461,7 +2461,9 @@ function vendorPayloadFromBody(body, user) {
         displayName: body.displayName,
         phone: body.phone || (user && user.mobile) || '',
         docsNote: body.docsNote || '',
-        personKind: body.personKind === 'company' ? 'company' : 'individual',
+        personKind: body.personKind === 'company'
+            ? 'company'
+            : (body.personKind === 'individual' ? 'individual' : undefined),
         nationalId: body.nationalId,
         legalName: body.legalName,
         registrationNo: body.registrationNo,

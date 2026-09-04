@@ -375,6 +375,7 @@ async function run() {
         });
         assert.strictEqual(approveVendor.status, 200, JSON.stringify(approveVendor.data));
         assert.strictEqual(approveVendor.data.status, 'active');
+        assert.strictEqual(approveVendor.data.personKind, 'individual');
 
         const vendorProduct = await request('POST', '/api/vendor/products', {
             headers: { Authorization: `Bearer ${verify.data.token}` },
