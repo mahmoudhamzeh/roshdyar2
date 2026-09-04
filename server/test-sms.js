@@ -39,9 +39,24 @@ async function run() {
     );
 
     const logResult = await deliverOtp('09120000000', '12345', {
-        env: { SMS_PROVIDER: 'log' }
+        env: { SMS_PROVIDER: 'log', NODE_ENV: 'test' }
     });
     assert.strictEqual(logResult.channel, 'log');
+
+    let prodLogBlocked = false;
+    try {
+        await deliverOtp('09120000000', '12345', {
+            env: { SMS_PROVIDER: 'log', NODE_ENV: 'production' }
+        });
+    } catch (err) {
+        prodLogBlocked = /production/.test(err.message);
+    }
+    assert.ok(prodLogBlocked, 'log provider must fail in production');
+
+    assert.strictEqual(
+        buildAuthHeaders({ SMS_API_KEY: 'YOUR_IDEKAVAN_API_KEY' }),
+        null
+    );
 
     const requestFn = mockRequest(async () => ({
         statusCode: 200,

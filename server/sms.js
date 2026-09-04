@@ -12,6 +12,30 @@ function envValue(env, key, fallback = '') {
     return value == null ? fallback : String(value);
 }
 
+function looksLikePlaceholder(value) {
+    const text = String(value || '').trim();
+    if (!text) return true;
+    return /^(YOUR_|CHANGE_ME|placeholder|xxx+$)/i.test(text);
+}
+
+function credentialValue(env, key) {
+    const value = envValue(env, key).trim();
+    return looksLikePlaceholder(value) ? '' : value;
+}
+
+function nodeEnvName(env) {
+    return envValue(env, 'NODE_ENV', process.env.NODE_ENV || '').trim().toLowerCase();
+}
+
+function smsRuntimeStatus(env = process.env) {
+    return {
+        provider: providerName(env),
+        configured: hasSmsCredentials(env),
+        hasLine: Boolean(envValue(env, 'SMS_LINE_NUMBER', envValue(env, 'SMS_LINE')).trim()),
+        hasPattern: Boolean(envValue(env, 'SMS_PATTERN_ID', envValue(env, 'SMS_TEMPLATE_ID')).trim())
+    };
+}
+
 function providerName(env) {
     return String(envValue(env, 'SMS_PROVIDER', 'idekavan')).trim().toLowerCase();
 }
@@ -106,10 +130,10 @@ function httpRequest(method, url, { headers, body, timeoutMs } = {}) {
 }
 
 function buildAuthHeaders(env, extra = {}) {
-    const apiKey = envValue(env, 'SMS_API_KEY').trim();
-    const username = envValue(env, 'SMS_USERNAME').trim();
-    const password = envValue(env, 'SMS_PASSWORD');
-    const bearer = envValue(env, 'SMS_BEARER_TOKEN').trim();
+    const apiKey = credentialValue(env, 'SMS_API_KEY');
+    const username = credentialValue(env, 'SMS_USERNAME');
+    const password = credentialValue(env, 'SMS_PASSWORD');
+    const bearer = credentialValue(env, 'SMS_BEARER_TOKEN');
 
     const headers = { ...extra };
     if (apiKey) {
@@ -163,8 +187,8 @@ function assertIdekavanSuccess(response, prefix) {
 }
 
 async function fetchIdekavanToken(env, requestFn = httpRequest) {
-    const username = envValue(env, 'SMS_USERNAME').trim();
-    const password = envValue(env, 'SMS_PASSWORD');
+    const username = credentialValue(env, 'SMS_USERNAME');
+    const password = credentialValue(env, 'SMS_PASSWORD');
     if (!username || !password) {
         throw new Error('SMS_USERNAME و SMS_PASSWORD برای دریافت توکن ایده کاوان لازم است');
     }
@@ -195,8 +219,8 @@ async function idekavanHeaders(env, requestFn = httpRequest) {
     const headers = buildAuthHeaders(env);
     if (headers) return headers;
 
-    const username = envValue(env, 'SMS_USERNAME').trim();
-    const password = envValue(env, 'SMS_PASSWORD');
+    const username = credentialValue(env, 'SMS_USERNAME');
+    const password = credentialValue(env, 'SMS_PASSWORD');
     if (username && password) {
         const token = await fetchIdekavanToken(env, requestFn);
         return { Authorization: `Bearer ${token}` };
@@ -311,6 +335,9 @@ async function deliverOtp(phone, code, deps = {}) {
     const provider = providerName(env);
 
     if (provider === 'console' || provider === 'log') {
+        if (nodeEnvName(env) === 'production') {
+            throw new Error('در production نمی‌توان SMS_PROVIDER=log گذاشت. SMS_PROVIDER=idekavan را در server/.env تنظیم کنید.');
+        }
         console.log(`[OTP] کد تأیید برای ${phone}: ${code} (معتبر به مدت ۵ دقیقه)`);
         return { delivered: true, channel: 'log' };
     }
@@ -350,6 +377,7 @@ module.exports = {
     buildOtpMessage,
     buildAuthHeaders,
     hasSmsCredentials,
+    smsRuntimeStatus,
     httpRequest,
     resetTokenCache
 };

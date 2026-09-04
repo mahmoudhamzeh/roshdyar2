@@ -31,7 +31,7 @@ const {
     calendarDayKey,
     isCompletedOnDay
 } = require('./child-growth-data');
-const { deliverOtp } = require('./sms');
+const { deliverOtp, smsRuntimeStatus } = require('./sms');
 const { analyzeConcernWithModel } = require('./child-growth-ai');
 
 const app = express();
@@ -62,7 +62,10 @@ const authLimiter = rateLimit({
 
 app.get('/api/health', async (req, res) => {
     try {
-        res.json(await store.health());
+        res.json({
+            ...(await store.health()),
+            sms: smsRuntimeStatus(process.env)
+        });
     } catch (err) {
         res.status(503).json({ ok: false, message: err.message });
     }
@@ -477,7 +480,8 @@ async function issueOtp({ phone, purpose, res }) {
 
     try {
         // Persist OTP only after SMS succeeds so failed sends do not trigger cooldown.
-        await deliverOtp(phone, code);
+        const delivery = await deliverOtp(phone, code);
+        console.log(`[OTP] delivered via ${delivery.channel} to ${phone}`);
         const sentAt = Date.now();
         await store.otp.set(phone, { code, expiresAt, sentAt, attempts: 0, purpose });
     } catch (err) {
