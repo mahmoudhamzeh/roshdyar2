@@ -10,6 +10,8 @@ import {
     removeFromCart,
     clearCart,
     getCartTotal,
+    groupCartByVendor,
+    cartLineKey,
     formatPrice,
 } from '../utils/cart';
 import './CartPage.css';
@@ -76,6 +78,8 @@ const CartPage = () => {
                 body: JSON.stringify({
                     items: cart.map((item) => ({
                         productId: item.productId,
+                        offerId: item.offerId || undefined,
+                        vendorId: item.vendorId || undefined,
                         quantity: item.quantity,
                     })),
                     shippingAddress,
@@ -98,6 +102,7 @@ const CartPage = () => {
     };
 
     const total = getCartTotal(cart);
+    const vendorGroups = groupCartByVendor(cart);
 
     return (
         <div className="cart-page shop-world">
@@ -121,52 +126,62 @@ const CartPage = () => {
                 ) : (
                     <div className="cart-layout">
                         <section className="cart-items animate-fade-up">
-                            {cart.map((item) => (
-                                <div key={item.productId} className="cart-item">
-                                    <div className="cart-item-image">
-                                        {item.imageUrl ? (
-                                            <img src={`${API}${item.imageUrl}`} alt={item.name} />
-                                        ) : (
-                                            <FontAwesomeIcon icon={faStore} />
-                                        )}
-                                    </div>
-                                    <div className="cart-item-info">
-                                        <Link to={`/shop/${item.productId}`}>{item.name}</Link>
-                                        <strong>{formatPrice(item.price)}</strong>
-                                    </div>
-                                    <div className="cart-item-qty">
-                                        <label>
-                                            تعداد
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                max={item.stock || 99}
-                                                value={item.quantity}
-                                                onChange={(e) => {
-                                                    const qty = parseInt(e.target.value, 10) || 1;
-                                                    refresh(updateCartQuantity(item.productId, qty));
-                                                }}
-                                            />
-                                        </label>
-                                        <button
-                                            type="button"
-                                            className="cart-remove"
-                                            onClick={() => refresh(removeFromCart(item.productId))}
-                                            aria-label="حذف از سبد"
-                                        >
-                                            <FontAwesomeIcon icon={faTrash} />
-                                        </button>
-                                    </div>
-                                    <div className="cart-item-line">
-                                        {formatPrice(item.price * item.quantity)}
-                                    </div>
+                            {vendorGroups.map((group) => (
+                                <div key={group.vendorId || group.vendorName} className="cart-vendor-group">
+                                    <h3 className="cart-vendor-title">
+                                        <FontAwesomeIcon icon={faStore} />
+                                        {group.vendorName}
+                                    </h3>
+                                    {group.items.map((item) => (
+                                        <div key={cartLineKey(item)} className="cart-item">
+                                            <div className="cart-item-image">
+                                                {item.imageUrl ? (
+                                                    <img src={`${API}${item.imageUrl}`} alt={item.name} />
+                                                ) : (
+                                                    <FontAwesomeIcon icon={faStore} />
+                                                )}
+                                            </div>
+                                            <div className="cart-item-info">
+                                                <Link to={`/shop/${item.productId}`}>{item.name}</Link>
+                                                <strong>{formatPrice(item.price)}</strong>
+                                            </div>
+                                            <div className="cart-item-qty">
+                                                <label>
+                                                    تعداد
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        max={item.stock || 99}
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            const qty = parseInt(e.target.value, 10) || 1;
+                                                            refresh(updateCartQuantity(cartLineKey(item), qty));
+                                                        }}
+                                                    />
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    className="cart-remove"
+                                                    onClick={() => refresh(removeFromCart(cartLineKey(item)))}
+                                                    aria-label="حذف از سبد"
+                                                >
+                                                    <FontAwesomeIcon icon={faTrash} />
+                                                </button>
+                                            </div>
+                                            <div className="cart-item-line">
+                                                {formatPrice(item.price * item.quantity)}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             ))}
                         </section>
 
                         <aside className="cart-checkout animate-fade-up">
                             <h2>ثبت سفارش</h2>
-                            <p className="cart-total">جمع کل: <strong>{formatPrice(total)}</strong></p>
+                            <p className="cart-total">جمع کالاها: <strong>{formatPrice(total)}</strong></p>
+                            <p className="cart-shipping-note">هزینه ارسال این مرحله ۰ تومان است و هر فروشنده جداگانه آماده‌سازی می‌کند.</p>
+                            <p className="cart-total">قابل پرداخت: <strong>{formatPrice(total)}</strong></p>
                             <form onSubmit={handleCheckout}>
                                 <label>
                                     شماره تماس

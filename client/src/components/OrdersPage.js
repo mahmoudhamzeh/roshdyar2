@@ -104,8 +104,11 @@ const OrdersPage = () => {
                                 </header>
                                 <ul className="order-items">
                                     {(order.items || []).map((item) => (
-                                        <li key={`${order.id}-${item.productId}`}>
-                                            <span>{item.name} × {item.quantity}</span>
+                                        <li key={`${order.id}-${item.id || item.offerId || item.productId}`}>
+                                            <span>
+                                                {item.name} × {item.quantity}
+                                                {item.vendorName ? ` · ${item.vendorName}` : ''}
+                                            </span>
                                             <strong>{formatPrice(item.lineTotal)}</strong>
                                         </li>
                                     ))}

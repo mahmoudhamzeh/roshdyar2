@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faChevronLeft, faChevronRight, faSearchPlus, faStore, faTimes } from '@fortawesome/free-solid-svg-icons';
 
@@ -13,7 +13,6 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
     const [lightbox, setLightbox] = useState(false);
     const [zoomed, setZoomed] = useState(false);
     const [origin, setOrigin] = useState('50% 50%');
-    const trackRef = useRef(null);
 
     useEffect(() => {
         setIndex(0);
@@ -22,27 +21,13 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
     }, [name]);
 
     useEffect(() => {
-        const node = trackRef.current;
-        if (!node || !urls.length) return undefined;
-        const slide = node.children[index];
-        if (slide && typeof slide.scrollIntoView === 'function') {
-            slide.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-        }
-        return undefined;
+        if (index >= urls.length) setIndex(0);
     }, [index, urls.length]);
 
     const go = (delta) => {
         if (!urls.length) return;
         setIndex((prev) => (prev + delta + urls.length) % urls.length);
         setZoomed(false);
-    };
-
-    const onTrackScroll = () => {
-        const node = trackRef.current;
-        if (!node || !urls.length) return;
-        const width = node.clientWidth || 1;
-        const next = Math.round(node.scrollLeft / width);
-        if (next !== index && next >= 0 && next < urls.length) setIndex(next);
     };
 
     const openZoom = () => {
@@ -59,26 +44,19 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
         );
     }
 
+    const current = urls[index] || urls[0];
+
     return (
         <div className="product-gallery">
             <div className="product-gallery-stage">
-                <div
-                    className="product-gallery-track"
-                    ref={trackRef}
-                    onScroll={onTrackScroll}
+                <button
+                    type="button"
+                    className="product-gallery-main"
+                    onClick={openZoom}
+                    aria-label="بزرگ‌نمایی تصویر محصول"
                 >
-                    {urls.map((src, i) => (
-                        <button
-                            key={`${src}-${i}`}
-                            type="button"
-                            className="product-gallery-slide"
-                            onClick={openZoom}
-                            aria-label={`بزرگ‌نمایی تصویر ${i + 1}`}
-                        >
-                            <img src={src} alt={name} />
-                        </button>
-                    ))}
-                </div>
+                    <img src={current} alt={name} />
+                </button>
                 {urls.length > 1 && (
                     <>
                         <button type="button" className="product-gallery-nav is-prev" onClick={() => go(-1)} aria-label="تصویر قبلی">
@@ -102,6 +80,7 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
                             type="button"
                             className={i === index ? 'is-active' : ''}
                             onClick={() => setIndex(i)}
+                            aria-label={`نمایش تصویر ${i + 1}`}
                         >
                             <img src={src} alt="" />
                         </button>
@@ -136,7 +115,7 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
                         }}
                     >
                         <img
-                            src={urls[index]}
+                            src={current}
                             alt={name}
                             style={{ transformOrigin: origin }}
                         />

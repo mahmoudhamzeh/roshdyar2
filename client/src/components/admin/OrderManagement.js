@@ -94,7 +94,10 @@ const OrderManagement = () => {
                             <ul>
                                 {(order.items || []).map((item) => (
                                     <li key={`${order.id}-${item.productId}`}>
-                                        {item.name} × {item.quantity} — {formatPrice(item.lineTotal)}
+                                        {item.name} × {item.quantity}
+                                        {item.vendorName ? ` · ${item.vendorName}` : ''}
+                                        {' — '}
+                                        {formatPrice(item.lineTotal)}
                                     </li>
                                 ))}
                             </ul>
