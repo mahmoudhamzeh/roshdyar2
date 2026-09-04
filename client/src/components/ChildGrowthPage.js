@@ -266,18 +266,17 @@ const ChildGrowthPage = () => {
                     </div>
                 </header>
                 <div className="cg-domains" role="tablist" aria-label="حوزه‌های رشد">
-                    {(expectSections || []).map((section) => {
-                        const visual = DOMAIN_TILES.find((item) => item.id === section.id) || DOMAIN_TILES[0];
-                        const active = activeSection && activeSection.id === section.id;
+                    {DOMAIN_TILES.map((visual) => {
+                        const active = openSection === visual.id;
                         return (
                             <button
                                 type="button"
                                 role="tab"
                                 aria-selected={active}
-                                key={section.id}
+                                key={visual.id}
                                 className={`cg-domain ${active ? 'is-active' : ''}`}
                                 onClick={() => {
-                                    setOpenSection(section.id);
+                                    setOpenSection(visual.id);
                                     setExpandedExpect(false);
                                 }}
                             >

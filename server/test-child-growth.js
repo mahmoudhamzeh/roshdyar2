@@ -52,6 +52,18 @@ assert.ok(payload.safetyTasks.length >= 1);
 assert.strictEqual(payload.today, dayA);
 assert.ok(payload.activities.length <= 3);
 
+const older = buildAgeGuidePayload({
+    firstName: 'آریا',
+    lastName: 'تست',
+    birthDate: '2023-08-01',
+    gender: 'boy'
+}, { today: dayA, completions: {}, safetyChecks: {} });
+assert.strictEqual(older.band && older.band.id, '36-48');
+assert.strictEqual(older.expectSections.length, 5);
+assert.ok(older.expectSections.every((section) => section.items && section.items.length > 0));
+assert.ok(older.activities.length <= 3);
+assert.ok(older.safetyTasks.length >= 1);
+
 const walking = analyzeConcernLocal(
     { name: 'محمد', gender: 'boy', ageInMonths: 13 },
     'پسرم هنوز تنهایی راه نمیفته و وقتی می‌خواد چیزی بخواد فقط جیغ می‌زنه و کلمه‌ای نمیگه.'

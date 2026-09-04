@@ -145,7 +145,7 @@ function isCompletedOnDay(completion, dayKey) {
 }
 
 const EXPECT_BLUEPRINT = [
-  { id: 'speech', title: 'کلام و ارتباط', domains: ['LANGUAGE'], sources: [] },
+  { id: 'speech', title: 'کلام و ارتباط', domains: ['LANGUAGE', 'COGNITIVE'], sources: [] },
   { id: 'motor', title: 'حرکت و تعادل', domains: ['MOTOR'], sources: [] },
   { id: 'food', title: 'تغذیه و استقلال', domains: ['INDEPENDENCE'], sources: ['nutrition'] },
   { id: 'sleep', title: 'خواب و روتین', domains: [], sources: ['sleep'] },
@@ -157,6 +157,17 @@ function shortText(value, max) {
   if (!text) return '';
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1).trim()}…`;
+}
+
+function itemsFromMilestones(band, domains) {
+  return ((band && band.milestones) || [])
+    .filter((item) => domains.includes(item.domain))
+    .slice(0, 3)
+    .map((item) => ({
+      title: item.title,
+      summary: shortText(item.description, 90),
+      detail: item.description
+    }));
 }
 
 function buildExpectSections(band) {
@@ -189,15 +200,23 @@ function buildExpectSections(band) {
         });
       });
     });
-    const items = (fromFocus.length ? fromFocus : extra).slice(0, 3);
-    if (!items.length && extra.length) items.push(...extra.slice(0, 2));
+    let items = (fromFocus.length ? fromFocus : extra).slice(0, 3);
+    if (!items.length && extra.length) items = extra.slice(0, 2);
+    if (!items.length && slot.domains.length) items = itemsFromMilestones(band, slot.domains);
+    if (!items.length) {
+      items = [{
+        title: slot.title,
+        summary: 'در این ماه این حوزه را آرام و کوتاه دنبال کنید.',
+        detail: 'بازی کوتاه روزانه در همین حوزه کافی است؛ فشار و مقایسه با کودکان دیگر لازم نیست.'
+      }];
+    }
     return {
       id: slot.id,
       title: slot.title,
-      teaser: items[0] ? items[0].summary || items[0].title : 'در این ماه این حوزه را آرام و کوتاه دنبال کنید.',
+      teaser: items[0] ? items[0].summary || items[0].title : slot.title,
       items
     };
-  }).filter((section) => section.items.length > 0);
+  });
 }
 
 function buildRedFlags(band) {
