@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import './ProductManagement.css';
 
+const DOC_LABELS = {
+    national_card: 'کارت ملی',
+    company_id: 'شناسه ملی / آگهی',
+    business_license: 'جواز کسب',
+    bank_certificate: 'تأییدیه شبا',
+    other: 'سایر'
+};
+
 const VendorManagement = () => {
     const [vendors, setVendors] = useState([]);
     const [error, setError] = useState('');
@@ -24,22 +32,44 @@ const VendorManagement = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...vendor, ...patch })
         });
-        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            setError(data.message || 'به‌روزرسانی ناموفق بود');
+            return;
+        }
+        setError('');
         load();
     };
 
     return (
         <div className="product-management">
             <h2>فروشندگان مارکت‌پلیس</h2>
-            <p>ثبت‌نام → بررسی مدارک → تأیید → تعیین کمیسیون و تسویه.</p>
+            <p>ثبت‌نام حقیقی/حقوقی → مدارک و شبا → تأیید → کمیسیون و تسویه.</p>
             {error && <p className="error-message">{error}</p>}
             <div className="products-admin-list">
                 {vendors.map((vendor) => (
                     <div key={vendor.id} className="product-admin-item">
-                        <div>
+                        <div className="product-admin-info">
                             <h3>{vendor.displayName}</h3>
-                            <p>{vendor.kind === 'internal' ? 'فروشنده داخلی مجموعه' : 'مارکت‌پلیس'} · وضعیت: {vendor.status}</p>
-                            <small>{vendor.docsNote || vendor.phone}</small>
+                            <p>
+                                {vendor.kind === 'internal' ? 'فروشنده داخلی مجموعه' : (vendor.personKind === 'company' ? 'حقوقی' : 'حقیقی')}
+                                {' · '}
+                                وضعیت: {vendor.status}
+                                {vendor.profileComplete ? ' · پرونده کامل' : ' · ناقص'}
+                            </p>
+                            <small>
+                                {vendor.ownerName} · {vendor.nationalId} · {vendor.phone}
+                                {vendor.bankSheba ? ` · شبا ${vendor.bankSheba}` : ''}
+                            </small>
+                            {(vendor.docs || []).length > 0 && (
+                                <p>
+                                    {(vendor.docs || []).map((doc) => (
+                                        <a key={doc.id} href={doc.fileUrl} target="_blank" rel="noreferrer" style={{ marginLeft: '0.75rem' }}>
+                                            {DOC_LABELS[doc.kind] || doc.kind}
+                                        </a>
+                                    ))}
+                                </p>
+                            )}
                         </div>
                         <div className="product-admin-actions">
                             {vendor.kind !== 'internal' && vendor.status !== 'active' && (

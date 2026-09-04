@@ -312,6 +312,101 @@ async function run() {
         assert.ok(names.includes('پسرانه'));
         assert.ok(names.includes('لگو'));
 
+        const vendorApply = await request('POST', '/api/shop/vendors/apply', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                displayName: 'فروشگاه بازی‌کده تست',
+                personKind: 'individual',
+                ownerName: 'علی فروشنده',
+                nationalId: '0012345678',
+                phone: '09121112233',
+                address: 'تهران، خیابان تست',
+                bankName: 'ملی',
+                bankSheba: 'IR120170000000123456789001'
+            }
+        });
+        assert.strictEqual(vendorApply.status, 201, JSON.stringify(vendorApply.data));
+        assert.strictEqual(vendorApply.data.status, 'pending');
+        assert.strictEqual(vendorApply.data.profileComplete, false);
+
+        const blockApprove = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'active' }
+        });
+        assert.strictEqual(blockApprove.status, 400);
+
+        const boundary = `----tatkids${Date.now()}`;
+        const fileBody = Buffer.concat([
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="kind"\r\n\r\nnational_card\r\n`),
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="docs"; filename="card1.txt"\r\nContent-Type: text/plain\r\n\r\ncard-one\r\n`),
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="docs"; filename="card2.txt"\r\nContent-Type: text/plain\r\n\r\ncard-two\r\n`),
+            Buffer.from(`--${boundary}--\r\n`)
+        ]);
+        const docs = await new Promise((resolve, reject) => {
+            const req = http.request({
+                hostname: '127.0.0.1',
+                port,
+                path: '/api/shop/vendors/me/docs',
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${verify.data.token}`,
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                    'Content-Length': fileBody.length
+                }
+            }, (res) => {
+                let raw = '';
+                res.on('data', (chunk) => { raw += chunk; });
+                res.on('end', () => {
+                    let data = raw;
+                    try { data = raw ? JSON.parse(raw) : null; } catch (_) {}
+                    resolve({ status: res.statusCode, data });
+                });
+            });
+            req.on('error', reject);
+            req.write(fileBody);
+            req.end();
+        });
+        assert.strictEqual(docs.status, 201, JSON.stringify(docs.data));
+        assert.ok(docs.data.profileComplete);
+
+        const approveVendor = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'active', commissionPct: 10 }
+        });
+        assert.strictEqual(approveVendor.status, 200, JSON.stringify(approveVendor.data));
+        assert.strictEqual(approveVendor.data.status, 'active');
+
+        const vendorProduct = await request('POST', '/api/vendor/products', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                name: 'حلقه چوبی فروشنده',
+                description: 'محصول فروشنده برای تأیید ادمین',
+                category: 'لگو',
+                price: 120000,
+                stock: 4
+            }
+        });
+        assert.strictEqual(vendorProduct.status, 201, JSON.stringify(vendorProduct.data));
+        assert.strictEqual(vendorProduct.data.reviewStatus, 'pending');
+        assert.strictEqual(vendorProduct.data.active, false);
+
+        const hiddenVendorProduct = await request('GET', `/api/shop/products/${vendorProduct.data.id}`);
+        assert.strictEqual(hiddenVendorProduct.status, 404);
+
+        const approveProduct = await request('PATCH', `/api/admin/products/${vendorProduct.data.id}/review`, {
+            headers: auth,
+            body: { status: 'approved' }
+        });
+        assert.strictEqual(approveProduct.status, 200, JSON.stringify(approveProduct.data));
+        assert.strictEqual(approveProduct.data.reviewStatus, 'approved');
+        assert.strictEqual(approveProduct.data.active, true);
+
+        const finance = await request('GET', '/api/vendor/finance', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(finance.status, 200, JSON.stringify(finance.data));
+        assert.ok(finance.data.sales);
+
         const loginAgain = await request('POST', '/api/login', {
             body: { login: 'Amin', password: 'admin' }
         });

@@ -231,7 +231,8 @@ function rowToProduct(row) {
         imageUrl: row.image_url,
         active: asBool(row.active),
         createdAt: row.created_at,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        reviewStatus: row.review_status || 'approved'
     };
 }
 
@@ -1954,7 +1955,11 @@ const products = {
             updated_at: product.updatedAt || null
         });
         cacheInvalidate('products');
-        const created = products.getById(Number(info.lastInsertRowid));
+        const createdId = Number(info.lastInsertRowid);
+        if (product.reviewStatus) {
+            db.prepare('UPDATE products SET review_status = ? WHERE id = ?').run(product.reviewStatus, createdId);
+        }
+        const created = products.getById(createdId);
         shopStore.syncProductCommerceSqlite(db, created.id, product);
         return products.getById(created.id);
     },
@@ -1985,6 +1990,9 @@ const products = {
             active: asBoolInt(next.active !== false),
             updated_at: next.updatedAt || new Date().toISOString()
         });
+        if (next.reviewStatus) {
+            db.prepare('UPDATE products SET review_status = ? WHERE id = ?').run(next.reviewStatus, Number(id));
+        }
         cacheInvalidate('products');
         shopStore.syncProductCommerceSqlite(db, Number(id), next);
         return products.getById(id);
@@ -2155,6 +2163,29 @@ const orders = {
             });
             return orders.getById(id);
         })();
+    },
+    listByVendor(vendorId) {
+        connect();
+        const rows = db.prepare(`
+            SELECT DISTINCT o.* FROM orders o
+            JOIN order_items i ON i.order_id = o.id
+            WHERE i.vendor_id = ?
+            ORDER BY o.created_at DESC, o.id DESC
+        `).all(Number(vendorId));
+        return hydrateOrders(rows).map((order) => ({
+            ...order,
+            items: (order.items || []).filter((item) => Number(item.vendorId) === Number(vendorId))
+        }));
+    },
+    updateLineStatus(itemId, status, vendorId) {
+        connect();
+        const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'];
+        if (!allowed.includes(status)) return null;
+        const item = db.prepare('SELECT * FROM order_items WHERE id = ?').get(Number(itemId));
+        if (!item) return null;
+        if (vendorId && Number(item.vendor_id) !== Number(vendorId)) return null;
+        db.prepare('UPDATE order_items SET line_status = ? WHERE id = ?').run(status, Number(itemId));
+        return shopStore.mapOrderItemRow(db.prepare('SELECT * FROM order_items WHERE id = ?').get(Number(itemId)));
     }
 };
 
@@ -2540,6 +2571,14 @@ module.exports = {
         updateVendor(id, patch) {
             connect();
             return shopStore.updateVendorSqlite(db, id, patch);
+        },
+        addVendorDoc(payload) {
+            connect();
+            return shopStore.addVendorDocSqlite(db, payload);
+        },
+        vendorFinance(vendorId) {
+            connect();
+            return shopStore.vendorFinanceSqlite(db, vendorId);
         },
         ageBands: shopStore.AGE_BANDS,
         skills: shopStore.SKILLS

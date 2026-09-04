@@ -308,11 +308,28 @@ const ProductManagement = () => {
                                 <h3>
                                     {product.name}
                                     {product.active === false && <span className="inactive-badge">غیرفعال</span>}
+                                    {product.reviewStatus === 'pending' && <span className="inactive-badge">منتظر تأیید فروشنده</span>}
                                 </h3>
                                 <p>{product.category} · {formatPrice(product.price)} · موجودی: {product.stock}</p>
                                 <small>{product.description}</small>
                             </div>
                             <div className="product-admin-actions">
+                                {product.reviewStatus === 'pending' && (
+                                    <button
+                                        type="button"
+                                        className="btn-edit"
+                                        onClick={async () => {
+                                            await fetch(`${API}/api/admin/products/${product.id}/review`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ status: 'approved' })
+                                            });
+                                            fetchProducts();
+                                        }}
+                                    >
+                                        تأیید محصول
+                                    </button>
+                                )}
                                 <button type="button" className="btn-edit" onClick={() => handleEdit(product)}>
                                     ویرایش
                                 </button>
