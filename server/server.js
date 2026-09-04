@@ -1017,6 +1017,8 @@ app.post('/api/children/:childId/concerns/chat', async (req, res) => {
         return res.status(400).json({ message: 'پیام را بنویسید' });
     }
     const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const summary = await buildGrowthSummaryForChild(req.params.childId, child);
+    const last = summary && summary.lastMeasurement;
     const state = await store.children.getGrowthState(req.params.childId);
     const incoming = Array.isArray(req.body && req.body.history) ? req.body.history : (state.chat || []);
     const history = incoming
@@ -1039,7 +1041,9 @@ app.post('/api/children/:childId/concerns/chat', async (req, res) => {
         {
             bandTitle: guide.band && guide.band.title,
             nutrition,
-            sleep
+            sleep,
+            heightLabel: last && last.height != null ? `قد ${last.height} سم` : '',
+            weightLabel: last && last.weight != null ? `وزن ${last.weight} کگ` : ''
         }
     );
     const assistantMessage = {
