@@ -198,9 +198,12 @@ function chatGrowthAssistantLocal(child, messages, context) {
         return `خواب این سن برای ${name}: ${ctx.sleep}\n\nروتین کوتاه و ثابت شب معمولاً بهتر از حرف زیاد جواب می‌دهد.`;
     }
     if (/قد|وزن|صدک/.test(last)) {
+        if (!ctx.heightLabel && !ctx.weightLabel) {
+            return `قد و وزن ${name} هنوز در نمودار رشد ثبت نشده. با ثبت اندازه‌گیری می‌توانم بگویم در محدوده طبیعی هست یا نه. این جمع‌بندی تشخیص پزشکی نیست.`;
+        }
         const height = ctx.heightLabel || 'قد هنوز ثبت نشده';
         const weight = ctx.weightLabel || 'وزن هنوز ثبت نشده';
-        return `آخرین اندازه‌گیری ${name}: ${height} و ${weight}. از یک عدد به‌تنهایی نتیجه پزشکی گرفته نمی‌شود؛ نمودار کامل را در صفحه رشد ببینید.`;
+        return `آخرین اندازه‌گیری ${name}: ${height} و ${weight}. از یک عدد به‌تنهایی نتیجه پزشکی گرفته نمی‌شود؛ نمودار کامل را در همین صفحه ببینید.`;
     }
     return analysisToChatReply(analyzeConcernLocal(child, last));
 }
