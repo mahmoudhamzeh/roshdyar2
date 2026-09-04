@@ -1,11 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const { Pool, types } = require('pg');
+const shopStore = require('./shop-store');
+const { buildCategoryTree } = require('./shop-model');
 
 types.setTypeParser(20, (val) => Number(val));
 types.setTypeParser(1700, (val) => Number(val));
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const SCHEMA_PATH = path.join(__dirname, 'schema.pg.sql');
 const DEFAULT_SQLITE_PATH = process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
 
@@ -291,11 +293,17 @@ function rowToPodcast(row) {
 }
 
 function rowToBanner(row) {
+    const productId = row.product_id != null ? Number(row.product_id) : null;
+    const link = row.link || (productId ? `/shop/${productId}` : '');
     return {
         id: Number(row.id),
         title: row.title,
-        link: row.link,
-        imageUrl: row.image_url
+        subtitle: row.subtitle || '',
+        link,
+        imageUrl: row.image_url,
+        placement: row.placement || 'home',
+        productId,
+        sortOrder: Number(row.sort_order || 0)
     };
 }
 
@@ -894,12 +902,15 @@ async function connect() {
             pool = next;
             const schemaSql = fs.readFileSync(SCHEMA_PATH, 'utf8');
             await pool.query(schemaSql);
+            await shopStore.ensureShopSchemaPg(q, one, many);
+            await seedShopCategories();
             const version = await getSchemaVersion();
             if (version < SCHEMA_VERSION) {
                 const importedSqlite = await maybeImportFromSqlite();
                 if (!importedSqlite) await seedFromJsonIfEmpty();
                 await setSchemaVersion(SCHEMA_VERSION);
             }
+            await shopStore.ensureShopSchemaPg(q, one, many);
             await pool.query('DELETE FROM otp_codes WHERE expires_at < $1', [Date.now()]);
             console.log(`Connected to PostgreSQL schema v${SCHEMA_VERSION}`);
             return pool;
@@ -1148,7 +1159,8 @@ const children = {
         return {
             milestones: extra.milestones && typeof extra.milestones === 'object' ? extra.milestones : {},
             completions: extra.completions && typeof extra.completions === 'object' ? extra.completions : {},
-            concerns: Array.isArray(extra.concerns) ? extra.concerns : []
+            concerns: Array.isArray(extra.concerns) ? extra.concerns : [],
+            safetyChecks: extra.safetyChecks && typeof extra.safetyChecks === 'object' ? extra.safetyChecks : {}
         };
     },
     async saveGrowthState(childId, patch) {
@@ -1159,7 +1171,8 @@ const children = {
             ...extra,
             milestones: patch.milestones !== undefined ? patch.milestones : extra.milestones || {},
             completions: patch.completions !== undefined ? patch.completions : extra.completions || {},
-            concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || []
+            concerns: patch.concerns !== undefined ? patch.concerns : extra.concerns || [],
+            safetyChecks: patch.safetyChecks !== undefined ? patch.safetyChecks : extra.safetyChecks || {}
         };
         await q('UPDATE children SET extra = $1 WHERE id = $2', [JSON.stringify(next), Number(childId)]);
         return children.getGrowthState(childId);
@@ -1553,15 +1566,31 @@ const banners = {
     async list() {
         const cached = cacheGet('banners');
         if (cached) return cached;
-        return cacheSet('banners', (await many('SELECT * FROM banners ORDER BY id')).map(rowToBanner));
+        const all = (await many('SELECT * FROM banners ORDER BY sort_order, id')).map(rowToBanner);
+        return cacheSet('banners', all);
+    },
+    async listByPlacement(placement) {
+        const all = await banners.list();
+        if (!placement || placement === 'all') return all;
+        const filtered = all.filter((b) => b.placement === placement);
+        return filtered.length ? filtered : all;
     },
     async count() {
         return (await one('SELECT COUNT(*)::int AS n FROM banners')).n;
     },
     async create(banner) {
         const row = await one(
-            'INSERT INTO banners (title, link, image_url) VALUES ($1,$2,$3) RETURNING *',
-            [banner.title || null, banner.link || null, banner.imageUrl || null]
+            `INSERT INTO banners (title, link, image_url, placement, product_id, sort_order, subtitle)
+             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+            [
+                banner.title || null,
+                banner.link || null,
+                banner.imageUrl || null,
+                banner.placement || 'home',
+                banner.productId ? Number(banner.productId) : null,
+                Number(banner.sortOrder || 0),
+                banner.subtitle || null
+            ]
         );
         cacheInvalidate('banners');
         return rowToBanner(row);
@@ -1571,11 +1600,21 @@ const banners = {
         if (!current) return null;
         const next = { ...current, ...patch, id: Number(id) };
         await q(
-            'UPDATE banners SET title=$1, link=$2, image_url=$3 WHERE id=$4',
-            [next.title || null, next.link || null, next.imageUrl || null, Number(id)]
+            `UPDATE banners SET title=$1, link=$2, image_url=$3, placement=$4, product_id=$5, sort_order=$6, subtitle=$7
+             WHERE id=$8`,
+            [
+                next.title || null,
+                next.link || null,
+                next.imageUrl || null,
+                next.placement || 'home',
+                next.productId ? Number(next.productId) : null,
+                Number(next.sortOrder || 0),
+                next.subtitle || null,
+                Number(id)
+            ]
         );
         cacheInvalidate('banners');
-        return next;
+        return banners.list().then((list) => list.find((item) => Number(item.id) === Number(id)));
     },
     async remove(id) {
         const result = await q('DELETE FROM banners WHERE id = $1', [Number(id)]);
@@ -1757,11 +1796,14 @@ const tickets = {
         const row = await one('SELECT * FROM tickets WHERE id = $1', [Number(id)]);
         return row ? rowToTicket(row) : null;
     },
-    async create({ userId, subject, content }) {
+    async create({ userId, subject, content, groupName, subgroup, attachments }) {
         const createdAt = new Date().toISOString();
         const payload = {
             subject: String(subject || '').trim(),
             content: String(content || '').trim(),
+            groupName: String(groupName || '').trim(),
+            subgroup: String(subgroup || '').trim(),
+            attachments: Array.isArray(attachments) ? attachments : [],
             replies: []
         };
         const row = await one(
@@ -1769,7 +1811,9 @@ const tickets = {
              VALUES ($1,$2,$3,$4,$5) RETURNING *`,
             [Number(userId), 'open', createdAt, createdAt, JSON.stringify(payload)]
         );
-        return rowToTicket(row);
+        const ticket = rowToTicket(row);
+        ticket.ticketNumber = `TK-${String(ticket.id).padStart(5, '0')}`;
+        return tickets.update(ticket.id, ticket);
     },
     async count() {
         return (await one('SELECT COUNT(*)::int AS n FROM tickets')).n;
@@ -1789,25 +1833,13 @@ const tickets = {
 const products = {
     async getById(id) {
         const row = await one('SELECT * FROM products WHERE id = $1', [Number(id)]);
-        return row ? rowToProduct(row) : null;
+        return row ? hydrateProduct(rowToProduct(row)) : null;
     },
     async listAll() {
-        return (await many('SELECT * FROM products ORDER BY id DESC')).map(rowToProduct);
+        return shopStore.listCatalogPg(many, asBool, {}, { activeOnly: false });
     },
-    async listActive({ category, q: search } = {}) {
-        const params = [];
-        let sql = 'SELECT * FROM products WHERE active = 1';
-        if (category && category !== 'همه') {
-            params.push(category);
-            sql += ` AND category = $${params.length}`;
-        }
-        if (search && String(search).trim()) {
-            const term = `%${String(search).trim().toLowerCase()}%`;
-            params.push(term, term);
-            sql += ` AND (lower(name) LIKE $${params.length - 1} OR lower(description) LIKE $${params.length})`;
-        }
-        sql += ' ORDER BY id DESC';
-        return (await many(sql, params)).map(rowToProduct);
+    async listActive(filters = {}) {
+        return shopStore.listCatalogPg(many, asBool, filters);
     },
     async count() {
         return (await one('SELECT COUNT(*)::int AS n FROM products')).n;
@@ -1829,7 +1861,8 @@ const products = {
             ]
         );
         cacheInvalidate('products');
-        return rowToProduct(row);
+        await shopStore.syncProductCommercePg(q, one, row.id, product);
+        return products.getById(row.id);
     },
     async update(id, product) {
         const current = await products.getById(id);
@@ -1852,6 +1885,7 @@ const products = {
             ]
         );
         cacheInvalidate('products');
+        await shopStore.syncProductCommercePg(q, one, Number(id), next);
         return products.getById(id);
     },
     async remove(id) {
@@ -1899,6 +1933,7 @@ const orders = {
             }
             for (const item of items) {
                 await q('UPDATE products SET stock = stock - $1 WHERE id = $2', [item.quantity, item.productId], client);
+                await shopStore.adjustOfferStockPg(q, item.productId, -item.quantity, client);
             }
             const createdAt = new Date().toISOString();
             const orderRow = await one(
@@ -1934,6 +1969,7 @@ const orders = {
                             [item.quantity, item.productId],
                             client
                         );
+                        await shopStore.adjustOfferStockPg(q, item.productId, item.quantity, client);
                     }
                 }
             }
@@ -2033,6 +2069,140 @@ async function migrateFromJson(jsonPath) {
     return true;
 }
 
+const DEFAULT_SHOP_GROUPS = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
+
+async function seedShopCategories() {
+    const count = await one('SELECT COUNT(*)::int AS n FROM product_categories');
+    if (count.n > 0) return;
+    for (let i = 0; i < DEFAULT_SHOP_GROUPS.length; i += 1) {
+        await q('INSERT INTO product_categories (name, parent_id, sort_order) VALUES ($1, NULL, $2)', [
+            DEFAULT_SHOP_GROUPS[i],
+            i
+        ]);
+    }
+}
+
+function rowToCategory(row) {
+    return {
+        id: Number(row.id),
+        name: row.name,
+        parentId: row.parent_id == null ? null : Number(row.parent_id),
+        sortOrder: Number(row.sort_order || 0),
+        active: row.active == null ? true : asBool(row.active)
+    };
+}
+
+const productCategories = {
+    async list() {
+        await seedShopCategories();
+        return (await many('SELECT * FROM product_categories ORDER BY sort_order, id')).map(rowToCategory);
+    },
+    async tree({ includeInactive } = {}) {
+        const all = (await productCategories.list()).filter((c) => includeInactive || c.active !== false);
+        return buildCategoryTree(all);
+    },
+    async create({ name, parentId, sortOrder }) {
+        const row = await one(
+            'INSERT INTO product_categories (name, parent_id, sort_order) VALUES ($1,$2,$3) RETURNING *',
+            [String(name || '').trim(), parentId ? Number(parentId) : null, Number(sortOrder || 0)]
+        );
+        return rowToCategory(row);
+    },
+    async update(id, { name, parentId, sortOrder }) {
+        const row = await one(
+            'UPDATE product_categories SET name=$1, parent_id=$2, sort_order=$3 WHERE id=$4 RETURNING *',
+            [String(name || '').trim(), parentId ? Number(parentId) : null, Number(sortOrder || 0), Number(id)]
+        );
+        return row ? rowToCategory(row) : null;
+    },
+    async remove(id) {
+        const result = await q('DELETE FROM product_categories WHERE id = $1', [Number(id)]);
+        return result.rowCount > 0;
+    }
+};
+
+const productImages = {
+    async listByProduct(productId) {
+        return (await many(
+            'SELECT * FROM product_images WHERE product_id = $1 ORDER BY sort_order, id',
+            [Number(productId)]
+        )).map((row) => ({
+            id: Number(row.id),
+            productId: Number(row.product_id),
+            imageUrl: row.image_url,
+            sortOrder: Number(row.sort_order || 0)
+        }));
+    },
+    async replace(productId, urls) {
+        await q('DELETE FROM product_images WHERE product_id = $1', [Number(productId)]);
+        for (let i = 0; i < (urls || []).length; i += 1) {
+            if (urls[i]) {
+                await q(
+                    'INSERT INTO product_images (product_id, image_url, sort_order) VALUES ($1,$2,$3)',
+                    [Number(productId), urls[i], i]
+                );
+            }
+        }
+        return productImages.listByProduct(productId);
+    },
+    async add(productId, url) {
+        const max = await one(
+            'SELECT COALESCE(MAX(sort_order), -1)::int AS n FROM product_images WHERE product_id = $1',
+            [Number(productId)]
+        );
+        await q(
+            'INSERT INTO product_images (product_id, image_url, sort_order) VALUES ($1,$2,$3)',
+            [Number(productId), url, max.n + 1]
+        );
+        return productImages.listByProduct(productId);
+    }
+};
+
+const productComments = {
+    async listByProduct(productId) {
+        return (await many(`
+            SELECT c.*, u.username, u.first_name, u.last_name
+            FROM product_comments c
+            LEFT JOIN users u ON u.id = c.user_id
+            WHERE c.product_id = $1
+            ORDER BY c.id DESC
+        `, [Number(productId)])).map((row) => ({
+            id: Number(row.id),
+            productId: Number(row.product_id),
+            userId: row.user_id == null ? null : Number(row.user_id),
+            author: shopStore.publicCommentAuthor(row),
+            body: row.body,
+            rating: row.rating != null ? Number(row.rating) : null,
+            createdAt: row.created_at
+        }));
+    },
+    async create({ productId, userId, body, rating }) {
+        const createdAt = new Date().toISOString();
+        const parsedRating = Number(rating);
+        const safeRating = Number.isFinite(parsedRating) && parsedRating >= 1 && parsedRating <= 5
+            ? Math.round(parsedRating)
+            : null;
+        const row = await one(
+            'INSERT INTO product_comments (product_id, user_id, body, rating, created_at) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+            [Number(productId), userId ? Number(userId) : null, String(body || '').trim(), safeRating, createdAt]
+        );
+        const list = await productComments.listByProduct(productId);
+        return list.find((c) => c.id === Number(row.id));
+    }
+};
+
+async function hydrateProduct(product) {
+    if (!product) return null;
+    const images = await productImages.listByProduct(product.id);
+    const comments = await productComments.listByProduct(product.id);
+    const cover = product.imageUrl ? [{ id: 0, productId: product.id, imageUrl: product.imageUrl, sortOrder: -1 }] : [];
+    return shopStore.enrichProductPg(many, asBool, {
+        ...product,
+        images: [...cover, ...images.filter((img) => img.imageUrl !== product.imageUrl)],
+        comments
+    });
+}
+
 async function stats() {
     return {
         totalUsers: await users.count(),
@@ -2075,6 +2245,37 @@ module.exports = {
     podcasts,
     tickets,
     products,
+    productCategories,
+    productImages,
+    productComments,
+    shop: {
+        listSkills() {
+            return shopStore.listSkillsPg(many);
+        },
+        getInternalVendor() {
+            return shopStore.getInternalVendorPg(one);
+        },
+        campaign() {
+            return shopStore.listCampaignPg(one);
+        },
+        listOffers(productId) {
+            return shopStore.listOffersForProductPg(many, productId);
+        },
+        listVendors() {
+            return shopStore.listVendorsPg(many);
+        },
+        getVendorByUser(userId) {
+            return shopStore.getVendorByUserPg(one, userId);
+        },
+        applyVendor(payload) {
+            return shopStore.applyVendorPg(q, one, payload);
+        },
+        updateVendor(id, patch) {
+            return shopStore.updateVendorPg(q, one, id, patch);
+        },
+        ageBands: shopStore.AGE_BANDS,
+        skills: shopStore.SKILLS
+    },
     orders,
     otp,
     normalizePhone

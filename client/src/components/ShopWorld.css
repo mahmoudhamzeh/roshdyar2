@@ -1,0 +1,254 @@
+.shop-world {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(251, 191, 36, 0.14), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 0% 20%, rgba(15, 118, 110, 0.08), transparent 45%),
+    #f7f3ea;
+}
+
+.shop-world .shop-main,
+.shop-world .product-detail-main,
+.shop-world .cart-main,
+.shop-world .orders-main {
+  padding-bottom: 2rem;
+}
+
+.shop-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.shop-chip {
+  border: 1px solid #e4d8b8;
+  background: #fffdf6;
+  color: #6b5b3a;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.shop-chip.is-active {
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+}
+
+.shop-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0.85rem;
+}
+
+.shop-section-title h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #134e4a;
+}
+
+.shop-section-title a {
+  color: #b45309;
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+
+.shop-rating {
+  color: #d97706;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.shop-rating-num {
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  color: #92400e;
+}
+
+.shop-price-was {
+  color: #9a8b73;
+  text-decoration: line-through;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.shop-sale-badge {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  background: #b45309;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.22rem 0.5rem;
+  border-radius: 6px;
+}
+
+.shop-age-badge {
+  display: inline-block;
+  background: #fde68a;
+  color: #78350f;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+}
+
+.shop-skill-tag {
+  display: inline-block;
+  background: #ccfbf1;
+  color: #115e59;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.16rem 0.45rem;
+  border-radius: 999px;
+}
+
+.shop-sort {
+  min-width: 10rem;
+  border: 1px solid #e4d8b8;
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-weight: 600;
+  color: #3f3a2f;
+}
+
+.shop-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shop-filter-toggle {
+  border: 1px solid #e4d8b8;
+  background: #fff;
+  color: #3f3a2f;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.shop-filter-panel {
+  background: #fffdf6;
+  border: 1px solid #eadfbf;
+  border-radius: 14px;
+  padding: 0.85rem;
+}
+
+.shop-filter-selects {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.shop-filter-selects label,
+.category-cascade label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #6b5b3a;
+}
+
+.shop-filter-selects .category-cascade {
+  grid-column: 1 / -1;
+}
+
+.category-cascade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.65rem;
+}
+
+.category-cascade-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #9a3412;
+  font-size: 0.8rem;
+}
+
+.shop-filter-panel p {
+  margin: 0.35rem 0 0.45rem;
+  font-weight: 800;
+  color: #6b5b3a;
+}
+
+.shop-cat-card,
+.shop-skill-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: #fff;
+  border: 1px solid #eadfbf;
+  border-radius: 16px;
+  padding: 1.1rem 1rem;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 8px 20px rgba(120, 90, 30, 0.06);
+}
+
+.shop-cat-card:hover,
+.shop-skill-card:hover {
+  border-color: #d97706;
+  color: inherit;
+  text-decoration: none;
+}
+
+.shop-cat-card h2,
+.shop-skill-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.shop-cat-card p,
+.shop-skill-card p {
+  margin: 0;
+  color: #7a6a4e;
+  font-size: 0.88rem;
+}
+
+.shop-subcats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.shop-world-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 0.9rem;
+}
+
+.shop-stars-input {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.shop-stars-input button {
+  border: none;
+  background: transparent;
+  color: #d6d3d1;
+  font-size: 1.35rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.shop-stars-input button.is-on {
+  color: #d97706;
+}

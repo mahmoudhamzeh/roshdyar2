@@ -4,6 +4,7 @@ import Footer from './Footer';
 import AppCarousel from './Carousel';
 import ServiceTiles from './ServiceTiles';
 import ContentRow from './ContentRow';
+import AmazingOffersRail from './AmazingOffersRail';
 import './DashboardPage.css';
 
 const fallbackVideos = Array.from({ length: 4 }, (_, i) => ({
@@ -25,11 +26,12 @@ const DashboardPage = () => {
     const [banners, setBanners] = useState([]);
     const [articles, setArticles] = useState([]);
     const [videos, setVideos] = useState(fallbackVideos);
+    const [sale, setSale] = useState({ products: [], campaign: null });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const bannersResponse = await fetch('/api/banners');
+                const bannersResponse = await fetch('/api/banners?placement=home');
                 if (bannersResponse.ok) {
                     const data = await bannersResponse.json();
                     const formattedBanners = data
@@ -85,6 +87,10 @@ const DashboardPage = () => {
                 console.error("Failed to fetch videos:", error);
             }
         };
+        fetch('/api/shop/sale')
+            .then((res) => (res.ok ? res.json() : { products: [] }))
+            .then((data) => setSale(data || { products: [] }))
+            .catch(() => {});
         fetchData();
     }, []);
 
@@ -94,6 +100,9 @@ const DashboardPage = () => {
             <main className="dashboard-main">
                 <AppCarousel slides={banners} />
                 <ServiceTiles />
+                <div className="dashboard-sale-wrap">
+                    <AmazingOffersRail products={sale.products} campaign={sale.campaign} />
+                </div>
                 <ContentRow
                     title="ویدیوهای آموزشی و تربیتی"
                     items={videos}

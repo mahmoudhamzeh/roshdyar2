@@ -17,7 +17,8 @@ function assertTables(db) {
     const names = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r) => r.name);
     for (const table of [
         'users', 'children', 'growth_records', 'vaccination_records',
-        'products', 'orders', 'order_items', 'messages', 'message_recipients', 'otp_codes'
+        'products', 'orders', 'order_items', 'messages', 'message_recipients', 'otp_codes',
+        'shop_vendors', 'shop_offers', 'shop_skills', 'shop_product_meta'
     ]) {
         assert.ok(names.includes(table), `missing table ${table}`);
     }
@@ -32,7 +33,7 @@ function run() {
     const health = store.health();
     assert.strictEqual(health.ok, true);
     assert.strictEqual(health.wal, true);
-    assert.strictEqual(health.schemaVersion, 2);
+    assert.strictEqual(health.schemaVersion, 3);
     assert.ok(health.counts.users >= 1, 'seeded users');
     assert.ok(health.counts.children >= 1, 'seeded children');
     assert.ok(health.counts.products >= 1, 'seeded products');
@@ -85,8 +86,27 @@ function run() {
     assert.strictEqual(upsert2.created, false);
     assert.strictEqual(store.growth.list(createdChild.id).length, 1);
 
+    const shopStore = require('./shop-store');
+    assert.strictEqual(shopStore.publicCommentAuthor({ username: 'Amin' }), 'Amin');
+    assert.strictEqual(shopStore.publicCommentAuthor({ username: '09121112233' }), 'کاربر تات کیدز');
+    assert.strictEqual(shopStore.publicCommentAuthor({ first_name: '09120000000' }), 'کاربر تات کیدز');
+
+    const categoryTree = store.productCategories.tree();
+    const categoryNames = [];
+    const walkCats = (nodes) => (nodes || []).forEach((node) => {
+        categoryNames.push(node.name);
+        walkCats(node.children);
+    });
+    walkCats(categoryTree);
+    assert.ok(categoryNames.includes('پسرانه'), 'toy tree should include پسرانه');
+    assert.ok(categoryNames.includes('لگو'), 'toy tree should include لگو');
+
     const product = store.products.listActive()[0];
     assert.ok(product);
+    const vendor = store.shop.getInternalVendor();
+    assert.ok(vendor && vendor.slug === 'tatkids');
+    assert.ok(store.shop.listSkills().length >= 5);
+    assert.ok(product.offerId || product.vendorName);
     const stockBefore = product.stock;
     const order = store.orders.create({
         userId: createdUser.id,
@@ -167,7 +187,7 @@ function runLegacyMigration() {
         const store = require('./db');
         store.connect();
         const health = store.health();
-        assert.strictEqual(health.schemaVersion, 2);
+        assert.strictEqual(health.schemaVersion, 3);
         assert.ok(health.counts.users >= 1);
         assert.ok(health.counts.children >= 1);
         const tables = store.connect().prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name);

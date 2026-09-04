@@ -1,32 +1,65 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faShoppingBag, faSearch, faStore } from '@fortawesome/free-solid-svg-icons';
+import { faSearch } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
-import { formatPrice, getCartCount } from '../utils/cart';
+import ShopProductCard from './ShopProductCard';
+import ShopHeroSlider from './ShopHeroSlider';
+import AmazingOffersRail from './AmazingOffersRail';
+import ShopCategoryTiles from './ShopCategoryTiles';
+import CategoryCascade from './CategoryCascade';
+import { AGE_BANDS, SORT_OPTIONS, ageBandFromBirthDate } from '../utils/shop';
 import './ShopPage.css';
+import './ShopWorld.css';
 
 const API = '';
-const CATEGORIES = ['همه', 'تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
 
 const ShopPage = () => {
+    const history = useHistory();
+    const location = useLocation();
+    const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+    const category = params.get('category') || 'همه';
+    const skill = params.get('skill') || '';
+    const age = params.get('age') || '';
+    const sort = params.get('sort') || 'newest';
+    const query = params.get('q') || '';
+
     const [products, setProducts] = useState([]);
+    const [home, setHome] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [category, setCategory] = useState('همه');
-    const [search, setSearch] = useState('');
-    const [query, setQuery] = useState('');
-    const [cartCount, setCartCount] = useState(getCartCount());
+    const [search, setSearch] = useState(query);
+    const [childBands, setChildBands] = useState([]);
+    const hasFilters = category !== 'همه' || Boolean(skill || age || query);
+
+    const setParam = (key, value) => {
+        const next = new URLSearchParams(location.search);
+        if (!value || value === 'همه') next.delete(key);
+        else next.set(key, value);
+        history.replace(`/shop${next.toString() ? `?${next.toString()}` : ''}`);
+    };
 
     useEffect(() => {
-        const onCartUpdate = () => setCartCount(getCartCount());
-        window.addEventListener('cart-updated', onCartUpdate);
-        window.addEventListener('storage', onCartUpdate);
-        return () => {
-            window.removeEventListener('cart-updated', onCartUpdate);
-            window.removeEventListener('storage', onCartUpdate);
-        };
+        setSearch(query);
+    }, [query]);
+
+    useEffect(() => {
+        fetch(`${API}/api/shop/home`)
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => setHome(data))
+            .catch(() => {});
+        fetch('/api/children')
+            .then((res) => (res.ok ? res.json() : []))
+            .then((kids) => {
+                const bands = new Set();
+                (Array.isArray(kids) ? kids : []).forEach((child) => {
+                    const band = ageBandFromBirthDate(child.birthDate);
+                    if (band) bands.add(band.id);
+                });
+                setChildBands([...bands]);
+            })
+            .catch(() => setChildBands([]));
     }, []);
 
     useEffect(() => {
@@ -34,13 +67,15 @@ const ShopPage = () => {
             setLoading(true);
             setError('');
             try {
-                const params = new URLSearchParams();
-                if (category && category !== 'همه') params.set('category', category);
-                if (query) params.set('q', query);
-                const res = await fetch(`${API}/api/shop/products?${params.toString()}`);
+                const qs = new URLSearchParams();
+                if (category && category !== 'همه') qs.set('category', category);
+                if (query) qs.set('q', query);
+                if (skill) qs.set('skill', skill);
+                if (age) qs.set('age', age);
+                if (sort) qs.set('sort', sort);
+                const res = await fetch(`${API}/api/shop/products?${qs.toString()}`);
                 if (!res.ok) throw new Error('خطا در دریافت محصولات');
-                const data = await res.json();
-                setProducts(data);
+                setProducts(await res.json());
             } catch (err) {
                 setError(err.message || 'خطا در دریافت محصولات');
             } finally {
@@ -48,40 +83,50 @@ const ShopPage = () => {
             }
         };
         fetchProducts();
-    }, [category, query]);
+    }, [category, query, skill, age, sort]);
 
-    const handleSearch = (e) => {
-        e.preventDefault();
-        setQuery(search.trim());
-    };
+    const forYourChild = useMemo(() => {
+        if (!childBands.length) return [];
+        return (home?.newest || home?.bestsellers || []).filter((p) => childBands.includes(p.ageBand));
+    }, [childBands, home]);
 
     return (
-        <div className="shop-page">
+        <div className="shop-page shop-world">
             <MainNavbar />
             <main className="shop-main">
-                <header className="shop-hero animate-fade-up">
-                    <div className="shop-hero-copy">
-                        <p className="shop-brand">فروشگاه تات کیدز</p>
-                        <h1>فروشگاه مادر و کودک</h1>
-                        <p className="shop-hero-text">
-                            محصولات منتخب تغذیه، بازی، بهداشت و آموزش برای رشد سالم کودک شما
-                        </p>
-                        <div className="shop-hero-actions">
-                            <Link to="/cart" className="shop-btn shop-btn-primary">
-                                <FontAwesomeIcon icon={faShoppingBag} />
-                                سبد خرید
-                                {cartCount > 0 && <span className="shop-cart-badge">{cartCount}</span>}
-                            </Link>
-                            <Link to="/orders" className="shop-btn shop-btn-ghost">سفارش‌های من</Link>
-                        </div>
-                    </div>
-                    <div className="shop-hero-visual" aria-hidden="true">
-                        <FontAwesomeIcon icon={faStore} />
-                    </div>
-                </header>
+                <ShopHeroSlider
+                    banners={
+                        (home?.banners || []).length
+                            ? home.banners
+                            : (home?.onSale || []).slice(0, 4).map((product) => ({
+                                id: `sale-${product.id}`,
+                                title: product.name,
+                                subtitle: 'فروش ویژه — خرید مستقیم محصول',
+                                imageUrl: product.imageUrl,
+                                productId: product.id,
+                                link: `/shop/${product.id}`
+                            }))
+                    }
+                />
+
+                <ShopCategoryTiles
+                    tree={home?.categories || []}
+                    selected={category}
+                    onSelect={(name) => setParam('category', name)}
+                />
+
+                {!hasFilters && home?.onSale?.length > 0 && (
+                    <AmazingOffersRail products={home.onSale} campaign={home.campaign} />
+                )}
 
                 <section className="shop-toolbar animate-fade-up">
-                    <form className="shop-search" onSubmit={handleSearch}>
+                    <form
+                        className="shop-search"
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            setParam('q', search.trim());
+                        }}
+                    >
                         <FontAwesomeIcon icon={faSearch} />
                         <input
                             type="search"
@@ -92,60 +137,85 @@ const ShopPage = () => {
                         />
                         <button type="submit">جستجو</button>
                     </form>
-                    <div className="shop-categories" role="tablist" aria-label="دسته‌بندی‌ها">
-                        {CATEGORIES.map((cat) => (
-                            <button
-                                key={cat}
-                                type="button"
-                                role="tab"
-                                aria-selected={category === cat}
-                                className={`shop-cat-btn ${category === cat ? 'active' : ''}`}
-                                onClick={() => setCategory(cat)}
+                    <div className="shop-filter-panel shop-filter-selects">
+                        <CategoryCascade
+                            tree={home?.categories || []}
+                            value={category === 'همه' ? '' : category}
+                            onChange={(name) => setParam('category', name || 'همه')}
+                            emptyLabel="همه گروه‌ها"
+                        />
+                        <label>
+                            رده سنی
+                            <select
+                                className="shop-sort"
+                                value={age}
+                                onChange={(e) => setParam('age', e.target.value)}
                             >
-                                {cat}
-                            </button>
-                        ))}
+                                <option value="">همه سنین</option>
+                                {AGE_BANDS.map((band) => (
+                                    <option key={band.id} value={band.id}>{band.label}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            مهارت رشدی
+                            <select
+                                className="shop-sort"
+                                value={skill}
+                                onChange={(e) => setParam('skill', e.target.value)}
+                            >
+                                <option value="">همه مهارت‌ها</option>
+                                {(home?.skills || []).map((item) => (
+                                    <option key={item.slug} value={item.slug}>{item.title}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            مرتب‌سازی
+                            <select
+                                className="shop-sort"
+                                value={sort}
+                                onChange={(e) => setParam('sort', e.target.value)}
+                                aria-label="مرتب‌سازی"
+                            >
+                                {SORT_OPTIONS.map((option) => (
+                                    <option key={option.id} value={option.id}>{option.label}</option>
+                                ))}
+                            </select>
+                        </label>
                     </div>
                 </section>
 
                 {loading && <p className="shop-status">در حال بارگذاری محصولات...</p>}
                 {error && <p className="shop-status shop-error">{error}</p>}
 
+                {!hasFilters && !loading && !error && home && forYourChild.length > 0 && (
+                    <section>
+                        <div className="shop-section-title">
+                            <h2>مناسب برای کودک شما</h2>
+                        </div>
+                        <div className="shop-grid">
+                            {forYourChild.slice(0, 4).map((product, index) => (
+                                <ShopProductCard key={`kid-${product.id}`} product={product} index={index} />
+                            ))}
+                        </div>
+                    </section>
+                )}
+
                 {!loading && !error && products.length === 0 && (
-                    <p className="shop-status">محصولی در این دسته یافت نشد.</p>
+                    <p className="shop-status">محصولی در این فیلتر یافت نشد.</p>
                 )}
 
                 {!loading && !error && products.length > 0 && (
-                    <section className="shop-grid">
-                        {products.map((product, index) => (
-                            <Link
-                                key={product.id}
-                                to={`/shop/${product.id}`}
-                                className="shop-product animate-fade-up"
-                                style={{ animationDelay: `${0.04 * index}s` }}
-                            >
-                                <div className="shop-product-image">
-                                    {product.imageUrl ? (
-                                        <img src={`${API}${product.imageUrl}`} alt={product.name} />
-                                    ) : (
-                                        <div className="shop-product-placeholder">
-                                            <FontAwesomeIcon icon={faStore} />
-                                        </div>
-                                    )}
-                                    <span className="shop-product-cat">{product.category}</span>
-                                </div>
-                                <div className="shop-product-body">
-                                    <h2>{product.name}</h2>
-                                    <p>{product.description}</p>
-                                    <div className="shop-product-meta">
-                                        <strong>{formatPrice(product.price)}</strong>
-                                        <span className={product.stock > 0 ? 'in-stock' : 'out-stock'}>
-                                            {product.stock > 0 ? `${product.stock} عدد` : 'ناموجود'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </Link>
-                        ))}
+                    <section>
+                        <div className="shop-section-title">
+                            <h2>{hasFilters ? 'نتایج' : 'جدیدترین‌ها'}</h2>
+                        </div>
+                        <div className="shop-grid">
+                            {products.map((product, index) => (
+                                <ShopProductCard key={product.id} product={product} index={index} />
+                            ))}
+                        </div>
                     </section>
                 )}
             </main>

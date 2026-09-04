@@ -12,6 +12,7 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
+const { AGE_BANDS, flattenCategories } = require('./shop-model');
 const rateLimit = require('express-rate-limit');
 const {
     hashPassword,
@@ -26,8 +27,12 @@ const {
     MILESTONE_STATUS,
     getBandForAge,
     recommendActivities,
-    buildAgeGuidePayload
+    buildAgeGuidePayload,
+    calendarDayKey,
+    isCompletedOnDay
 } = require('./child-growth-data');
+const { deliverOtp } = require('./sms');
+const { analyzeConcernWithModel } = require('./child-growth-ai');
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -97,7 +102,9 @@ const API_CATALOG = {
             'POST /api/children/:childId/activities/:activityId/completion',
             'GET /api/children/:childId/growth-summary',
             'GET /api/children/:childId/concerns',
-            'POST /api/children/:childId/concerns'
+            'POST /api/children/:childId/concerns',
+            'POST /api/children/:childId/concerns/analyze',
+            'POST /api/children/:childId/safety/:itemId'
         ],
         growth: [
             'GET /api/growth/:childId',
@@ -131,12 +138,19 @@ const API_CATALOG = {
             'GET /api/podcasts/:id'
         ],
         shop: [
+            'GET /api/shop/home',
+            'GET /api/shop/sale',
             'GET /api/shop/categories',
+            'GET /api/shop/skills',
+            'GET /api/shop/age-bands',
             'GET /api/shop/products',
             'GET /api/shop/products/:id',
+            'GET /api/shop/products/:id/offers',
             'GET /api/shop/orders',
             'GET /api/shop/orders/:id',
-            'POST /api/shop/orders'
+            'POST /api/shop/orders',
+            'GET /api/shop/vendors/me',
+            'POST /api/shop/vendors/apply'
         ],
         reminders: [
             'POST /api/generate-reminders/:userId',
@@ -399,119 +413,6 @@ async function ensureDefaultAdmin() {
 function publicUser(user) {
     const { password, ...userToSend } = user;
     return userToSend;
-}
-
-function httpsJsonRequest(method, url, headers, bodyObj) {
-    const https = require('https');
-    const body = bodyObj === undefined ? null : JSON.stringify(bodyObj);
-    const u = new URL(url);
-    const reqHeaders = { Accept: 'application/json', ...(headers || {}) };
-    if (body !== null) {
-        reqHeaders['Content-Type'] = 'application/json';
-        reqHeaders['Content-Length'] = Buffer.byteLength(body);
-    }
-
-    return new Promise((resolve, reject) => {
-        const req = https.request(
-            {
-                hostname: u.hostname,
-                path: `${u.pathname}${u.search}`,
-                method,
-                headers: reqHeaders
-            },
-            (res) => {
-                let raw = '';
-                res.on('data', (chunk) => {
-                    raw += chunk;
-                });
-                res.on('end', () => {
-                    let data = raw;
-                    try {
-                        data = raw ? JSON.parse(raw) : null;
-                    } catch (_) {
-                        /* keep raw string */
-                    }
-                    resolve({ statusCode: res.statusCode, data, raw });
-                });
-            }
-        );
-        req.on('error', reject);
-        if (body !== null) req.write(body);
-        req.end();
-    });
-}
-
-function toSmsIrMobile(phone) {
-    // sms.ir examples commonly use 9xxxxxxxxx (without leading 0)
-    return phone.startsWith('0') ? phone.slice(1) : phone;
-}
-
-async function deliverOtp(phone, code) {
-    const apiKey = process.env.SMS_API_KEY;
-    const provider = String(process.env.SMS_PROVIDER || '').toLowerCase();
-    const lineNumber = process.env.SMS_LINE_NUMBER || process.env.SMS_LINE || '';
-    const templateId = process.env.SMS_TEMPLATE_ID;
-    const templateParam = process.env.SMS_TEMPLATE_PARAM || 'CODE';
-
-    if (!apiKey || provider === 'console' || provider === 'log') {
-        console.log(`[OTP] کد تأیید برای ${phone}: ${code} (معتبر به مدت ۵ دقیقه)`);
-        return { delivered: true, channel: 'log' };
-    }
-
-    if (provider === 'sms.ir' || provider === 'smsir') {
-        const mobile = toSmsIrMobile(phone);
-
-        // Preferred: Verify template (service line / high priority)
-        if (templateId) {
-            const response = await httpsJsonRequest(
-                'POST',
-                'https://api.sms.ir/v1/send/verify',
-                { 'x-api-key': apiKey, Accept: 'text/plain' },
-                {
-                    mobile,
-                    templateId: Number(templateId),
-                    parameters: [{ name: templateParam, value: String(code) }]
-                }
-            );
-            if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
-                return { delivered: true, channel: 'sms.ir-verify', data: response.data.data };
-            }
-            const errMsg =
-                (response.data && (response.data.message || response.data.Message)) ||
-                response.raw ||
-                `HTTP ${response.statusCode}`;
-            throw new Error(`sms.ir verify failed: ${errMsg}`);
-        }
-
-        // Fallback: bulk text SMS with configured line number
-        if (lineNumber) {
-            const messageText = `کد تأیید تات کیدز: ${code}\nاین کد تا ۵ دقیقه معتبر است.`;
-            const response = await httpsJsonRequest(
-                'POST',
-                'https://api.sms.ir/v1/send/bulk',
-                { 'x-api-key': apiKey, Accept: 'text/plain' },
-                {
-                    lineNumber: Number(lineNumber),
-                    messageText,
-                    mobiles: [mobile],
-                    sendDateTime: null
-                }
-            );
-            if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
-                return { delivered: true, channel: 'sms.ir-bulk', data: response.data.data };
-            }
-            const errMsg =
-                (response.data && (response.data.message || response.data.Message)) ||
-                response.raw ||
-                `HTTP ${response.statusCode}`;
-            throw new Error(`sms.ir bulk failed: ${errMsg}`);
-        }
-
-        throw new Error('SMS_TEMPLATE_ID یا SMS_LINE_NUMBER برای sms.ir تنظیم نشده است');
-    }
-
-    console.log(`[OTP] Unknown SMS_PROVIDER="${provider}". کد برای ${phone}: ${code}`);
-    return { delivered: true, channel: 'log' };
 }
 
 // --- Auth Routes ---
@@ -935,18 +836,22 @@ app.get('/api/children/:childId/age-guide', async (req, res) => {
     const child = owned.child;
     const milestoneStatuses = await getChildMilestoneMap(req.params.childId);
     const completions = await getChildCompletionMap(req.params.childId);
+    const growthState = await store.children.getGrowthState(req.params.childId);
+    const today = calendarDayKey();
     const payload = buildAgeGuidePayload(
         { ...child, name: getChildDisplayName(child) },
         {
             milestoneStatuses,
             completions,
+            safetyChecks: (growthState && growthState.safetyChecks) || {},
+            today,
             growthSummary: await buildGrowthSummaryForChild(req.params.childId, child),
             parentConcern: req.query.concern || null
         }
     );
     payload.activities = (payload.activities || []).map((activity) => ({
         ...activity,
-        completed: Boolean(completions[activity.id]?.completed),
+        completed: isCompletedOnDay(completions[activity.id], today),
         completion: completions[activity.id] || null
     }));
     res.json(payload);
@@ -1006,16 +911,20 @@ app.get('/api/children/:childId/activities', async (req, res) => {
         : guide.child.ageInMonths;
     const band = getBandForAge(contentAge);
     const completions = await getChildCompletionMap(req.params.childId);
+    const today = calendarDayKey();
     const recommended = recommendActivities(band, {
         milestoneStatuses: await getChildMilestoneMap(req.params.childId),
         completions,
-        parentConcern: req.query.concern || null
+        parentConcern: req.query.concern || null,
+        today,
+        dailyCount: 3
     });
     res.json({
         band: { id: band.id, title: band.title },
+        today,
         activities: recommended.map((activity) => ({
             ...activity,
-            completed: Boolean(completions[activity.id]?.completed),
+            completed: isCompletedOnDay(completions[activity.id], today),
             completion: completions[activity.id] || null
         }))
     });
@@ -1042,6 +951,48 @@ app.get('/api/children/:childId/growth-summary', async (req, res) => {
     if (!owned) return;
     const child = owned.child;
     res.json(await buildGrowthSummaryForChild(req.params.childId, child));
+});
+
+app.post('/api/children/:childId/safety/:itemId', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const state = await store.children.getGrowthState(req.params.childId);
+    const safetyChecks = { ...(state.safetyChecks || {}) };
+    const done = req.body && req.body.done === false ? false : true;
+    safetyChecks[req.params.itemId] = {
+        done,
+        updatedAt: new Date().toISOString()
+    };
+    await store.children.saveGrowthState(req.params.childId, { safetyChecks });
+    res.json({ itemId: req.params.itemId, ...safetyChecks[req.params.itemId] });
+});
+
+app.post('/api/children/:childId/concerns/analyze', async (req, res) => {
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+    const child = owned.child;
+    const text = String(req.body && (req.body.concern || req.body.text || req.body.parent_concern) || '').trim();
+    if (text.length < 4) {
+        return res.status(400).json({ message: 'نگرانی را کمی کامل‌تر بنویسید' });
+    }
+    const guide = buildAgeGuidePayload({ ...child, name: getChildDisplayName(child) }, {});
+    const analysis = await analyzeConcernWithModel({
+        name: getChildDisplayName(child),
+        gender: child.gender,
+        ageInMonths: guide.child.ageInMonths,
+        age_bracket: guide.band && guide.band.id
+    }, text);
+    const state = await store.children.getGrowthState(req.params.childId);
+    const entry = {
+        id: `c-${Date.now()}`,
+        topic: req.body && req.body.topic ? req.body.topic : 'متن آزاد',
+        text,
+        result: analysis.triage_status,
+        analysis,
+        createdAt: new Date().toISOString()
+    };
+    await store.children.saveGrowthState(req.params.childId, { concerns: [entry, ...(state.concerns || [])] });
+    res.status(201).json(analysis);
 });
 
 app.get('/api/children/:childId/concerns', async (req, res) => {
@@ -1396,6 +1347,20 @@ const isAdmin = (req, res, next) => {
     }).catch(next);
 };
 
+const requireVendor = (req, res, next) => {
+    Promise.resolve(resolveAuthUser(req)).then(async (user) => {
+        if (!user) return res.status(401).json({ message: 'لطفا وارد شوید' });
+        const vendor = await store.shop.getVendorByUser(user.id);
+        if (!vendor) return res.status(403).json({ message: 'حساب فروشندگی یافت نشد' });
+        if (vendor.status !== 'active' && !user.isAdmin) {
+            return res.status(403).json({ message: 'پنل فروشنده هنوز تأیید نشده است' });
+        }
+        req.user = user;
+        req.vendor = vendor;
+        next();
+    }).catch(next);
+};
+
 // --- Admin Routes ---
 app.get('/api/admin/users', isAdmin, async (req, res) => {
     res.json((await store.users.list()).map((u) => publicUser(u)));
@@ -1481,15 +1446,51 @@ app.get('/api/tickets', async (req, res) => {
     res.json(await store.tickets.listByUser(user.id));
 });
 
-app.post('/api/tickets', async (req, res) => {
+const TICKET_GROUPS = {
+    'حساب کاربری': ['ورود و ثبت‌نام', 'پروفایل', 'رمز عبور'],
+    'کودکان و پرونده': ['ثبت کودک', 'واکسیناسیون', 'نمودار رشد', 'پرونده سلامت'],
+    'فروشگاه': ['سفارش', 'پرداخت', 'محصول'],
+    'فنی': ['خطای سایت', 'پیشنهاد'],
+    'سایر': ['عمومی']
+};
+
+app.get('/api/tickets/groups', (req, res) => {
+    res.json(TICKET_GROUPS);
+});
+
+function maybeMultipart(field, maxCount) {
+    return (req, res, next) => {
+        const type = String(req.headers['content-type'] || '');
+        if (type.includes('multipart/form-data')) {
+            return upload.array(field, maxCount)(req, res, next);
+        }
+        return next();
+    };
+}
+
+app.post('/api/tickets', maybeMultipart('attachments', 4), async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
     const subject = String(req.body.subject || '').trim();
     const content = String(req.body.content || req.body.message || '').trim();
+    const groupName = String(req.body.groupName || req.body.group || 'سایر').trim();
+    const subgroup = String(req.body.subgroup || 'عمومی').trim();
     if (!subject || !content) {
         return res.status(400).json({ message: 'موضوع و متن تیکت الزامی است' });
     }
-    const ticket = await store.tickets.create({ userId: user.id, subject, content });
+    const allowed = TICKET_GROUPS[groupName];
+    if (!allowed || !allowed.includes(subgroup)) {
+        return res.status(400).json({ message: 'گروه یا زیرگروه نامعتبر است' });
+    }
+    const attachments = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    const ticket = await store.tickets.create({
+        userId: user.id,
+        subject,
+        content,
+        groupName,
+        subgroup,
+        attachments
+    });
     res.status(201).json(ticket);
 });
 
@@ -1505,20 +1506,41 @@ app.get('/api/tickets/:id', async (req, res) => {
 });
 
 // --- Banner, News, Video, Podcast Routes (Content Management) ---
-app.get('/api/banners', async (req, res) => res.set('Cache-Control', 'no-store').json(await store.banners.list()));
+app.get('/api/banners', async (req, res) => {
+    const list = store.banners.listByPlacement
+        ? await store.banners.listByPlacement(req.query.placement)
+        : await store.banners.list();
+    res.set('Cache-Control', 'no-store').json(list);
+});
 app.post('/api/admin/banners', isAdmin, upload.single('image'), async (req, res) => {
-    const { title, link } = req.body;
+    const { title, link, placement, productId, subtitle, sortOrder } = req.body;
     if (!req.file) return res.status(400).json({ message: 'تصویر بنر الزامی است' });
-    const newBanner = await store.banners.create({ title, link, imageUrl: `/uploads/${req.file.filename}` });
+    const parsedProduct = productId ? Number(productId) : null;
+    const newBanner = await store.banners.create({
+        title,
+        link: link || (parsedProduct ? `/shop/${parsedProduct}` : ''),
+        imageUrl: `/uploads/${req.file.filename}`,
+        placement: placement === 'shop' ? 'shop' : 'home',
+        productId: parsedProduct,
+        subtitle,
+        sortOrder
+    });
     res.status(201).json(newBanner);
 });
 app.put('/api/admin/banners/:id', isAdmin, upload.single('image'), async (req, res) => {
     const current = (await store.banners.list()).find((b) => Number(b.id) === Number(req.params.id));
     if (!current) return res.status(404).json({ message: 'بنر یافت نشد' });
+    const parsedProduct = req.body.productId !== undefined
+        ? (req.body.productId ? Number(req.body.productId) : null)
+        : current.productId;
     const updated = await store.banners.update(req.params.id, {
         title: req.body.title !== undefined ? req.body.title : current.title,
-        link: req.body.link !== undefined ? req.body.link : current.link,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : current.imageUrl
+        link: req.body.link !== undefined ? req.body.link : (parsedProduct ? `/shop/${parsedProduct}` : current.link),
+        imageUrl: req.file ? `/uploads/${req.file.filename}` : current.imageUrl,
+        placement: req.body.placement || current.placement,
+        productId: parsedProduct,
+        subtitle: req.body.subtitle !== undefined ? req.body.subtitle : current.subtitle,
+        sortOrder: req.body.sortOrder !== undefined ? req.body.sortOrder : current.sortOrder
     });
     res.json(updated);
 });
@@ -1655,12 +1677,138 @@ const parsePrice = (value) => {
     return Number.isFinite(n) && n >= 0 ? n : null;
 };
 
+const parseSkillIds = (body) => {
+    if (!body) return undefined;
+    if (Array.isArray(body.skillIds)) return body.skillIds;
+    if (typeof body.skillIds === 'string' && body.skillIds.trim()) {
+        try {
+            const parsed = JSON.parse(body.skillIds);
+            return Array.isArray(parsed) ? parsed : String(body.skillIds).split(',').filter(Boolean);
+        } catch (_) {
+            return String(body.skillIds).split(',').map((s) => s.trim()).filter(Boolean);
+        }
+    }
+    if (body['skillIds[]'] != null) return [].concat(body['skillIds[]']);
+    return undefined;
+};
+
 app.get('/api/shop/categories', async (req, res) => {
-    res.json(SHOP_CATEGORIES);
+    const tree = await store.productCategories.tree();
+    res.json(tree.length ? tree : SHOP_CATEGORIES.map((name) => ({ name, children: [] })));
+});
+
+app.get('/api/shop/skills', async (req, res) => {
+    res.json(await store.shop.listSkills());
+});
+
+app.get('/api/shop/age-bands', (req, res) => {
+    res.json(AGE_BANDS);
+});
+
+app.get('/api/shop/home', async (req, res) => {
+    const [newest, popular, allActive, skills, categories, vendor, campaign, shopBanners] = await Promise.all([
+        store.products.listActive({ sort: 'newest' }),
+        store.products.listActive({ sort: 'popular' }),
+        store.products.listActive({}),
+        store.shop.listSkills(),
+        store.productCategories.tree(),
+        store.shop.getInternalVendor(),
+        store.shop.campaign(),
+        store.banners.listByPlacement ? store.banners.listByPlacement('shop') : store.banners.list()
+    ]);
+    const onSale = (allActive || []).filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
+    res.json({
+        mode: 'marketplace',
+        vendor: vendor || { slug: 'tatkids', displayName: 'مجموعه تات کیدز', kind: 'internal' },
+        ageBands: AGE_BANDS,
+        skills,
+        categories: categories.length ? categories : SHOP_CATEGORIES.map((name) => ({ name, children: [] })),
+        newest: (newest || []).slice(0, 8),
+        bestsellers: (popular || []).slice(0, 8),
+        onSale: onSale.slice(0, 10),
+        campaign,
+        banners: shopBanners
+    });
+});
+
+app.get('/api/shop/sale', async (req, res) => {
+    const products = await store.products.listActive({});
+    const onSale = (products || []).filter((p) => p.compareAtPrice && p.compareAtPrice > p.price);
+    res.json({
+        campaign: await store.shop.campaign(),
+        products: onSale
+    });
+});
+
+app.get('/api/shop/products/:id/offers', async (req, res) => {
+    res.json(await store.shop.listOffers(req.params.id));
+});
+
+app.get('/api/admin/product-categories', isAdmin, async (req, res) => {
+    res.json(await store.productCategories.tree({ includeInactive: true }));
+});
+
+app.post('/api/admin/product-categories', isAdmin, async (req, res) => {
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.status(400).json({ message: 'نام گروه الزامی است' });
+    res.status(201).json(await store.productCategories.create({
+        name,
+        parentId: req.body.parentId || null,
+        sortOrder: req.body.sortOrder || 0
+    }));
+});
+
+app.put('/api/admin/product-categories/:id', isAdmin, async (req, res) => {
+    const updated = await store.productCategories.update(req.params.id, {
+        name: req.body.name,
+        parentId: req.body.parentId || null,
+        sortOrder: req.body.sortOrder || 0
+    });
+    if (!updated) return res.status(404).json({ message: 'گروه یافت نشد' });
+    res.json(updated);
+});
+
+app.delete('/api/admin/product-categories/:id', isAdmin, async (req, res) => {
+    if (await store.productCategories.remove(req.params.id)) {
+        return res.json({ message: 'گروه حذف شد' });
+    }
+    res.status(404).json({ message: 'گروه یافت نشد' });
+});
+
+app.get('/api/shop/products/:id/comments', async (req, res) => {
+    res.json(await store.productComments.listByProduct(req.params.id));
+});
+
+app.post('/api/shop/products/:id/comments', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const body = String(req.body.body || req.body.comment || '').trim();
+    if (body.length < 3) return res.status(400).json({ message: 'متن نظر خیلی کوتاه است' });
+    const product = await store.products.getById(req.params.id);
+    if (!product || product.active === false) return res.status(404).json({ message: 'محصول یافت نشد' });
+    const comment = await store.productComments.create({
+        productId: product.id,
+        userId: user.id,
+        body,
+        rating: req.body.rating
+    });
+    res.status(201).json(comment);
 });
 
 app.get('/api/shop/products', async (req, res) => {
-    res.json(paginateList(await store.products.listActive({ category: req.query.category, q: req.query.q }), req));
+    const filters = {
+        category: req.query.category,
+        q: req.query.q,
+        sort: req.query.sort,
+        age: req.query.age || req.query.ageBand,
+        skill: req.query.skill
+    };
+    if (req.query.categoryId) {
+        const tree = await store.productCategories.tree({ includeInactive: true });
+        const node = flattenCategories(tree).find((c) => String(c.id) === String(req.query.categoryId));
+        if (node) filters.category = node.name;
+    }
+    res.json(paginateList(await store.products.listActive(filters), req));
 });
 
 app.get('/api/shop/products/:id', async (req, res) => {
@@ -1668,15 +1816,16 @@ app.get('/api/shop/products/:id', async (req, res) => {
     if (!product || product.active === false) {
         return res.status(404).json({ message: 'محصول یافت نشد' });
     }
-    res.json(product);
+    const offers = await store.shop.listOffers(product.id);
+    res.json({ ...product, offers });
 });
 
 app.get('/api/admin/products', isAdmin, async (req, res) => {
     res.json(await store.products.listAll());
 });
 
-app.post('/api/admin/products', isAdmin, upload.single('image'), async (req, res) => {
-    const { name, description, category, price, stock } = req.body;
+app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, res) => {
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
     }
@@ -1689,26 +1838,41 @@ app.post('/api/admin/products', isAdmin, upload.single('image'), async (req, res
         return res.status(400).json({ message: 'موجودی معتبر نیست' });
     }
 
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
     const newProduct = await store.products.create({
         name: String(name).trim(),
         description: description ? String(description).trim() : '',
-        category: SHOP_CATEGORIES.includes(category) ? category : 'تغذیه',
+        category: category ? String(category).trim() : 'تغذیه',
         price: parsedPrice,
         stock: parsedStock,
-        imageUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        imageUrl: uploaded[0] || null,
         active: true,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        ageBand,
+        brand,
+        safetyWarning,
+        compareAtPrice,
+        skillIds: parseSkillIds(req.body)
     });
-    res.status(201).json(newProduct);
+    if (uploaded.length) {
+        await store.productImages.replace(newProduct.id, uploaded);
+    }
+    res.status(201).json(await store.products.getById(newProduct.id));
 });
 
-app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, res) => {
+app.put('/api/admin/products/:id', isAdmin, upload.array('images', 8), async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const current = await store.products.getById(id);
     if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
 
-    const { name, description, category, price, stock, active } = req.body;
+    const { name, description, category, price, stock, active, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
     const updated = { ...current, updatedAt: new Date().toISOString() };
+    if (ageBand !== undefined) updated.ageBand = ageBand;
+    if (brand !== undefined) updated.brand = brand;
+    if (safetyWarning !== undefined) updated.safetyWarning = safetyWarning;
+    if (compareAtPrice !== undefined) updated.compareAtPrice = compareAtPrice;
+    const skillIds = parseSkillIds(req.body);
+    if (skillIds) updated.skillIds = skillIds;
 
     if (name !== undefined) {
         if (!String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -1716,7 +1880,7 @@ app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, 
     }
     if (description !== undefined) updated.description = String(description).trim();
     if (category !== undefined) {
-        updated.category = SHOP_CATEGORIES.includes(category) ? category : updated.category;
+        updated.category = String(category || '').trim() || updated.category;
     }
     if (price !== undefined && price !== '') {
         const parsedPrice = parsePrice(price);
@@ -1733,9 +1897,13 @@ app.put('/api/admin/products/:id', isAdmin, upload.single('image'), async (req, 
     if (active !== undefined) {
         updated.active = active === true || active === 'true';
     }
-    if (req.file) updated.imageUrl = `/uploads/${req.file.filename}`;
-
-    res.json(await store.products.update(id, updated));
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    if (uploaded[0]) updated.imageUrl = uploaded[0];
+    const saved = await store.products.update(id, updated);
+    if (uploaded.length) {
+        await store.productImages.replace(id, uploaded);
+    }
+    res.json(await store.products.getById(id) || saved);
 });
 
 app.delete('/api/admin/products/:id', isAdmin, async (req, res) => {
@@ -2150,6 +2318,75 @@ app.delete('/api/admin/messages/:id', isAdmin, async (req, res) => {
         return res.status(200).json({ message: 'پیام حذف شد' });
     }
     res.status(404).json({ message: 'پیام یافت نشد' });
+});
+
+app.get('/api/shop/vendors/me', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    res.json(await store.shop.getVendorByUser(user.id));
+});
+
+app.post('/api/shop/vendors/apply', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const displayName = String(req.body.displayName || '').trim();
+    if (displayName.length < 3) return res.status(400).json({ message: 'نام فروشگاه خیلی کوتاه است' });
+    const vendor = await store.shop.applyVendor({
+        userId: user.id,
+        displayName,
+        phone: req.body.phone || user.mobile || '',
+        docsNote: req.body.docsNote || ''
+    });
+    res.status(201).json(vendor);
+});
+
+app.get('/api/admin/vendors', isAdmin, async (req, res) => {
+    res.json(await store.shop.listVendors());
+});
+
+app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
+    const updated = await store.shop.updateVendor(req.params.id, {
+        displayName: req.body.displayName,
+        status: req.body.status,
+        commissionPct: req.body.commissionPct,
+        settlementCycle: req.body.settlementCycle,
+        phone: req.body.phone,
+        docsNote: req.body.docsNote
+    });
+    if (!updated) return res.status(404).json({ message: 'فروشنده یافت نشد' });
+    res.json(updated);
+});
+
+app.get('/api/vendor/offers', requireVendor, async (req, res) => {
+    const all = await store.products.listAll();
+    res.json((all || []).filter((p) => Number(p.vendorId) === Number(req.vendor.id)));
+});
+
+app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async (req, res) => {
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
+    if (!name || !String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
+    const parsedPrice = parsePrice(price);
+    if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
+    const parsedStock = stock === undefined || stock === '' ? 0 : parseInt(stock, 10);
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    const created = await store.products.create({
+        name: String(name).trim(),
+        description: description ? String(description).trim() : '',
+        category: category ? String(category).trim() : 'اسباب‌بازی',
+        price: parsedPrice,
+        stock: Number.isFinite(parsedStock) ? parsedStock : 0,
+        imageUrl: uploaded[0] || null,
+        active: true,
+        createdAt: new Date().toISOString(),
+        ageBand,
+        brand,
+        safetyWarning,
+        compareAtPrice,
+        skillIds: parseSkillIds(req.body),
+        vendorId: req.vendor.id
+    });
+    if (uploaded.length) await store.productImages.replace(created.id, uploaded);
+    res.status(201).json(await store.products.getById(created.id));
 });
 
 app.use((err, req, res, next) => {

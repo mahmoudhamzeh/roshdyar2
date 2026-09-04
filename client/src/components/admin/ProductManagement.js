@@ -1,18 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
+import { AGE_BANDS, findCategoryPath } from '../../utils/shop';
+import CategoryCascade from '../CategoryCascade';
 import './ProductManagement.css';
 
 const API = '';
-const CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
-
 const emptyForm = {
     name: '',
     description: '',
-    category: 'تغذیه',
+    category: '',
     price: '',
     stock: '',
     active: true,
-    image: null,
+    images: [],
+    ageBand: '',
+    compareAtPrice: '',
+    brand: '',
+    safetyWarning: '',
+    skillIds: [],
 };
 
 const getAdmin = () => {
@@ -29,6 +34,8 @@ const ProductManagement = () => {
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [form, setForm] = useState(emptyForm);
+    const [categories, setCategories] = useState([]);
+    const [skills, setSkills] = useState([]);
 
     const fetchProducts = async () => {
         setLoading(true);
@@ -40,6 +47,12 @@ const ProductManagement = () => {
             if (!res.ok) throw new Error('Failed to fetch products');
             const data = await res.json();
             setProducts(data);
+            const catRes = await fetch(`${API}/api/admin/product-categories`, {
+                headers: { 'x-user-id': admin.id }
+            });
+            if (catRes.ok) setCategories(await catRes.json());
+            const skillRes = await fetch(`${API}/api/shop/skills`);
+            if (skillRes.ok) setSkills(await skillRes.json());
         } catch (err) {
             console.error(err);
         } finally {
@@ -66,13 +79,24 @@ const ProductManagement = () => {
             price: String(product.price ?? ''),
             stock: String(product.stock ?? ''),
             active: product.active !== false,
-            image: null,
+            images: [],
+            ageBand: product.ageBand || '',
+            compareAtPrice: product.compareAtPrice ? String(product.compareAtPrice) : '',
+            brand: product.brand || '',
+            safetyWarning: product.safetyWarning || '',
+            skillIds: (product.skills || []).map((s) => s.id),
         });
         setShowForm(true);
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        const path = findCategoryPath(categories, form.category);
+        const leaf = path[path.length - 1];
+        if (!form.category || (leaf && (leaf.children || []).length)) {
+            alert('گروه و زیرگروه محصول را تا آخرین سطح انتخاب کنید.');
+            return;
+        }
         const admin = getAdmin();
         const formData = new FormData();
         formData.append('name', form.name);
@@ -81,7 +105,12 @@ const ProductManagement = () => {
         formData.append('price', form.price);
         formData.append('stock', form.stock);
         formData.append('active', String(form.active));
-        if (form.image) formData.append('image', form.image);
+        formData.append('ageBand', form.ageBand || '');
+        formData.append('compareAtPrice', form.compareAtPrice || '');
+        formData.append('brand', form.brand || '');
+        formData.append('safetyWarning', form.safetyWarning || '');
+        formData.append('skillIds', JSON.stringify(form.skillIds || []));
+        Array.from(form.images || []).forEach((file) => formData.append('images', file));
 
         try {
             const url = editingId
@@ -156,19 +185,18 @@ const ProductManagement = () => {
                         placeholder="توضیحات"
                         rows="4"
                     />
-                    <label>دسته‌بندی</label>
-                    <select
-                        name="category"
+                    <label>گروه و زیرگروه محصول</label>
+                    <CategoryCascade
+                        tree={categories}
                         value={form.category}
-                        onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
-                    >
-                        {CATEGORIES.map((cat) => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                    </select>
+                        onChange={(name) => setForm((p) => ({ ...p, category: name }))}
+                        emptyLabel="انتخاب گروه"
+                        required
+                        forceLeaf
+                    />
                     <div className="product-form-row">
                         <label>
-                            قیمت (تومان)
+                            قیمت فروش (تومان)
                             <input
                                 type="number"
                                 min="0"
@@ -177,6 +205,17 @@ const ProductManagement = () => {
                                 required
                             />
                         </label>
+                        <label>
+                            قیمت قبل از تخفیف
+                            <input
+                                type="number"
+                                min="0"
+                                value={form.compareAtPrice}
+                                onChange={(e) => setForm((p) => ({ ...p, compareAtPrice: e.target.value }))}
+                            />
+                        </label>
+                    </div>
+                    <div className="product-form-row">
                         <label>
                             موجودی
                             <input
@@ -187,6 +226,51 @@ const ProductManagement = () => {
                                 required
                             />
                         </label>
+                        <label>
+                            رده سنی
+                            <select
+                                value={form.ageBand}
+                                onChange={(e) => setForm((p) => ({ ...p, ageBand: e.target.value }))}
+                            >
+                                <option value="">انتخاب رده سنی</option>
+                                {AGE_BANDS.map((band) => (
+                                    <option key={band.id} value={band.id}>{band.label}</option>
+                                ))}
+                            </select>
+                        </label>
+                    </div>
+                    <input
+                        type="text"
+                        value={form.brand}
+                        onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
+                        placeholder="برند"
+                    />
+                    <input
+                        type="text"
+                        value={form.safetyWarning}
+                        onChange={(e) => setForm((p) => ({ ...p, safetyWarning: e.target.value }))}
+                        placeholder="هشدار ایمنی (مثلاً خطر خفگی زیر ۳ سال)"
+                    />
+                    <label>مهارت‌های رشدی</label>
+                    <div className="product-skill-picks">
+                        {skills.map((skill) => {
+                            const checked = (form.skillIds || []).includes(skill.id);
+                            return (
+                                <label key={skill.id} className="product-active-label">
+                                    <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => setForm((p) => ({
+                                            ...p,
+                                            skillIds: checked
+                                                ? p.skillIds.filter((id) => id !== skill.id)
+                                                : [...(p.skillIds || []), skill.id]
+                                        }))}
+                                    />
+                                    {skill.title}
+                                </label>
+                            );
+                        })}
                     </div>
                     <label className="product-active-label">
                         <input
@@ -196,11 +280,12 @@ const ProductManagement = () => {
                         />
                         فعال در فروشگاه
                     </label>
-                    <label>تصویر محصول (اختیاری)</label>
+                    <label>تصاویر محصول (چند فایل)</label>
                     <input
                         type="file"
                         accept="image/*"
-                        onChange={(e) => setForm((p) => ({ ...p, image: e.target.files[0] || null }))}
+                        multiple
+                        onChange={(e) => setForm((p) => ({ ...p, images: e.target.files }))}
                     />
                     <div className="product-form-actions">
                         <button type="submit">{editingId ? 'ذخیره تغییرات' : 'ایجاد محصول'}</button>

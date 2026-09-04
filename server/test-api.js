@@ -81,7 +81,7 @@ async function run() {
 
     try {
         const health = await waitForHealth(child);
-        assert.strictEqual(health.schemaVersion, 2);
+        assert.strictEqual(health.schemaVersion, 3);
         assert.strictEqual(health.wal, true);
         assert.ok(health.counts.users >= 1);
 
@@ -111,6 +111,24 @@ async function run() {
         assert.ok(products.data.length >= 1);
         const product = products.data[0];
         const stockBefore = product.stock;
+        assert.ok(product.offerId || product.vendorName, 'catalog product should carry offer/vendor');
+
+        const skills = await request('GET', '/api/shop/skills');
+        assert.strictEqual(skills.status, 200);
+        assert.ok(Array.isArray(skills.data) && skills.data.length >= 5);
+
+        const shopHome = await request('GET', '/api/shop/home');
+        assert.strictEqual(shopHome.status, 200);
+        assert.ok(shopHome.data.mode === 'marketplace' || shopHome.data.mode === 'single_vendor');
+        assert.ok(Array.isArray(shopHome.data.onSale));
+        assert.ok(shopHome.data.vendor);
+        assert.ok(Array.isArray(shopHome.data.newest));
+
+        const sorted = await request('GET', '/api/shop/products?sort=price-asc');
+        assert.strictEqual(sorted.status, 200);
+        if (sorted.data.length >= 2) {
+            assert.ok(sorted.data[0].price <= sorted.data[1].price);
+        }
 
         const children = await request('GET', '/api/children', {
             headers: auth
@@ -125,6 +143,18 @@ async function run() {
         assert.strictEqual(ageGuide.status, 200, JSON.stringify(ageGuide.data));
         assert.ok(ageGuide.data.band);
         assert.ok(Array.isArray(ageGuide.data.milestones.items));
+        assert.ok(Array.isArray(ageGuide.data.expectSections) && ageGuide.data.expectSections.length >= 3);
+        assert.ok(Array.isArray(ageGuide.data.activities));
+        assert.ok(ageGuide.data.activities.length <= 3);
+        assert.ok(ageGuide.data.today);
+
+        const analyzed = await request('POST', `/api/children/${childId}/concerns/analyze`, {
+            headers: auth,
+            body: { concern: 'پسرم هنوز تنهایی راه نمیفته و فقط جیغ می‌زند' }
+        });
+        assert.strictEqual(analyzed.status, 201, JSON.stringify(analyzed.data));
+        assert.ok(analyzed.data.triage_status);
+        assert.ok(analyzed.data.status_badge);
 
         const growth = await request('GET', `/api/growth/${childId}`, { headers: auth });
         assert.strictEqual(growth.status, 200);
@@ -161,6 +191,14 @@ async function run() {
 
         const productAfter = await request('GET', `/api/shop/products/${product.id}`);
         assert.strictEqual(productAfter.data.stock, stockBefore - 1);
+
+        const adminComment = await request('POST', `/api/shop/products/${product.id}/comments`, {
+            headers: auth,
+            body: { body: 'نظر تست ادمین برای امتیاز محصول', rating: 4 }
+        });
+        assert.strictEqual(adminComment.status, 201, JSON.stringify(adminComment.data));
+        assert.strictEqual(adminComment.data.author, 'Amin');
+        assert.ok(!/\d{8,}/.test(String(adminComment.data.author || '')));
 
         const stats = await request('GET', '/api/admin/stats', {
             headers: auth
@@ -227,6 +265,25 @@ async function run() {
         });
         assert.strictEqual(me.status, 200, JSON.stringify(me.data));
         assert.strictEqual(me.data.user.id, verify.data.user.id);
+
+        const phoneComment = await request('POST', `/api/shop/products/${product.id}/comments`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { body: 'نظر کاربر پیامکی بدون نمایش موبایل', rating: 5 }
+        });
+        assert.strictEqual(phoneComment.status, 201, JSON.stringify(phoneComment.data));
+        assert.strictEqual(phoneComment.data.author, 'کاربر تات کیدز');
+        assert.ok(!/\d{8,}/.test(String(phoneComment.data.author || '')));
+
+        const categories = await request('GET', '/api/shop/categories');
+        assert.strictEqual(categories.status, 200);
+        const names = [];
+        const walk = (nodes) => (nodes || []).forEach((node) => {
+            names.push(node.name);
+            walk(node.children);
+        });
+        walk(categories.data);
+        assert.ok(names.includes('پسرانه'));
+        assert.ok(names.includes('لگو'));
 
         const loginAgain = await request('POST', '/api/login', {
             body: { login: 'Amin', password: 'admin' }

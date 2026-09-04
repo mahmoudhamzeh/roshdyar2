@@ -8,7 +8,7 @@
     "dev": "nodemon server.js",
     "migrate:sqlite": "node migrate-to-sqlite.js",
     "migrate:postgres": "node migrate-to-postgres.js",
-    "test": "node test-auth.js && node test-relational-db.js && node test-api.js"
+    "test": "node test-auth.js && node test-sms.js && node test-relational-db.js && node test-child-growth.js && node test-api.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

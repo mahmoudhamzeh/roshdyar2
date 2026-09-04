@@ -118,11 +118,147 @@ function normalizeStatus(entry) {
   return entry.status || MILESTONE_STATUS.NOT_CHECKED;
 }
 
+function calendarDayKey(now) {
+  const date = now instanceof Date ? now : new Date(now || Date.now());
+  if (Number.isNaN(date.getTime())) {
+    const fallback = new Date();
+    return `${fallback.getUTCFullYear()}-${String(fallback.getUTCMonth() + 1).padStart(2, '0')}-${String(fallback.getUTCDate()).padStart(2, '0')}`;
+  }
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function completionDayKey(completion) {
+  if (!completion || typeof completion !== 'object') return null;
+  const at = completion.completedAt || completion.updatedAt || null;
+  if (!at) return null;
+  return String(at).slice(0, 10);
+}
+
+function hashDay(value) {
+  return String(value || '').split('').reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+}
+
+function isCompletedOnDay(completion, dayKey) {
+  if (!completion || (completion.completed !== true && completion !== true)) return false;
+  const doneDay = completionDayKey(completion);
+  return Boolean(doneDay && doneDay === dayKey);
+}
+
+const EXPECT_BLUEPRINT = [
+  { id: 'speech', title: 'کلام و ارتباط', domains: ['LANGUAGE', 'COGNITIVE'], sources: [] },
+  { id: 'motor', title: 'حرکت و تعادل', domains: ['MOTOR'], sources: [] },
+  { id: 'food', title: 'تغذیه و استقلال', domains: ['INDEPENDENCE'], sources: ['nutrition'] },
+  { id: 'sleep', title: 'خواب و روتین', domains: [], sources: ['sleep'] },
+  { id: 'mood', title: 'رفتار و خلق‌وخو', domains: ['SOCIAL'], sources: ['behavior'] }
+];
+
+function shortText(value, max) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1).trim()}…`;
+}
+
+function itemsFromMilestones(band, domains) {
+  return ((band && band.milestones) || [])
+    .filter((item) => domains.includes(item.domain))
+    .slice(0, 3)
+    .map((item) => ({
+      title: item.title,
+      summary: shortText(item.description, 90),
+      detail: item.description
+    }));
+}
+
+function buildExpectSections(band) {
+  const focus = (band && band.monthlyFocus) || [];
+  return EXPECT_BLUEPRINT.map((slot) => {
+    const fromFocus = focus
+      .filter((item) => slot.domains.includes(item.domain))
+      .map((item) => ({
+        title: item.title,
+        summary: item.summary,
+        detail: item.detail
+      }));
+    const extra = [];
+    slot.sources.forEach((source) => {
+      const block = band && band[source];
+      if (!block) return;
+      if (block.overview) {
+        extra.push({
+          title: source === 'sleep' ? 'خواب این مرحله' : source === 'nutrition' ? 'تغذیه این مرحله' : 'رفتار این مرحله',
+          summary: shortText(block.overview, 90),
+          detail: block.overview
+        });
+      }
+      const list = block.routine || block.priorities || block.topics || [];
+      list.slice(0, 2).forEach((item) => {
+        extra.push({
+          title: item.title,
+          summary: shortText(item.detail, 90),
+          detail: item.detail
+        });
+      });
+    });
+    let items = (fromFocus.length ? fromFocus : extra).slice(0, 3);
+    if (!items.length && extra.length) items = extra.slice(0, 2);
+    if (!items.length && slot.domains.length) items = itemsFromMilestones(band, slot.domains);
+    if (!items.length) {
+      items = [{
+        title: slot.title,
+        summary: 'در این ماه این حوزه را آرام و کوتاه دنبال کنید.',
+        detail: 'بازی کوتاه روزانه در همین حوزه کافی است؛ فشار و مقایسه با کودکان دیگر لازم نیست.'
+      }];
+    }
+    return {
+      id: slot.id,
+      title: slot.title,
+      teaser: items[0] ? items[0].summary || items[0].title : slot.title,
+      items
+    };
+  });
+}
+
+function buildRedFlags(band) {
+  const healthItems = ((band && band.health && (band.health.priorities || band.health.topics)) || []).slice(0, 3);
+  const safetyItems = ((band && band.safety && band.safety.items) || []).slice(0, 2);
+  const flags = [];
+  healthItems.forEach((item) => {
+    flags.push({
+      id: item.id || `h-${item.title}`,
+      title: item.title,
+      detail: shortText(item.detail, 140),
+      level: 'watch'
+    });
+  });
+  safetyItems.forEach((item) => {
+    flags.push({
+      id: item.id || `s-${item.title}`,
+      title: item.title,
+      detail: shortText(item.detail, 140),
+      level: 'alert'
+    });
+  });
+  return flags.slice(0, 5);
+}
+
+function buildSafetyTasks(band, safetyChecks) {
+  const checks = safetyChecks || {};
+  return ((band && band.safety && band.safety.items) || []).slice(0, 4).map((item) => ({
+    id: item.id,
+    title: item.title,
+    detail: shortText(item.detail, 120),
+    done: Boolean(checks[item.id] && checks[item.id].done)
+  }));
+}
+
 function recommendActivities(band, options) {
   const opts = options || {};
   const milestoneStatuses = opts.milestoneStatuses || {};
   const completions = opts.completions || {};
   const parentConcern = opts.parentConcern || null;
+  const todayKey = opts.today || calendarDayKey();
+  const dailyCount = Number(opts.dailyCount) > 0 ? Number(opts.dailyCount) : 3;
   const activities = (band && band.activities) || [];
   if (!activities.length) return [];
 
@@ -134,6 +270,9 @@ function recommendActivities(band, options) {
   const scored = activities.map((activity) => {
     let score = 10;
     const reasons = [];
+    const completion = completions[activity.id];
+    const completedToday = isCompletedOnDay(completion, todayKey);
+    const lastDay = completionDayKey(completion);
 
     const related = activity.relatedMilestones || [];
     let relatedBoost = 0;
@@ -152,13 +291,15 @@ function recommendActivities(band, options) {
       reasons.push('مرتبط با مهارتی که هنوز کامل مشاهده نشده');
     }
 
-    const completion = completions[activity.id];
-    if (completion && (completion.completed === true || completion === true)) {
-      score -= 8;
-      reasons.push('اخیراً انجام شده؛ می‌توانید بعداً تکرار کنید');
+    if (completedToday) {
+      score -= 20;
+      reasons.push('امروز انجام شده');
+    } else if (lastDay && lastDay !== todayKey) {
+      score -= 3;
+      reasons.push('قبلاً انجام شده؛ امروز بازی تازه‌تری پیشنهاد می‌شود');
     } else {
       score += 2;
-      reasons.push('هنوز در فهرست کارهای انجام‌شده نیست');
+      reasons.push('هنوز برای امروز تیک نخورده');
     }
 
     if (concernDomain && Array.isArray(activity.domains) && activity.domains.includes(concernDomain)) {
@@ -169,25 +310,38 @@ function recommendActivities(band, options) {
     if (activity.difficulty === 'easy') {
       score += 1;
       reasons.push('شروع آسان برای امروز');
-    } else if (activity.difficulty === 'medium') {
-      score += 0;
     }
 
     if (!reasons.length) {
       reasons.push('مناسب سن فعلی کودک');
     }
 
-    return Object.assign({}, activity, { score, reasons });
+    return Object.assign({}, activity, { score, reasons, completedToday, lastCompletedOn: lastDay });
   });
 
   scored.sort((a, b) => b.score - a.score || String(a.id).localeCompare(String(b.id)));
-  return scored;
+  const available = scored.filter((item) => !item.completedToday);
+  const doneToday = scored.filter((item) => item.completedToday);
+  const pool = available.length ? available : scored;
+  const offset = pool.length ? hashDay(`${todayKey}:${band && band.id ? band.id : ''}`) % pool.length : 0;
+  const rotated = pool.length ? pool.slice(offset).concat(pool.slice(0, offset)) : [];
+  const daily = rotated.slice(0, Math.min(dailyCount, rotated.length));
+  const ids = new Set(daily.map((item) => item.id));
+  doneToday.forEach((item) => {
+    if (daily.length < dailyCount && !ids.has(item.id)) {
+      daily.push(item);
+      ids.add(item.id);
+    }
+  });
+  return daily;
 }
 
 function buildAgeGuidePayload(child, options) {
   const opts = options || {};
   const milestoneStatuses = opts.milestoneStatuses || {};
   const completions = opts.completions || {};
+  const safetyChecks = opts.safetyChecks || {};
+  const todayKey = opts.today || calendarDayKey();
   const growthSummary = opts.growthSummary != null ? opts.growthSummary : null;
 
   const ageInMonths = getAgeInMonths(child && child.birthDate);
@@ -214,6 +368,8 @@ function buildAgeGuidePayload(child, options) {
     milestoneStatuses,
     completions,
     parentConcern: opts.parentConcern,
+    today: todayKey,
+    dailyCount: 3
   });
 
   return {
@@ -230,6 +386,10 @@ function buildAgeGuidePayload(child, options) {
     band: band
       ? { id: band.id, title: band.title, subtitle: band.subtitle }
       : null,
+    today: todayKey,
+    expectSections: buildExpectSections(band),
+    redFlags: buildRedFlags(band),
+    safetyTasks: buildSafetyTasks(band, safetyChecks),
     monthlyFocus: (band && band.monthlyFocus) || [],
     milestones: {
       total: milestoneItems.length,
@@ -6529,4 +6689,9 @@ module.exports = {
   getBandForAge,
   recommendActivities,
   buildAgeGuidePayload,
+  calendarDayKey,
+  isCompletedOnDay,
+  buildExpectSections,
+  buildRedFlags,
+  buildSafetyTasks,
 };
