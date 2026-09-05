@@ -35,7 +35,8 @@ const App = () => {
             <Switch>
                 <Route path="/login" component={LoginPage} />
                 <Route path="/register" component={RegisterPage} />
-                <Route path="/dashboard" component={DashboardPage} />
+                <Route exact path="/" component={DashboardPage} />
+                <Redirect exact from="/dashboard" to="/" />
                 <Route exact path="/shop" component={ShopPage} />
                 <Route exact path="/shop/categories" component={ShopCategoriesPage} />
                 <Route exact path="/shop/skills" component={ShopSkillsPage} />
@@ -59,9 +60,8 @@ const App = () => {
                 <PrivateRoute path="/orders" component={OrdersPage} />
                 <AdminRoute path="/admin" component={AdminPage} />
 
-                {/* Home is the public dashboard: browse content first, login only for services */}
                 <Route path="/">
-                    <Redirect to="/dashboard" />
+                    <Redirect to="/" />
                 </Route>
             </Switch>
             <MobileBottomNav />

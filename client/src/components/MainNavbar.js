@@ -28,7 +28,7 @@ const MainNavbar = () => {
             <nav className="navbar">
                 <div className="navbar-left">
                     <div className="navbar-brand">
-                        <Link to="/dashboard" onClick={closeMenu}>
+                        <Link to="/" onClick={closeMenu}>
                             <BrandLogo className="navbar-brand-icon" size={34} alt="" />
                             <span className="navbar-brand-text">
                                 <span className="navbar-brand-fa">تات کیدز</span>
@@ -40,7 +40,7 @@ const MainNavbar = () => {
 
                 <div className={`navbar-center ${isMenuOpen ? 'active' : ''}`}>
                     <div className="navbar-links">
-                        <Link to="/dashboard" onClick={closeMenu}>داشبورد</Link>
+                        <Link to="/" onClick={closeMenu}>خانه</Link>
                         <Link to="/news" onClick={closeMenu}>مجله سلامت</Link>
                         <Link to="/shop" onClick={closeMenu}>فروشگاه</Link>
                         {isAdmin && (

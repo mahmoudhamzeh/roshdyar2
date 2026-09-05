@@ -36,7 +36,7 @@ if (typeof document !== 'undefined') {
 }
 
 const serviceHint = (next) => {
-    if (!next || next === '/dashboard') return '';
+    if (!next || next === '/dashboard' || next === '/') return '';
     if (next.startsWith('/cart')) return 'برای ثبت سفارش وارد شوید.';
     if (next.startsWith('/vendor')) return 'برای ثبت‌نام یا ورود فروشنده وارد شوید.';
     if (next.startsWith('/orders') || next.startsWith('/profile')) return 'برای ادامه این بخش وارد شوید.';
@@ -211,7 +211,7 @@ const RegisterPage = () => {
 
     const continueAfterAuth = () => {
         setShowWelcome(false);
-        if (nextPath && nextPath !== '/dashboard') {
+        if (nextPath && nextPath !== '/dashboard' && nextPath !== '/') {
             history.push(nextPath);
             return;
         }
@@ -277,7 +277,7 @@ const RegisterPage = () => {
                                 >
                                     {loading ? 'در حال ارسال...' : 'ارسال کد تأیید'}
                                 </button>
-                                <Link to="/dashboard" className="login-btn login-btn-secondary register-link-btn">
+                                <Link to="/" className="login-btn login-btn-secondary register-link-btn">
                                     بازگشت به صفحه اصلی
                                 </Link>
                                 <Link to="/login" className="register-text-btn">
@@ -378,7 +378,7 @@ const RegisterPage = () => {
                             : 'ورود شما موفقیت‌آمیز بود.'}
                     </p>
                     <button type="button" className="login-btn login-btn-primary" onClick={continueAfterAuth}>
-                        {nextPath && nextPath !== '/dashboard' ? 'ادامه' : 'تکمیل پروفایل کاربری'}
+                        {nextPath && nextPath !== '/dashboard' && nextPath !== '/' ? 'ادامه' : 'تکمیل پروفایل کاربری'}
                     </button>
                 </div>
             </Modal>

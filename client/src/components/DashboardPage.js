@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { isLoggedIn } from '../api';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import AppCarousel from './Carousel';
+import HomeAbout from './HomeAbout';
 import ServiceTiles from './ServiceTiles';
 import ContentRow from './ContentRow';
 import AmazingOffersRail from './AmazingOffersRail';
@@ -100,15 +99,8 @@ const DashboardPage = () => {
         <div className="dashboard-page">
             <MainNavbar />
             <main className="dashboard-main">
-                {!isLoggedIn() && (
-                    <p className="dashboard-guest-hint">
-                        فروشگاه، مجله و معرفی خدمات برای همه باز است.
-                        برای گرفتن سرویس رشد، واکسن یا ثبت سفارش
-                        {' '}
-                        <Link to="/register">وارد شوید</Link>.
-                    </p>
-                )}
                 <AppCarousel slides={banners} />
+                <HomeAbout />
                 <ServiceTiles />
                 <div className="dashboard-sale-wrap">
                     <AmazingOffersRail products={sale.products} campaign={sale.campaign} />

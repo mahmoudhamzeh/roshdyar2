@@ -101,11 +101,7 @@ const ServiceTiles = () => {
 
     return (
         <>
-            <section className="tiles-section">
-                <div className="tiles-header animate-fade-up">
-                    <h2>خدمات تات کیدز</h2>
-                    <p>از پیگیری رشد تا مراقبت روزانه — همه در یک نگاه</p>
-                </div>
+            <section className="tiles-section" aria-label="خدمات">
                 <div className="tiles-container">
                     {services.map((service, index) => {
                         const requiresChild = CHILD_SERVICE_IDS.has(service.id);

@@ -23,7 +23,7 @@ export function isLoggedIn() {
     return !!(user && user.id);
 }
 
-export function safeNextPath(value, fallback = '/dashboard') {
+export function safeNextPath(value, fallback = '/') {
     const next = String(value || '').trim();
     return next.startsWith('/') && !next.startsWith('//') ? next : fallback;
 }

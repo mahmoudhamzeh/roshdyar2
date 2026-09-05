@@ -56,7 +56,7 @@ const MobileBottomNav = () => {
     }
 
     const portalItems = [
-        { to: '/dashboard', icon: faHome, label: 'خانه', exact: true },
+        { to: '/', icon: faHome, label: 'خانه', exact: true },
         { to: '/my-children', icon: faChild, label: 'فرزندان' },
         { to: '/shop', icon: faStore, label: 'فروشگاه' },
         { to: '/profile', icon: faUser, label: 'پروفایل' }
@@ -65,10 +65,10 @@ const MobileBottomNav = () => {
     const shopItems = [
         {
             key: 'tatkids-home',
-            to: '/dashboard',
+            to: '/',
             icon: faHome,
             label: 'خانه تات کیدز',
-            isActive: (_match, loc) => loc.pathname === '/dashboard'
+            isActive: (_match, loc) => loc.pathname === '/' || loc.pathname === '/dashboard'
         },
         {
             key: 'shop-home',
