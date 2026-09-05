@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useHistory } from 'react-router-dom';
+import { Link, useHistory, useLocation } from 'react-router-dom';
 import Modal from 'react-modal';
 import BrandLogo from './BrandLogo';
-import { setAuthSession } from '../api';
+import { setAuthSession, safeNextPath } from '../api';
 import './LoginPage.css';
 import './RegisterPage.css';
 
@@ -35,8 +35,31 @@ if (typeof document !== 'undefined') {
     Modal.setAppElement('#root');
 }
 
+const serviceHint = (next) => {
+    if (!next || next === '/dashboard') return '';
+    if (next.startsWith('/cart')) return 'برای ثبت سفارش وارد شوید.';
+    if (next.startsWith('/vendor')) return 'برای ثبت‌نام یا ورود فروشنده وارد شوید.';
+    if (next.startsWith('/orders') || next.startsWith('/profile')) return 'برای ادامه این بخش وارد شوید.';
+    if (
+        next.startsWith('/my-children')
+        || next.startsWith('/add-child')
+        || next.startsWith('/child-growth')
+        || next.startsWith('/growth-chart')
+        || next.startsWith('/vaccination')
+        || next.startsWith('/health')
+        || next.startsWith('/lab-tests')
+        || next.startsWith('/age-guidance')
+    ) {
+        return 'برای گرفتن این سرویس ابتدا وارد شوید.';
+    }
+    return 'برای ادامه وارد شوید.';
+};
+
 const RegisterPage = () => {
     const history = useHistory();
+    const location = useLocation();
+    const nextPath = safeNextPath(new URLSearchParams(location.search).get('next'));
+    const hint = serviceHint(nextPath);
     const [step, setStep] = useState('phone'); // phone | otp
     const [phoneInput, setPhoneInput] = useState('');
     const [otpInput, setOtpInput] = useState('');
@@ -177,7 +200,7 @@ const RegisterPage = () => {
                 setIsNewUser(true);
                 setShowWelcome(true);
             } else {
-                history.push('/dashboard');
+                history.push(nextPath);
             }
         } catch (error) {
             showError('خطا در ارتباط با سرور.');
@@ -186,8 +209,12 @@ const RegisterPage = () => {
         }
     };
 
-    const goToCompleteProfile = () => {
+    const continueAfterAuth = () => {
         setShowWelcome(false);
+        if (nextPath && nextPath !== '/dashboard') {
+            history.push(nextPath);
+            return;
+        }
         history.push('/profile?complete=1');
     };
 
@@ -208,7 +235,7 @@ const RegisterPage = () => {
                     </div>
                     <h1 className="animate-fade-up-delay">ورود و ثبت‌نام با موبایل</h1>
                     <p className="animate-fade-up-delay-2">
-                        شماره را وارد کنید، کد پیامکی بگیرید و وارد شوید.
+                        {hint || 'شماره را وارد کنید، کد پیامکی بگیرید و وارد شوید. دیدن فروشگاه و مجله نیاز به ورود ندارد.'}
                     </p>
                 </div>
             </section>
@@ -219,7 +246,7 @@ const RegisterPage = () => {
                         <h2>{step === 'phone' ? 'ورود / ثبت‌نام' : 'کد تأیید'}</h2>
                         <p>
                             {step === 'phone'
-                                ? 'شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.'
+                                ? (hint || 'شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.')
                                 : `کد ۵ رقمی ارسال‌شده به ${phoneInput} را وارد کنید.`}
                         </p>
                     </div>
@@ -337,7 +364,7 @@ const RegisterPage = () => {
 
             <Modal
                 isOpen={showWelcome}
-                onRequestClose={goToCompleteProfile}
+                onRequestClose={continueAfterAuth}
                 className="welcome-modal"
                 overlayClassName="welcome-modal-overlay"
                 contentLabel="خوش‌آمدگویی"
@@ -350,8 +377,8 @@ const RegisterPage = () => {
                             ? 'حساب شما ساخته شد. برای شروع بهتر، پروفایل کاربری‌تان را تکمیل کنید.'
                             : 'ورود شما موفقیت‌آمیز بود.'}
                     </p>
-                    <button type="button" className="login-btn login-btn-primary" onClick={goToCompleteProfile}>
-                        تکمیل پروفایل کاربری
+                    <button type="button" className="login-btn login-btn-primary" onClick={continueAfterAuth}>
+                        {nextPath && nextPath !== '/dashboard' ? 'ادامه' : 'تکمیل پروفایل کاربری'}
                     </button>
                 </div>
             </Modal>
