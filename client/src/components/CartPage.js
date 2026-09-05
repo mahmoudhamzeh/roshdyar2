@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash, faStore, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
+import { isLoggedIn, loginUrl } from '../api';
 import {
     getCart,
     updateCartQuantity,
@@ -57,8 +58,7 @@ const CartPage = () => {
         })();
 
         if (!user || !user.id) {
-            alert('برای ثبت سفارش ابتدا وارد شوید.');
-            history.push('/register');
+            history.push(loginUrl('/cart'));
             return;
         }
 
@@ -179,6 +179,13 @@ const CartPage = () => {
 
                         <aside className="cart-checkout animate-fade-up">
                             <h2>ثبت سفارش</h2>
+                            {!isLoggedIn() && (
+                                <p className="cart-shipping-note">
+                                    سبد را بدون ورود می‌چینید.
+                                    {' '}
+                                    <Link to={loginUrl('/cart')}>برای ثبت سفارش وارد شوید</Link>.
+                                </p>
+                            )}
                             <p className="cart-total">جمع کالاها: <strong>{formatPrice(total)}</strong></p>
                             <p className="cart-shipping-note">هزینه ارسال این مرحله ۰ تومان است و هر فروشنده جداگانه آماده‌سازی می‌کند.</p>
                             <p className="cart-total">قابل پرداخت: <strong>{formatPrice(total)}</strong></p>

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
-import { setAuthSession } from '../api';
+import { setAuthSession, safeNextPath } from '../api';
 import './LoginPage.css';
 import './RegisterPage.css';
 
@@ -28,11 +28,6 @@ const formatTimer = (totalSec) => {
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-};
-
-const safeNextPath = (value) => {
-    const next = String(value || '').trim();
-    return next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
 };
 
 const LoginPage = () => {

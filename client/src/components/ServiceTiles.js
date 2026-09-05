@@ -13,6 +13,7 @@ import {
     faSeedling,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
+import { loginUrl } from '../api';
 import './ServiceTiles.css';
 
 const services = [
@@ -49,8 +50,7 @@ const ServiceTiles = () => {
             const userId = loggedInUser ? loggedInUser.id : null;
 
             if (!userId) {
-                alert('لطفا برای مشاهده این بخش ابتدا وارد شوید.');
-                history.push('/register');
+                history.push(loginUrl('/my-children'));
                 return;
             }
 
