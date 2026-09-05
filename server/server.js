@@ -158,7 +158,13 @@ const API_CATALOG = {
             'GET /api/shop/orders/:id',
             'POST /api/shop/orders',
             'GET /api/shop/vendors/me',
-            'POST /api/shop/vendors/apply'
+            'POST /api/shop/vendors/apply',
+            'POST /api/shop/vendors/me/docs',
+            'GET /api/vendor/offers',
+            'POST /api/vendor/products',
+            'GET /api/vendor/orders',
+            'PUT /api/vendor/orders/items/:itemId',
+            'GET /api/vendor/finance'
         ],
         reminders: [
             'POST /api/generate-reminders/:userId',
@@ -2450,6 +2456,28 @@ app.get('/api/shop/vendors/me', async (req, res) => {
     res.json(await store.shop.getVendorByUser(user.id));
 });
 
+function vendorPayloadFromBody(body, user) {
+    return {
+        displayName: body.displayName,
+        phone: body.phone || (user && user.mobile) || '',
+        docsNote: body.docsNote || '',
+        personKind: body.personKind === 'company'
+            ? 'company'
+            : (body.personKind === 'individual' ? 'individual' : undefined),
+        nationalId: body.nationalId,
+        legalName: body.legalName,
+        registrationNo: body.registrationNo,
+        economicCode: body.economicCode,
+        ownerName: body.ownerName,
+        province: body.province,
+        city: body.city,
+        address: body.address,
+        bankName: body.bankName,
+        bankSheba: body.bankSheba,
+        bankAccount: body.bankAccount
+    };
+}
+
 app.post('/api/shop/vendors/apply', async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
@@ -2457,11 +2485,31 @@ app.post('/api/shop/vendors/apply', async (req, res) => {
     if (displayName.length < 3) return res.status(400).json({ message: 'نام فروشگاه خیلی کوتاه است' });
     const vendor = await store.shop.applyVendor({
         userId: user.id,
-        displayName,
-        phone: req.body.phone || user.mobile || '',
-        docsNote: req.body.docsNote || ''
+        ...vendorPayloadFromBody(req.body, user),
+        displayName
     });
     res.status(201).json(vendor);
+});
+
+app.post('/api/shop/vendors/me/docs', upload.array('docs', 8), async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    let vendor = await store.shop.getVendorByUser(user.id);
+    if (!vendor) {
+        return res.status(400).json({ message: 'ابتدا اطلاعات فروشگاه را ثبت کنید' });
+    }
+    const kinds = [].concat(req.body.kind || req.body.kinds || 'other');
+    const files = req.files || [];
+    if (!files.length) return res.status(400).json({ message: 'دست‌کم یک مدرک بارگذاری کنید' });
+    for (let i = 0; i < files.length; i += 1) {
+        await store.shop.addVendorDoc({
+            vendorId: vendor.id,
+            kind: kinds[i] || kinds[0] || 'other',
+            fileUrl: `/uploads/${files[i].filename}`,
+            originalName: files[i].originalname
+        });
+    }
+    res.status(201).json(await store.shop.getVendorByUser(user.id));
 });
 
 app.get('/api/admin/vendors', isAdmin, async (req, res) => {
@@ -2469,7 +2517,12 @@ app.get('/api/admin/vendors', isAdmin, async (req, res) => {
 });
 
 app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
+    const current = (await store.shop.listVendors()).find((item) => Number(item.id) === Number(req.params.id));
+    if (req.body.status === 'active' && current && !current.profileComplete) {
+        return res.status(400).json({ message: 'مدارک و اطلاعات حقیقی/حقوقی و مالی هنوز کامل نیست' });
+    }
     const updated = await store.shop.updateVendor(req.params.id, {
+        ...vendorPayloadFromBody(req.body, null),
         displayName: req.body.displayName,
         status: req.body.status,
         commissionPct: req.body.commissionPct,
@@ -2500,7 +2553,8 @@ app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async
         price: parsedPrice,
         stock: Number.isFinite(parsedStock) ? parsedStock : 0,
         imageUrl: uploaded[0] || null,
-        active: true,
+        active: false,
+        reviewStatus: 'pending',
         createdAt: new Date().toISOString(),
         ageBand,
         brand,
@@ -2511,6 +2565,33 @@ app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async
     });
     if (uploaded.length) await store.productImages.replace(created.id, uploaded);
     res.status(201).json(await store.products.getById(created.id));
+});
+
+app.get('/api/vendor/orders', requireVendor, async (req, res) => {
+    res.json(await store.orders.listByVendor(req.vendor.id));
+});
+
+app.put('/api/vendor/orders/items/:itemId', requireVendor, async (req, res) => {
+    const updated = await store.orders.updateLineStatus(req.params.itemId, req.body.status, req.vendor.id);
+    if (!updated) return res.status(400).json({ message: 'به‌روزرسانی وضعیت قلم سفارش ممکن نیست' });
+    res.json(updated);
+});
+
+app.get('/api/vendor/finance', requireVendor, async (req, res) => {
+    res.json(await store.shop.vendorFinance(req.vendor.id));
+});
+
+app.patch('/api/admin/products/:id/review', isAdmin, async (req, res) => {
+    const status = String(req.body.status || '').trim();
+    if (!['approved', 'rejected', 'pending'].includes(status)) {
+        return res.status(400).json({ message: 'وضعیت بررسی نامعتبر است' });
+    }
+    const updated = await store.products.update(req.params.id, {
+        reviewStatus: status,
+        active: status === 'approved'
+    });
+    if (!updated) return res.status(404).json({ message: 'محصول یافت نشد' });
+    res.json(updated);
 });
 
 app.use((err, req, res, next) => {

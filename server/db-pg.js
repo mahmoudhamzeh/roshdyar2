@@ -237,7 +237,8 @@ function rowToProduct(row) {
         imageUrl: row.image_url,
         active: asBool(row.active),
         createdAt: row.created_at,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        reviewStatus: row.review_status || 'approved'
     };
 }
 
@@ -1873,6 +1874,9 @@ const products = {
             ]
         );
         cacheInvalidate('products');
+        if (product.reviewStatus) {
+            await q('UPDATE products SET review_status = $1 WHERE id = $2', [product.reviewStatus, row.id]);
+        }
         await shopStore.syncProductCommercePg(q, one, row.id, product);
         return products.getById(row.id);
     },
@@ -1896,6 +1900,9 @@ const products = {
                 Number(id)
             ]
         );
+        if (next.reviewStatus) {
+            await q('UPDATE products SET review_status = $1 WHERE id = $2', [next.reviewStatus, Number(id)]);
+        }
         cacheInvalidate('products');
         await shopStore.syncProductCommercePg(q, one, Number(id), next);
         return products.getById(id);
@@ -2068,6 +2075,28 @@ const orders = {
             const updated = await one('SELECT * FROM orders WHERE id = $1', [Number(id)], client);
             return (await hydrateOrders([updated], client))[0];
         });
+    },
+    async listByVendor(vendorId) {
+        const rows = await many(`
+            SELECT DISTINCT o.* FROM orders o
+            JOIN order_items i ON i.order_id = o.id
+            WHERE i.vendor_id = $1
+            ORDER BY o.created_at DESC, o.id DESC
+        `, [Number(vendorId)]);
+        const ordersList = await hydrateOrders(rows);
+        return ordersList.map((order) => ({
+            ...order,
+            items: (order.items || []).filter((item) => Number(item.vendorId) === Number(vendorId))
+        }));
+    },
+    async updateLineStatus(itemId, status, vendorId) {
+        const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'];
+        if (!allowed.includes(status)) return null;
+        const item = await one('SELECT * FROM order_items WHERE id = $1', [Number(itemId)]);
+        if (!item) return null;
+        if (vendorId && Number(item.vendor_id) !== Number(vendorId)) return null;
+        await q('UPDATE order_items SET line_status = $1 WHERE id = $2', [status, Number(itemId)]);
+        return shopStore.mapOrderItemRow(await one('SELECT * FROM order_items WHERE id = $1', [Number(itemId)]));
     }
 };
 
@@ -2402,13 +2431,19 @@ module.exports = {
             return shopStore.listVendorsPg(many);
         },
         getVendorByUser(userId) {
-            return shopStore.getVendorByUserPg(one, userId);
+            return shopStore.getVendorByUserPg(one, many, userId);
         },
         applyVendor(payload) {
-            return shopStore.applyVendorPg(q, one, payload);
+            return shopStore.applyVendorPg(q, one, many, payload);
         },
         updateVendor(id, patch) {
-            return shopStore.updateVendorPg(q, one, id, patch);
+            return shopStore.updateVendorPg(q, one, many, id, patch);
+        },
+        addVendorDoc(payload) {
+            return shopStore.addVendorDocPg(q, many, payload);
+        },
+        vendorFinance(vendorId) {
+            return shopStore.vendorFinancePg(many, vendorId);
         },
         ageBands: shopStore.AGE_BANDS,
         skills: shopStore.SKILLS

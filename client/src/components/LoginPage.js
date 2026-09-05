@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useHistory } from 'react-router-dom';
+import { useHistory, useLocation } from 'react-router-dom';
 import BrandLogo from './BrandLogo';
 import { setAuthSession } from '../api';
 import './LoginPage.css';
@@ -30,8 +30,15 @@ const formatTimer = (totalSec) => {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 };
 
+const safeNextPath = (value) => {
+    const next = String(value || '').trim();
+    return next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
+};
+
 const LoginPage = () => {
     const history = useHistory();
+    const location = useLocation();
+    const nextPath = safeNextPath(new URLSearchParams(location.search).get('next'));
     const [mode, setMode] = useState('login'); // login | forgot-phone | forgot-otp | forgot-password
     const [loginInput, setLoginInput] = useState('');
     const [passwordInput, setPasswordInput] = useState('');
@@ -94,7 +101,7 @@ const LoginPage = () => {
 
             if (response.status === 200) {
                 setAuthSession(data.user, data.token);
-                history.push('/dashboard');
+                history.push(nextPath);
             } else {
                 showError(data.message || 'اطلاعات ورود نادرست است.');
             }
