@@ -5,6 +5,7 @@ import { faArrowRight, faCartPlus, faThumbsDown, faThumbsUp } from '@fortawesome
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import { addToCart, formatPrice } from '../utils/cart';
+import { isLoggedIn, loginUrl } from '../api';
 import { ageBandLabel, displayCommentAuthor, formatRating, stars } from '../utils/shop';
 import ProductImageGallery from './ProductImageGallery';
 import './ProductDetailPage.css';
@@ -85,6 +86,10 @@ const ProductDetailPage = () => {
     };
 
     const handleVote = async (commentId, vote) => {
+        if (!isLoggedIn()) {
+            history.push(loginUrl(`/shop/${id}`));
+            return;
+        }
         const current = comments.find((item) => item.id === commentId);
         const nextVote = current && current.myVote === vote ? 0 : vote;
         const res = await fetch(`${API}/api/shop/comments/${commentId}/vote`, {
@@ -271,6 +276,7 @@ const ProductDetailPage = () => {
                             {tab === 'reviews' && (
                                 <div className="product-tab-panel product-comments">
                                     <h2>نظر کاربران</h2>
+                                    {isLoggedIn() ? (
                                     <form
                                         onSubmit={async (e) => {
                                             e.preventDefault();
@@ -311,6 +317,11 @@ const ProductDetailPage = () => {
                                         />
                                         <button type="submit">ثبت نظر</button>
                                     </form>
+                                    ) : (
+                                        <p>
+                                            <Link to={loginUrl(`/shop/${id}`)}>برای ثبت نظر وارد شوید</Link>
+                                        </p>
+                                    )}
                                     {comments.length === 0 ? (
                                         <p>هنوز نظر تأیید‌شده‌ای ثبت نشده است.</p>
                                     ) : (

@@ -1,5 +1,5 @@
 .tiles-section {
-  padding: 2.5rem clamp(1rem, 3vw, 2rem) 1rem;
+  padding: 1.15rem clamp(1rem, 3vw, 2rem) 1rem;
   max-width: 1200px;
   margin: 0 auto;
 }

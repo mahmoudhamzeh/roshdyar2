@@ -38,8 +38,8 @@ const NewsHeader = () => {
                         <Link to={{ pathname: "/news", state: { category: 'مادر و کودک' } }} onClick={() => setIsMenuOpen(false)}>مادر و کودک</Link>
                         <Link to={{ pathname: "/news", state: { category: 'تربیتی' } }} onClick={() => setIsMenuOpen(false)}>تربیتی</Link>
                         {isLoggedIn ? (
-                            <Link to="/dashboard" className="news-login-cta" onClick={() => setIsMenuOpen(false)}>
-                                داشبورد
+                            <Link to="/" className="news-login-cta" onClick={() => setIsMenuOpen(false)}>
+                                خانه
                             </Link>
                         ) : (
                             <Link to="/register" className="news-login-cta" onClick={() => setIsMenuOpen(false)}>
@@ -56,8 +56,8 @@ const NewsHeader = () => {
                         </Link>
                     )}
                     {isLoggedIn && (
-                        <Link to="/dashboard" className="news-login-cta news-login-cta--desktop">
-                            داشبورد
+                        <Link to="/" className="news-login-cta news-login-cta--desktop">
+                            خانه
                         </Link>
                     )}
                     <button

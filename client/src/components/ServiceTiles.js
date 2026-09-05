@@ -13,6 +13,7 @@ import {
     faSeedling,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
+import { loginUrl } from '../api';
 import './ServiceTiles.css';
 
 const services = [
@@ -49,8 +50,7 @@ const ServiceTiles = () => {
             const userId = loggedInUser ? loggedInUser.id : null;
 
             if (!userId) {
-                alert('لطفا برای مشاهده این بخش ابتدا وارد شوید.');
-                history.push('/register');
+                history.push(loginUrl('/my-children'));
                 return;
             }
 
@@ -101,11 +101,7 @@ const ServiceTiles = () => {
 
     return (
         <>
-            <section className="tiles-section">
-                <div className="tiles-header animate-fade-up">
-                    <h2>خدمات تات کیدز</h2>
-                    <p>از پیگیری رشد تا مراقبت روزانه — همه در یک نگاه</p>
-                </div>
+            <section className="tiles-section" aria-label="خدمات">
                 <div className="tiles-container">
                     {services.map((service, index) => {
                         const requiresChild = CHILD_SERVICE_IDS.has(service.id);

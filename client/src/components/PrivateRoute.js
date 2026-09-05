@@ -1,26 +1,18 @@
 import React from 'react';
 import { Route, Redirect } from 'react-router-dom';
+import { isLoggedIn, loginUrl } from '../api';
 
 const PrivateRoute = ({ component: Component, ...rest }) => {
-    const isLoggedIn = () => {
-        try {
-            const loggedInUser = localStorage.getItem('loggedInUser');
-            if (!loggedInUser) return false;
-            const user = JSON.parse(loggedInUser);
-            return !!(user && user.id);
-        } catch (error) {
-            return false;
-        }
-    };
-
     return (
         <Route
             {...rest}
-            render={props =>
+            render={(props) =>
                 isLoggedIn() ? (
                     <Component {...props} />
                 ) : (
-                    <Redirect to="/register" />
+                    <Redirect
+                        to={loginUrl(`${props.location.pathname}${props.location.search || ''}`)}
+                    />
                 )
             }
         />

@@ -19,7 +19,7 @@ const Footer = () => {
                 <div className="footer-section">
                     <h4>دسترسی سریع</h4>
                     <ul>
-                        <li><a href="/dashboard">صفحه اصلی</a></li>
+                        <li><a href="/">صفحه اصلی</a></li>
                         <li><a href="/register">ورود / ثبت‌نام</a></li>
                         <li><a href="/news">مجله سلامت</a></li>
                         <li><a href="/shop">فروشگاه</a></li>

@@ -35,7 +35,15 @@ const App = () => {
             <Switch>
                 <Route path="/login" component={LoginPage} />
                 <Route path="/register" component={RegisterPage} />
-                <PrivateRoute path="/dashboard" component={DashboardPage} />
+                <Route exact path="/" component={DashboardPage} />
+                <Redirect exact from="/dashboard" to="/" />
+                <Route exact path="/shop" component={ShopPage} />
+                <Route exact path="/shop/categories" component={ShopCategoriesPage} />
+                <Route exact path="/shop/skills" component={ShopSkillsPage} />
+                <Route path="/shop/:id" component={ProductDetailPage} />
+                <Route path="/cart" component={CartPage} />
+                <Route exact path="/news" component={NewsPage} />
+                <Route path="/news/:id" component={ArticleDetailPage} />
                 <PrivateRoute path="/my-children" component={MyChildrenPage} />
                 <PrivateRoute path="/add-child" component={AddChildPage} />
                 <PrivateRoute path="/edit-child/:id" component={EditChildPage} />
@@ -48,20 +56,12 @@ const App = () => {
                 <PrivateRoute path="/child-growth/:childId" component={ChildGrowthPage} />
                 <PrivateRoute path="/age-guidance/:childId" component={ChildGrowthPage} />
                 <PrivateRoute path="/profile" component={ProfilePage} />
-                <PrivateRoute exact path="/shop" component={ShopPage} />
-                <PrivateRoute exact path="/shop/categories" component={ShopCategoriesPage} />
-                <PrivateRoute exact path="/shop/skills" component={ShopSkillsPage} />
                 <PrivateRoute exact path="/vendor" component={VendorPanelPage} />
-                <PrivateRoute path="/shop/:id" component={ProductDetailPage} />
-                <PrivateRoute path="/cart" component={CartPage} />
                 <PrivateRoute path="/orders" component={OrdersPage} />
-                <Route exact path="/news" component={NewsPage} />
-                <Route path="/news/:id" component={ArticleDetailPage} />
                 <AdminRoute path="/admin" component={AdminPage} />
 
-                {/* App home = dashboard; guests are sent to SMS login via PrivateRoute */}
                 <Route path="/">
-                    <Redirect to="/dashboard" />
+                    <Redirect to="/" />
                 </Route>
             </Switch>
             <MobileBottomNav />

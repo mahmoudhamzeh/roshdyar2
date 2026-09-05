@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import AppCarousel from './Carousel';
+import HomeAbout from './HomeAbout';
 import ServiceTiles from './ServiceTiles';
 import ContentRow from './ContentRow';
 import AmazingOffersRail from './AmazingOffersRail';
@@ -99,6 +100,7 @@ const DashboardPage = () => {
             <MainNavbar />
             <main className="dashboard-main">
                 <AppCarousel slides={banners} />
+                <HomeAbout />
                 <ServiceTiles />
                 <div className="dashboard-sale-wrap">
                     <AmazingOffersRail products={sale.products} campaign={sale.campaign} />

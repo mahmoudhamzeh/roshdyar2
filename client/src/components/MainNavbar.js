@@ -2,24 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Reminders from './Reminders';
 import BrandLogo from './BrandLogo';
+import { isLoggedIn, getLoggedInUser } from '../api';
 import './MainNavbar.css';
 
 const MainNavbar = () => {
     const [isAdmin, setIsAdmin] = useState(false);
+    const [signedIn, setSignedIn] = useState(isLoggedIn());
     const [isMenuOpen, setIsMenuOpen] = useState(false);
 
     useEffect(() => {
-        try {
-            const loggedInUser = localStorage.getItem('loggedInUser');
-            if (loggedInUser) {
-                const user = JSON.parse(loggedInUser);
-                if (user && user.isAdmin) {
-                    setIsAdmin(true);
-                }
-            }
-        } catch (error) {
-            console.error("Error parsing user data from localStorage", error);
-        }
+        const user = getLoggedInUser();
+        setSignedIn(!!(user && user.id));
+        setIsAdmin(!!(user && user.isAdmin));
     }, []);
 
     useEffect(() => {
@@ -34,7 +28,7 @@ const MainNavbar = () => {
             <nav className="navbar">
                 <div className="navbar-left">
                     <div className="navbar-brand">
-                        <Link to="/dashboard" onClick={closeMenu}>
+                        <Link to="/" onClick={closeMenu}>
                             <BrandLogo className="navbar-brand-icon" size={34} alt="" />
                             <span className="navbar-brand-text">
                                 <span className="navbar-brand-fa">تات کیدز</span>
@@ -46,7 +40,7 @@ const MainNavbar = () => {
 
                 <div className={`navbar-center ${isMenuOpen ? 'active' : ''}`}>
                     <div className="navbar-links">
-                        <Link to="/dashboard" onClick={closeMenu}>داشبورد</Link>
+                        <Link to="/" onClick={closeMenu}>خانه</Link>
                         <Link to="/news" onClick={closeMenu}>مجله سلامت</Link>
                         <Link to="/shop" onClick={closeMenu}>فروشگاه</Link>
                         {isAdmin && (
@@ -54,20 +48,34 @@ const MainNavbar = () => {
                                 پنل مدیریت
                             </Link>
                         )}
-                        <Link
-                            to="/profile"
-                            className="btn btn-profile mobile-only-profile"
-                            onClick={closeMenu}
-                        >
-                            پروفایل من
-                        </Link>
+                        {signedIn ? (
+                            <Link
+                                to="/profile"
+                                className="btn btn-profile mobile-only-profile"
+                                onClick={closeMenu}
+                            >
+                                پروفایل من
+                            </Link>
+                        ) : (
+                            <Link
+                                to="/register"
+                                className="btn btn-profile mobile-only-profile"
+                                onClick={closeMenu}
+                            >
+                                ورود
+                            </Link>
+                        )}
                     </div>
                 </div>
 
                 <div className="navbar-right">
                     <div className="navbar-profile">
-                        <Reminders />
-                        <Link to="/profile" className="btn btn-profile desktop-only-profile">پروفایل من</Link>
+                        {signedIn && <Reminders />}
+                        {signedIn ? (
+                            <Link to="/profile" className="btn btn-profile desktop-only-profile">پروفایل من</Link>
+                        ) : (
+                            <Link to="/register" className="btn btn-profile desktop-only-profile">ورود</Link>
+                        )}
                     </div>
                     <button
                         className="navbar-toggler"
