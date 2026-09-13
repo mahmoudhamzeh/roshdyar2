@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import ChildAvatar from '../ChildAvatar';
+import { getChildDisplayName } from '../../utils/childName';
 import './UserDetailPage.css';
 
 const UserDetailPage = () => {
@@ -56,8 +58,8 @@ const UserDetailPage = () => {
                 {children.length > 0 ? (
                     children.map(child => (
                         <div key={child.id} className="child-card">
-                            <img src={child.avatar.startsWith('http') ? child.avatar : `${child.avatar}`} alt={child.name || `${child.firstName || ''} ${child.lastName || ''}`.trim()} />
-                            <p>{child.name || `${child.firstName || ''} ${child.lastName || ''}`.trim()}</p>
+                            <ChildAvatar child={child} size="lg" />
+                            <p>{getChildDisplayName(child)}</p>
                             <Link to={`/health-profile/${child.id}`} className="btn-view-profile">
                                 مشاهده پروفایل سلامت
                             </Link>

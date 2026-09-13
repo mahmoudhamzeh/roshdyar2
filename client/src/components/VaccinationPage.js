@@ -18,6 +18,7 @@ import {
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import Modal from 'react-modal';
 import { getChildDisplayName } from '../utils/childName';
+import ChildAvatar from './ChildAvatar';
 import './VaccinationPage.css';
 
 Modal.setAppElement('#root');
@@ -60,13 +61,6 @@ const vaccineDetails = {
         symptoms: 'تب، بثورات جلدی خفیف ۷ تا ۱۰ روز پس از تزریق.',
         care: 'مایعات فراوان و استراحت.',
     },
-};
-
-const getAvatarUrl = (avatar) => {
-    if (!avatar) return null;
-    if (avatar.startsWith('http') || avatar.startsWith('data:')) return avatar;
-    if (avatar.startsWith('/uploads')) return `${avatar}`;
-    return avatar;
 };
 
 const formatAgeLabel = (birthMoment) => {
@@ -401,12 +395,10 @@ const VaccinationPage = () => {
         );
     }
 
-    const avatarUrl = getAvatarUrl(child.avatar);
     const ageLabel = formatAgeLabel(birthMoment);
     const genderLabel = child.gender === 'boy' ? 'پسر' : child.gender === 'girl' ? 'دختر' : (child.gender || '—');
     const birthTypeLabel = child.birthType ? (BIRTH_TYPE_LABELS[child.birthType] || child.birthType) : '—';
     const reportDate = moment().locale('fa').format('YYYY/MM/DD');
-    const initial = childName.charAt(0) || 'ک';
 
     return (
         <div className="vaccination-page">
@@ -422,11 +414,7 @@ const VaccinationPage = () => {
             <div className="vax-card-content">
                 <header className="vax-card-hero animate-fade-up">
                     <div className="vax-card-hero-main">
-                        {avatarUrl ? (
-                            <img className="vax-card-avatar" src={avatarUrl} alt={childName} />
-                        ) : (
-                            <div className="vax-card-avatar placeholder" aria-hidden="true">{initial}</div>
-                        )}
+                        <ChildAvatar child={child} size="md" className="vax-card-avatar" />
                         <div className="vax-card-hero-text">
                             <p className="vax-card-kicker">
                                 <FontAwesomeIcon icon={faSyringe} />

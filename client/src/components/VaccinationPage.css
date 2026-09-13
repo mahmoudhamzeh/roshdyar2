@@ -121,6 +121,8 @@
     object-fit: cover;
     border: 3px solid var(--brand-soft);
     background: var(--brand-wash);
+    overflow: hidden;
+    display: inline-block;
 }
 
 .vax-card-avatar.placeholder {

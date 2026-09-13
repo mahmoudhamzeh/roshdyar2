@@ -26,6 +26,7 @@ import {
     faCircleInfo,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
+import ChildAvatar from './ChildAvatar';
 import './HealthProfilePage.css';
 
 Modal.setAppElement('#root');
@@ -198,9 +199,6 @@ const HealthProfilePage = () => {
 
     const displayName = getChildDisplayName(child);
     const ageLabel = calculateAge(child.birthDate);
-    const avatarUrl = child.avatar
-        ? (child.avatar.startsWith('/uploads') ? `${child.avatar}` : child.avatar)
-        : null;
     const allergyTags = getActiveTags(child.allergies);
     const illnessTags = getActiveTags(child.special_illnesses);
     const allergyDescription = typeof child.allergies === 'object' ? child.allergies?.description : '';
@@ -281,13 +279,7 @@ const HealthProfilePage = () => {
             <div className="hp-content">
                 <header className="hp-hero">
                     <div className="hp-hero-main">
-                        {avatarUrl ? (
-                            <img src={avatarUrl} alt={displayName} className="hp-avatar" />
-                        ) : (
-                            <div className="hp-avatar placeholder" aria-hidden="true">
-                                {displayName.charAt(0)}
-                            </div>
-                        )}
+                        <ChildAvatar child={child} size="lg" className="hp-avatar" />
                         <div className="hp-hero-text">
                             <h2>{displayName}</h2>
                             <p className="hp-hero-meta">

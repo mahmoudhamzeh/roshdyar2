@@ -9,9 +9,9 @@ import {
     faBaby,
     faHeartbeat,
     faFileMedical,
-    faCamera,
     faCheck
 } from '@fortawesome/free-solid-svg-icons';
+import ChildAvatar from './ChildAvatar';
 import './AddChildPage.css';
 
 const STEPS = [
@@ -255,10 +255,11 @@ const AddChildPage = () => {
                                     {preview ? (
                                         <img src={preview} alt="پیش‌نمایش" className="avatar-preview" />
                                     ) : (
-                                        <div className="avatar-placeholder">
-                                            <FontAwesomeIcon icon={faCamera} />
-                                            <span>عکس</span>
-                                        </div>
+                                        <ChildAvatar
+                                            child={{ gender: formData.gender, firstName: formData.firstName }}
+                                            size="xl"
+                                            className="avatar-preview"
+                                        />
                                     )}
                                 </div>
                                 <label htmlFor="avatar" className="avatar-pick-btn">انتخاب عکس پروفایل</label>
