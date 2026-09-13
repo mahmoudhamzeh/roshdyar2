@@ -6,7 +6,8 @@ const {
     buildCategoryTree,
     descendantCategoryNames,
     buildCatalogSql,
-    mapCatalogRow
+    mapCatalogRow,
+    resolveProductGender
 } = require('./shop-model');
 
 const SHOP_TABLES_SQLITE = `
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS shop_product_meta (
     safety_warning TEXT,
     video_url TEXT,
     weight_g INTEGER,
+    gender TEXT,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 
@@ -150,7 +152,8 @@ CREATE TABLE IF NOT EXISTS shop_product_meta (
     brand TEXT,
     safety_warning TEXT,
     video_url TEXT,
-    weight_g INTEGER
+    weight_g INTEGER,
+    gender TEXT
 );
 
 CREATE TABLE IF NOT EXISTS shop_product_skills (
@@ -550,6 +553,9 @@ function ensureShopSchemaSqlite(db) {
     if (!sqliteHasColumn(db, 'product_categories', 'active')) {
         db.exec('ALTER TABLE product_categories ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
     }
+    if (!sqliteHasColumn(db, 'shop_product_meta', 'gender')) {
+        db.exec('ALTER TABLE shop_product_meta ADD COLUMN gender TEXT');
+    }
     [
         ['offer_id', 'INTEGER'],
         ['vendor_id', 'INTEGER'],
@@ -586,6 +592,26 @@ function ensureShopSchemaSqlite(db) {
     seedDefaultsSqlite(db);
     backfillSqlite(db);
     seedShopExtrasSqlite(db);
+    backfillProductGenderSqlite(db);
+}
+
+function backfillProductGenderSqlite(db) {
+    const tree = categoryTreeFromRows(db.prepare('SELECT id, name, parent_id FROM product_categories').all());
+    const rows = db.prepare(`
+        SELECT p.id, p.category, m.gender
+        FROM products p
+        LEFT JOIN shop_product_meta m ON m.product_id = p.id
+    `).all();
+    const upsert = db.prepare(`
+        INSERT INTO shop_product_meta (product_id, gender)
+        VALUES (?, ?)
+        ON CONFLICT(product_id) DO UPDATE SET
+            gender = COALESCE(NULLIF(shop_product_meta.gender, ''), excluded.gender)
+    `);
+    rows.forEach((row) => {
+        if (row.gender) return;
+        upsert.run(row.id, resolveProductGender('', row.category, tree));
+    });
 }
 
 function listSkillsSqlite(db) {
@@ -827,14 +853,17 @@ function syncProductCommerceSqlite(db, productId, extra = {}) {
     const ageBand = extra.ageBand || CATEGORY_DEFAULTS[product.category]?.ageBand || null;
     const brand = extra.brand != null ? String(extra.brand).trim() : '';
     const safetyWarning = extra.safetyWarning != null ? String(extra.safetyWarning).trim() : '';
+    const tree = categoryTreeFromRows(db.prepare('SELECT id, name, parent_id FROM product_categories').all());
+    const gender = resolveProductGender(extra.gender, product.category, tree);
     db.prepare(`
-        INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning, gender)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(product_id) DO UPDATE SET
             age_band = excluded.age_band,
             brand = excluded.brand,
-            safety_warning = excluded.safety_warning
-    `).run(product.id, ageBand, brand || null, safetyWarning || null);
+            safety_warning = excluded.safety_warning,
+            gender = excluded.gender
+    `).run(product.id, ageBand, brand || null, safetyWarning || null, gender);
 
     if (Array.isArray(extra.skillIds) || Array.isArray(extra.skillSlugs)) {
         db.prepare('DELETE FROM shop_product_skills WHERE product_id = ?').run(product.id);
@@ -886,6 +915,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q('ALTER TABLE product_comments ADD COLUMN IF NOT EXISTS rating INTEGER');
     await q("ALTER TABLE product_comments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'");
     await q('ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1');
+    await q('ALTER TABLE shop_product_meta ADD COLUMN IF NOT EXISTS gender TEXT');
     await q('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS offer_id BIGINT');
     await q('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vendor_id BIGINT');
     await q('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vendor_name TEXT');
@@ -997,6 +1027,27 @@ async function ensureShopSchemaPg(q, one, many) {
         `);
     }
     await seedCategoryTreePg(one, q);
+    await backfillProductGenderPg(q, one, many);
+}
+
+async function backfillProductGenderPg(q, one, many) {
+    const tree = categoryTreeFromRows(await many('SELECT id, name, parent_id FROM product_categories'));
+    const rows = await many(`
+        SELECT p.id, p.category, m.gender
+        FROM products p
+        LEFT JOIN shop_product_meta m ON m.product_id = p.id
+    `);
+    for (const row of rows) {
+        if (row.gender) continue;
+        const gender = resolveProductGender('', row.category, tree);
+        await q(
+            `INSERT INTO shop_product_meta (product_id, gender)
+             VALUES ($1,$2)
+             ON CONFLICT (product_id) DO UPDATE SET
+                gender = COALESCE(NULLIF(shop_product_meta.gender, ''), EXCLUDED.gender)`,
+            [row.id, gender]
+        );
+    }
 }
 
 function toPg(sql) {
@@ -1225,14 +1276,18 @@ async function syncProductCommercePg(q, one, productId, extra = {}) {
     const ageBand = extra.ageBand || CATEGORY_DEFAULTS[product.category]?.ageBand || null;
     const brand = extra.brand != null ? String(extra.brand).trim() : '';
     const safetyWarning = extra.safetyWarning != null ? String(extra.safetyWarning).trim() : '';
+    const catResult = await q('SELECT id, name, parent_id FROM product_categories');
+    const tree = categoryTreeFromRows(catResult.rows || []);
+    const gender = resolveProductGender(extra.gender, product.category, tree);
     await q(
-        `INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning)
-         VALUES ($1,$2,$3,$4)
+        `INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning, gender)
+         VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (product_id) DO UPDATE SET
             age_band = EXCLUDED.age_band,
             brand = EXCLUDED.brand,
-            safety_warning = EXCLUDED.safety_warning`,
-        [product.id, ageBand, brand || null, safetyWarning || null]
+            safety_warning = EXCLUDED.safety_warning,
+            gender = EXCLUDED.gender`,
+        [product.id, ageBand, brand || null, safetyWarning || null, gender]
     );
     if (Array.isArray(extra.skillIds) || Array.isArray(extra.skillSlugs)) {
         await q('DELETE FROM shop_product_skills WHERE product_id = $1', [product.id]);

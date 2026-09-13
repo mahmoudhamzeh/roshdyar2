@@ -130,6 +130,15 @@ async function run() {
             assert.ok(sorted.data[0].price <= sorted.data[1].price);
         }
 
+        const genders = await request('GET', '/api/shop/genders');
+        assert.strictEqual(genders.status, 200);
+        assert.ok((genders.data || []).some((item) => item.id === 'boy'));
+        const boyFilter = await request('GET', '/api/shop/products?gender=boy');
+        assert.strictEqual(boyFilter.status, 200, JSON.stringify(boyFilter.data));
+        (boyFilter.data || []).forEach((item) => {
+            assert.ok(['boy', 'unisex'].includes(item.gender || 'unisex'), item.name);
+        });
+
         const children = await request('GET', '/api/children', {
             headers: auth
         });
@@ -311,6 +320,10 @@ async function run() {
         walk(categories.data);
         assert.ok(names.includes('پسرانه'));
         assert.ok(names.includes('لگو'));
+        const shopModel = require('./shop-model');
+        assert.strictEqual(shopModel.inferGenderFromCategory('لگو', categories.data), 'boy');
+        assert.strictEqual(shopModel.inferGenderFromCategory('عروسک', categories.data), 'girl');
+        assert.strictEqual(shopModel.inferGenderFromCategory('کتاب', categories.data), 'unisex');
 
         const vendorApply = await request('POST', '/api/shop/vendors/apply', {
             headers: { Authorization: `Bearer ${verify.data.token}` },
@@ -390,6 +403,7 @@ async function run() {
         assert.strictEqual(vendorProduct.status, 201, JSON.stringify(vendorProduct.data));
         assert.strictEqual(vendorProduct.data.reviewStatus, 'pending');
         assert.strictEqual(vendorProduct.data.active, false);
+        assert.strictEqual(vendorProduct.data.gender, 'boy');
 
         const hiddenVendorProduct = await request('GET', `/api/shop/products/${vendorProduct.data.id}`);
         assert.strictEqual(hiddenVendorProduct.status, 404);

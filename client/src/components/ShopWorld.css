@@ -366,12 +366,13 @@
 .shop-stars-input button {
   border: none;
   background: transparent;
-  color: #d6d3d1;
-  font-size: 1.35rem;
+  color: #e8dcc4;
+  font-size: 1.7rem;
   cursor: pointer;
   line-height: 1;
+  padding: 0;
 }
 
 .shop-stars-input button.is-on {
-  color: #d97706;
+  color: #f59e0b;
 }

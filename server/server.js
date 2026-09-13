@@ -12,7 +12,7 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
-const { AGE_BANDS, flattenCategories } = require('./shop-model');
+const { AGE_BANDS, flattenCategories, GENDER_OPTIONS } = require('./shop-model');
 const rateLimit = require('express-rate-limit');
 const {
     hashPassword,
@@ -158,6 +158,7 @@ const API_CATALOG = {
             'GET /api/shop/categories',
             'GET /api/shop/skills',
             'GET /api/shop/age-bands',
+            'GET /api/shop/genders',
             'GET /api/shop/products',
             'GET /api/shop/products/:id',
             'GET /api/shop/products/:id/offers',
@@ -1795,6 +1796,10 @@ app.get('/api/shop/age-bands', (req, res) => {
     res.json(AGE_BANDS);
 });
 
+app.get('/api/shop/genders', (req, res) => {
+    res.json(GENDER_OPTIONS);
+});
+
 app.get('/api/shop/home', async (req, res) => {
     const [newest, popular, allActive, skills, categories, vendor, campaign, shopBanners] = await Promise.all([
         store.products.listActive({ sort: 'newest' }),
@@ -1811,6 +1816,7 @@ app.get('/api/shop/home', async (req, res) => {
         mode: 'marketplace',
         vendor: vendor || { slug: 'tatkids', displayName: 'مجموعه تات کیدز', kind: 'internal' },
         ageBands: AGE_BANDS,
+        genders: GENDER_OPTIONS,
         skills,
         categories: categories.length ? categories : SHOP_CATEGORIES.map((name) => ({ name, children: [] })),
         newest: (newest || []).slice(0, 8),
@@ -1935,7 +1941,8 @@ app.get('/api/shop/products', async (req, res) => {
         q: req.query.q,
         sort: req.query.sort,
         age: req.query.age || req.query.ageBand,
-        skill: req.query.skill
+        skill: req.query.skill,
+        gender: req.query.gender
     };
     if (req.query.categoryId) {
         const tree = await store.productCategories.tree({ includeInactive: true });
@@ -1959,7 +1966,7 @@ app.get('/api/admin/products', isAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, res) => {
-    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
     }
@@ -1986,6 +1993,7 @@ app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, 
         brand,
         safetyWarning,
         compareAtPrice,
+        gender,
         skillIds: parseSkillIds(req.body)
     });
     if (uploaded.length) {
@@ -1999,12 +2007,13 @@ app.put('/api/admin/products/:id', isAdmin, upload.array('images', 8), async (re
     const current = await store.products.getById(id);
     if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
 
-    const { name, description, category, price, stock, active, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
+    const { name, description, category, price, stock, active, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
     const updated = { ...current, updatedAt: new Date().toISOString() };
     if (ageBand !== undefined) updated.ageBand = ageBand;
     if (brand !== undefined) updated.brand = brand;
     if (safetyWarning !== undefined) updated.safetyWarning = safetyWarning;
     if (compareAtPrice !== undefined) updated.compareAtPrice = compareAtPrice;
+    if (gender !== undefined) updated.gender = gender;
     const skillIds = parseSkillIds(req.body);
     if (skillIds) updated.skillIds = skillIds;
 
@@ -2559,7 +2568,7 @@ app.get('/api/vendor/offers', requireVendor, async (req, res) => {
 });
 
 app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async (req, res) => {
-    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice } = req.body;
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
     if (!name || !String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
     const parsedPrice = parsePrice(price);
     if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
@@ -2579,6 +2588,7 @@ app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async
         brand,
         safetyWarning,
         compareAtPrice,
+        gender,
         skillIds: parseSkillIds(req.body),
         vendorId: req.vendor.id
     });
