@@ -108,6 +108,11 @@ function run() {
     assert.ok(vendor && vendor.slug === 'tatkids');
     assert.ok(store.shop.listSkills().length >= 5);
     assert.ok(product.offerId || product.vendorName);
+    const pgSrc = fs.readFileSync(path.join(__dirname, 'db-pg.js'), 'utf8');
+    assert.ok(
+        /ALTER TABLE otp_codes ALTER COLUMN expires_at TYPE BIGINT/.test(pgSrc),
+        'otp timestamps must be widened to BIGINT on existing Postgres'
+    );
     const stockBefore = product.stock;
     const order = store.orders.create({
         userId: createdUser.id,

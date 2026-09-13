@@ -68,6 +68,10 @@ function assertPgFkTypes() {
     const storeSrc = fs.readFileSync(path.join(__dirname, 'magazine-store.js'), 'utf8');
     assert.ok(!/is_admin\s*=\s*true/.test(storeSrc), 'users.is_admin is INTEGER on Postgres; comparing to true throws 42883');
     assert.ok(/is_admin\s*=\s*1/.test(storeSrc), 'admin lookup must use integer 1');
+    assert.ok(
+        /ALTER TABLE magazine_posts ALTER COLUMN source_id TYPE BIGINT/.test(storeSrc),
+        'existing PG magazine_posts.source_id must be widened to BIGINT'
+    );
 }
 
 async function run() {
