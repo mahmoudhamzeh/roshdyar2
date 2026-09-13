@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useHistory } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCartPlus, faThumbsDown, faThumbsUp } from '@fortawesome/free-solid-svg-icons';
+import { faCartPlus, faCheck, faThumbsDown, faThumbsUp } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
 import ShopBreadcrumb from './ShopBreadcrumb';
@@ -10,6 +10,7 @@ import { addToCart, formatPrice } from '../utils/cart';
 import { ageBandLabel, displayCommentAuthor, genderLabel } from '../utils/shop';
 import { formatToShamsi } from '../utils/dateConverter';
 import ProductImageGallery from './ProductImageGallery';
+import { getLoggedInUser } from '../api';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
 
@@ -33,9 +34,11 @@ const ProductDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const [thanks, setThanks] = useState('');
     const [comment, setComment] = useState('');
     const [comments, setComments] = useState([]);
     const [rating, setRating] = useState(5);
+    const [sendingReview, setSendingReview] = useState(false);
     const [offerId, setOfferId] = useState(null);
     const [activeSection, setActiveSection] = useState('intro');
 
@@ -128,6 +131,50 @@ const ProductDetailPage = () => {
             return;
         }
         setComments((prev) => prev.map((item) => (item.id === commentId ? data : item)));
+    };
+
+    const handleReviewSubmit = async (event) => {
+        event.preventDefault();
+        if (!getLoggedInUser()) {
+            setMessage('برای ثبت امتیاز ابتدا وارد شوید');
+            history.push('/login');
+            return;
+        }
+        const text = comment.trim();
+        const hasRating = Number.isFinite(Number(rating)) && Number(rating) >= 1 && Number(rating) <= 5;
+        if (!hasRating && text.length < 3) {
+            setMessage('امتیاز یا متن نظر را وارد کنید');
+            return;
+        }
+        setSendingReview(true);
+        setMessage('');
+        try {
+            const res = await fetch(`${API}/api/shop/products/${id}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ body: text, rating: hasRating ? Number(rating) : undefined })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 401) {
+                setMessage(data.message || 'برای ثبت امتیاز وارد شوید');
+                history.push('/login');
+                return;
+            }
+            if (!res.ok) {
+                setMessage(data.message || 'ثبت نظر ناموفق بود');
+                return;
+            }
+            setComment('');
+            setRating(5);
+            setThanks(data.message || (text
+                ? 'از نظر شما متشکریم. دیدگاه‌تان پس از تأیید کارشناس نمایش داده می‌شود'
+                : 'از امتیاز شما متشکریم. پس از تأیید کارشناس روی محصول دیده می‌شود'));
+            loadComments();
+        } catch (err) {
+            setMessage('خطا در ارتباط با سرور');
+        } finally {
+            setSendingReview(false);
+        }
     };
 
     const scrollToSection = (sectionId) => {
@@ -346,24 +393,7 @@ const ProductDetailPage = () => {
 
                                 <form
                                     className="product-review-form"
-                                    onSubmit={async (e) => {
-                                        e.preventDefault();
-                                        if (!comment.trim()) return;
-                                        const res = await fetch(`${API}/api/shop/products/${id}/comments`, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ body: comment.trim(), rating })
-                                        });
-                                        const data = await res.json().catch(() => ({}));
-                                        if (!res.ok) {
-                                            setMessage(data.message || 'ثبت نظر ناموفق بود');
-                                            return;
-                                        }
-                                        setComment('');
-                                        setRating(5);
-                                        setMessage(data.message || 'نظر شما پس از تأیید کارشناس نمایش داده می‌شود');
-                                        loadComments();
-                                    }}
+                                    onSubmit={handleReviewSubmit}
                                 >
                                     <h3>دیدگاه خود را بنویسید</h3>
                                     <p className="product-review-form-label">
@@ -387,9 +417,13 @@ const ProductDetailPage = () => {
                                         value={comment}
                                         onChange={(e) => setComment(e.target.value)}
                                         rows="4"
-                                        placeholder="کیفیت، مناسب بودن برای سن کودک و تجربه خرید را بنویسید..."
+                                        placeholder="اختیاری — کیفیت، مناسب بودن برای سن کودک و تجربه خرید را بنویسید..."
                                     />
-                                    <button type="submit">ثبت دیدگاه</button>
+                                    <p className="product-review-form-hint">فقط امتیاز هم کافی است. دیدگاه بعد از تأیید کارشناس دیده می‌شود.</p>
+                                    {message && <p className="product-toast">{message}</p>}
+                                    <button type="submit" disabled={sendingReview}>
+                                        {sendingReview ? 'در حال ثبت...' : 'ثبت دیدگاه'}
+                                    </button>
                                 </form>
 
                                 {comments.length === 0 ? (
@@ -415,7 +449,9 @@ const ProductDetailPage = () => {
                                                             <ShopRating value={item.rating} size="sm" />
                                                         ) : null}
                                                     </header>
-                                                    <p>{item.body}</p>
+                                                    {item.body ? <p>{item.body}</p> : (
+                                                        <p className="product-review-card__rating-only">فقط امتیاز ثبت شده است.</p>
+                                                    )}
                                                     <div className="product-review-votes">
                                                         <span>آیا این دیدگاه مفید بود؟</span>
                                                         <button
@@ -447,6 +483,19 @@ const ProductDetailPage = () => {
                     </>
                 )}
             </main>
+            {thanks && (
+                <div className="product-thanks" role="dialog" aria-modal="true" aria-labelledby="product-thanks-title">
+                    <button type="button" className="product-thanks__backdrop" aria-label="بستن" onClick={() => setThanks('')} />
+                    <div className="product-thanks__card">
+                        <span className="product-thanks__icon" aria-hidden="true">
+                            <FontAwesomeIcon icon={faCheck} />
+                        </span>
+                        <h3 id="product-thanks-title">متشکریم</h3>
+                        <p>{thanks}</p>
+                        <button type="button" onClick={() => setThanks('')}>باشه</button>
+                    </div>
+                </div>
+            )}
             <Footer />
         </div>
     );

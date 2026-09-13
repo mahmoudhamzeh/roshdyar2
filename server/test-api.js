@@ -310,6 +310,18 @@ async function run() {
         const stillHidden = await request('GET', `/api/shop/products/${product.id}/comments`);
         assert.ok(!(stillHidden.data || []).some((item) => item.id === phoneComment.data.id));
 
+        const ratingOnly = await request('POST', `/api/shop/products/${product.id}/comments`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { rating: 5 }
+        });
+        assert.strictEqual(ratingOnly.status, 201, JSON.stringify(ratingOnly.data));
+        assert.strictEqual(ratingOnly.data.status, 'pending');
+        assert.ok(ratingOnly.data.pending);
+        assert.ok(/متشکر/.test(String(ratingOnly.data.message || '')), ratingOnly.data.message);
+        assert.ok(!String(ratingOnly.data.body || '').trim());
+        const hiddenRating = await request('GET', `/api/shop/products/${product.id}/comments`);
+        assert.ok(!(hiddenRating.data || []).some((item) => item.id === ratingOnly.data.id));
+
         const categories = await request('GET', '/api/shop/categories');
         assert.strictEqual(categories.status, 200);
         const names = [];
