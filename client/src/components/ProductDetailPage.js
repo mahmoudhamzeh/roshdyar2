@@ -7,7 +7,8 @@ import Footer from './Footer';
 import ShopBreadcrumb from './ShopBreadcrumb';
 import ShopRating from './ShopRating';
 import { addToCart, formatPrice } from '../utils/cart';
-import { ageBandLabel, displayCommentAuthor } from '../utils/shop';
+import { ageBandLabel, displayCommentAuthor, genderLabel } from '../utils/shop';
+import { formatToShamsi } from '../utils/dateConverter';
 import ProductImageGallery from './ProductImageGallery';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
@@ -18,6 +19,11 @@ const SECTIONS = [
     { id: 'specs', label: 'مشخصات' },
     { id: 'reviews', label: 'نظرات' }
 ];
+const RATING_WORDS = ['', 'خیلی بد', 'بد', 'معمولی', 'خوب', 'عالی'];
+
+const commentDate = (value) => formatToShamsi(value);
+
+const authorInitial = (name) => String(name || 'ک').trim().charAt(0);
 
 const ProductDetailPage = () => {
     const { id } = useParams();
@@ -276,6 +282,10 @@ const ProductDetailPage = () => {
                                         <dd>{product.ageBand ? ageBandLabel(product.ageBand) : '—'}</dd>
                                     </div>
                                     <div>
+                                        <dt>جنسیت</dt>
+                                        <dd>{product.gender ? genderLabel(product.gender) : 'دختر و پسر'}</dd>
+                                    </div>
+                                    <div>
                                         <dt>برند</dt>
                                         <dd>{product.brand || '—'}</dd>
                                     </div>
@@ -300,9 +310,42 @@ const ProductDetailPage = () => {
                                 </dl>
                             </section>
 
-                            <section id="product-section-reviews" className="product-section product-comments">
+                            <section id="product-section-reviews" className="product-section product-reviews">
                                 <h2>نظر کاربران</h2>
+                                <div className="product-reviews-summary">
+                                    <div className="product-reviews-score">
+                                        <strong>{Number(product.ratingAvg || 0).toFixed(1)}</strong>
+                                        <ShopRating
+                                            value={product.ratingAvg}
+                                            count={product.ratingCount || comments.length}
+                                            size="lg"
+                                            showEmpty
+                                        />
+                                        <span>
+                                            {comments.length > 0
+                                                ? `${comments.length} دیدگاه تأییدشده`
+                                                : 'هنوز دیدگاهی ثبت نشده'}
+                                        </span>
+                                    </div>
+                                    <ul className="product-reviews-bars">
+                                        {[5, 4, 3, 2, 1].map((star) => {
+                                            const count = comments.filter((item) => Number(item.rating) === star).length;
+                                            const pct = comments.length ? Math.round((count / comments.length) * 100) : 0;
+                                            return (
+                                                <li key={star}>
+                                                    <span>{star} ستاره</span>
+                                                    <div className="product-reviews-bar">
+                                                        <em style={{ width: `${pct}%` }} />
+                                                    </div>
+                                                    <b>{count}</b>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </div>
+
                                 <form
+                                    className="product-review-form"
                                     onSubmit={async (e) => {
                                         e.preventDefault();
                                         if (!comment.trim()) return;
@@ -317,10 +360,16 @@ const ProductDetailPage = () => {
                                             return;
                                         }
                                         setComment('');
+                                        setRating(5);
                                         setMessage(data.message || 'نظر شما پس از تأیید کارشناس نمایش داده می‌شود');
                                         loadComments();
                                     }}
                                 >
+                                    <h3>دیدگاه خود را بنویسید</h3>
+                                    <p className="product-review-form-label">
+                                        امتیاز شما
+                                        <em>{RATING_WORDS[rating]}</em>
+                                    </p>
                                     <div className="shop-stars-input" role="radiogroup" aria-label="امتیاز">
                                         {[1, 2, 3, 4, 5].map((value) => (
                                             <button
@@ -337,45 +386,61 @@ const ProductDetailPage = () => {
                                     <textarea
                                         value={comment}
                                         onChange={(e) => setComment(e.target.value)}
-                                        rows="3"
-                                        placeholder="نظر خود را بنویسید"
+                                        rows="4"
+                                        placeholder="کیفیت، مناسب بودن برای سن کودک و تجربه خرید را بنویسید..."
                                     />
-                                    <button type="submit">ثبت نظر</button>
+                                    <button type="submit">ثبت دیدگاه</button>
                                 </form>
+
                                 {comments.length === 0 ? (
-                                    <p>هنوز نظر تأیید‌شده‌ای ثبت نشده است.</p>
+                                    <div className="product-reviews-empty">
+                                        <p>هنوز نظر تأیید‌شده‌ای ثبت نشده است.</p>
+                                        <span>اولین نفری باشید که تجربه خرید این محصول را می‌نویسد.</span>
+                                    </div>
                                 ) : (
-                                    comments.map((item) => (
-                                        <article key={item.id} className="product-comment">
-                                            <div className="product-comment-head">
-                                                <strong>{displayCommentAuthor(item)}</strong>
-                                                {item.rating ? (
-                                                    <ShopRating value={item.rating} size="sm" />
-                                                ) : null}
-                                            </div>
-                                            <p>{item.body}</p>
-                                            <div className="product-comment-votes">
-                                                <button
-                                                    type="button"
-                                                    className={item.myVote === 1 ? 'is-on' : ''}
-                                                    onClick={() => handleVote(item.id, 1)}
-                                                    aria-label="پسندیدن نظر"
-                                                >
-                                                    <FontAwesomeIcon icon={faThumbsUp} />
-                                                    {item.likeCount || 0}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={item.myVote === -1 ? 'is-on is-down' : ''}
-                                                    onClick={() => handleVote(item.id, -1)}
-                                                    aria-label="نپسندیدن نظر"
-                                                >
-                                                    <FontAwesomeIcon icon={faThumbsDown} />
-                                                    {item.dislikeCount || 0}
-                                                </button>
-                                            </div>
-                                        </article>
-                                    ))
+                                    <div className="product-reviews-list">
+                                        {comments.map((item) => {
+                                            const author = displayCommentAuthor(item);
+                                            return (
+                                                <article key={item.id} className="product-review-card">
+                                                    <header className="product-review-card__head">
+                                                        <span className="product-review-avatar" aria-hidden="true">
+                                                            {authorInitial(author)}
+                                                        </span>
+                                                        <div>
+                                                            <strong>{author}</strong>
+                                                            <time>{commentDate(item.createdAt)}</time>
+                                                        </div>
+                                                        {item.rating ? (
+                                                            <ShopRating value={item.rating} size="sm" />
+                                                        ) : null}
+                                                    </header>
+                                                    <p>{item.body}</p>
+                                                    <div className="product-review-votes">
+                                                        <span>آیا این دیدگاه مفید بود؟</span>
+                                                        <button
+                                                            type="button"
+                                                            className={item.myVote === 1 ? 'is-on' : ''}
+                                                            onClick={() => handleVote(item.id, 1)}
+                                                            aria-label="پسندیدن نظر"
+                                                        >
+                                                            <FontAwesomeIcon icon={faThumbsUp} />
+                                                            {item.likeCount || 0}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className={item.myVote === -1 ? 'is-on is-down' : ''}
+                                                            onClick={() => handleVote(item.id, -1)}
+                                                            aria-label="نپسندیدن نظر"
+                                                        >
+                                                            <FontAwesomeIcon icon={faThumbsDown} />
+                                                            {item.dislikeCount || 0}
+                                                        </button>
+                                                    </div>
+                                                </article>
+                                            );
+                                        })}
+                                    </div>
                                 )}
                             </section>
                         </div>

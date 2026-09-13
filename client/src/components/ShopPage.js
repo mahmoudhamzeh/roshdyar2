@@ -9,11 +9,24 @@ import ShopHeroSlider from './ShopHeroSlider';
 import AmazingOffersRail from './AmazingOffersRail';
 import ShopCategoryTiles from './ShopCategoryTiles';
 import ShopBreadcrumb from './ShopBreadcrumb';
-import { AGE_BANDS, SORT_OPTIONS, ageBandFromBirthDate, ageBandLabel } from '../utils/shop';
+import ShopCategorySheet from './ShopCategorySheet';
+import { AGE_BANDS, GENDER_OPTIONS, SORT_OPTIONS, ageBandFromBirthDate, ageBandLabel, genderLabel } from '../utils/shop';
 import './ShopPage.css';
 import './ShopWorld.css';
 
 const API = '';
+
+const FilterSelect = ({ label, value, onChange, options, allLabel = 'همه' }) => (
+    <label className="shop-filter-select">
+        {label}
+        <select value={value} onChange={(e) => onChange(e.target.value)}>
+            {allLabel ? <option value="">{allLabel}</option> : null}
+            {options.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+        </select>
+    </label>
+);
 
 const ShopPage = () => {
     const history = useHistory();
@@ -22,6 +35,7 @@ const ShopPage = () => {
     const category = params.get('category') || 'همه';
     const skill = params.get('skill') || '';
     const age = params.get('age') || '';
+    const gender = params.get('gender') || '';
     const sort = params.get('sort') || 'newest';
     const query = params.get('q') || '';
 
@@ -32,17 +46,14 @@ const ShopPage = () => {
     const [search, setSearch] = useState(query);
     const [childBands, setChildBands] = useState([]);
     const [filtersOpen, setFiltersOpen] = useState(false);
-    const hasFilters = category !== 'همه' || Boolean(skill || age || query);
+    const [categoriesOpen, setCategoriesOpen] = useState(false);
+    const hasFilters = category !== 'همه' || Boolean(skill || age || gender || query);
 
     const setParam = (key, value) => {
         const next = new URLSearchParams(location.search);
         if (!value || value === 'همه') next.delete(key);
         else next.set(key, value);
         history.replace(`/shop${next.toString() ? `?${next.toString()}` : ''}`);
-    };
-
-    const toggleParam = (key, value) => {
-        setParam(key, params.get(key) === value ? '' : value);
     };
 
     const clearFilters = () => {
@@ -83,6 +94,7 @@ const ShopPage = () => {
                 if (query) qs.set('q', query);
                 if (skill) qs.set('skill', skill);
                 if (age) qs.set('age', age);
+                if (gender) qs.set('gender', gender);
                 if (sort) qs.set('sort', sort);
                 const res = await fetch(`${API}/api/shop/products?${qs.toString()}`);
                 if (!res.ok) throw new Error('خطا در دریافت محصولات');
@@ -94,7 +106,23 @@ const ShopPage = () => {
             }
         };
         fetchProducts();
-    }, [category, query, skill, age, sort]);
+    }, [category, query, skill, age, gender, sort]);
+
+    useEffect(() => {
+        if (!filtersOpen) return undefined;
+        const prev = document.body.style.overflow;
+        const onKey = (event) => {
+            if (event.key === 'Escape') setFiltersOpen(false);
+        };
+        if (window.matchMedia('(max-width: 768px)').matches) {
+            document.body.style.overflow = 'hidden';
+        }
+        window.addEventListener('keydown', onKey);
+        return () => {
+            document.body.style.overflow = prev;
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [filtersOpen]);
 
     const forYourChild = useMemo(() => {
         if (!childBands.length) return [];
@@ -102,14 +130,53 @@ const ShopPage = () => {
     }, [childBands, home]);
 
     const selectedSkill = (home?.skills || []).find((item) => item.slug === skill);
-    const activeFilterCount = [category !== 'همه', Boolean(skill), Boolean(age), Boolean(query)].filter(Boolean).length;
+    const skillOptions = (home?.skills || []).map((item) => ({ id: item.slug, label: item.title }));
+    const genderOptions = home?.genders?.length ? home.genders : GENDER_OPTIONS;
+    const activeFilterCount = [category !== 'همه', Boolean(skill), Boolean(age), Boolean(gender), Boolean(query)]
+        .filter(Boolean).length;
     const crumbs = [
         { label: 'فروشگاه', to: '/shop' },
         category !== 'همه' ? { label: category, to: `/shop?category=${encodeURIComponent(category)}` } : null,
         selectedSkill ? { label: selectedSkill.title, to: `/shop?skill=${encodeURIComponent(skill)}` } : null,
         age ? { label: ageBandLabel(age), to: `/shop?age=${encodeURIComponent(age)}` } : null,
+        gender ? { label: genderLabel(gender), to: `/shop?gender=${encodeURIComponent(gender)}` } : null,
         query ? { label: `جستجو: ${query}` } : null
     ].filter(Boolean);
+
+    const filterControls = (
+        <>
+            <FilterSelect
+                label="رده سنی"
+                value={age}
+                onChange={(value) => setParam('age', value)}
+                options={AGE_BANDS}
+                allLabel="همه سن‌ها"
+            />
+            <FilterSelect
+                label="جنسیت"
+                value={gender}
+                onChange={(value) => setParam('gender', value)}
+                options={genderOptions}
+                allLabel="همه"
+            />
+            <FilterSelect
+                label="مهارت رشدی"
+                value={skill}
+                onChange={(value) => setParam('skill', value)}
+                options={skillOptions}
+                allLabel="همه مهارت‌ها"
+            />
+            <div className="shop-filter-sort-mobile">
+                <FilterSelect
+                    label="مرتب‌سازی"
+                    value={sort}
+                    onChange={(value) => setParam('sort', value || 'newest')}
+                    options={SORT_OPTIONS}
+                    allLabel=""
+                />
+            </div>
+        </>
+    );
 
     return (
         <div className="shop-page shop-world">
@@ -134,6 +201,7 @@ const ShopPage = () => {
                     tree={home?.categories || []}
                     selected={category}
                     onSelect={(name) => setParam('category', name)}
+                    onMore={() => setCategoriesOpen(true)}
                 />
 
                 {!hasFilters && home?.onSale?.length > 0 && (
@@ -142,11 +210,20 @@ const ShopPage = () => {
 
                 <div className="shop-catalog">
                     <aside className={`shop-filters ${filtersOpen ? 'is-open' : ''}`}>
+                        {filtersOpen && (
+                            <button
+                                type="button"
+                                className="shop-filters-backdrop"
+                                aria-label="بستن فیلترها"
+                                onClick={() => setFiltersOpen(false)}
+                            />
+                        )}
                         <form
                             className="shop-search"
                             onSubmit={(e) => {
                                 e.preventDefault();
                                 setParam('q', search.trim());
+                                setFiltersOpen(false);
                             }}
                         >
                             <FontAwesomeIcon icon={faSearch} />
@@ -181,37 +258,20 @@ const ShopPage = () => {
                         </div>
 
                         <div className="shop-filters-body">
-                            <div className="shop-filter-group">
-                                <p>رده سنی</p>
-                                <div className="shop-chip-row">
-                                    {AGE_BANDS.map((band) => (
-                                        <button
-                                            key={band.id}
-                                            type="button"
-                                            className={`shop-chip${age === band.id ? ' is-active' : ''}`}
-                                            onClick={() => toggleParam('age', band.id)}
-                                        >
-                                            {band.label}
-                                        </button>
-                                    ))}
-                                </div>
+                            <div className="shop-filters-sheet-head">
+                                <p>فیلتر و مرتب‌سازی</p>
+                                <button type="button" onClick={() => setFiltersOpen(false)} aria-label="بستن">
+                                    <FontAwesomeIcon icon={faTimes} />
+                                </button>
                             </div>
-
-                            <div className="shop-filter-group">
-                                <p>مهارت رشدی</p>
-                                <div className="shop-chip-row">
-                                    {(home?.skills || []).map((item) => (
-                                        <button
-                                            key={item.slug}
-                                            type="button"
-                                            className={`shop-chip${skill === item.slug ? ' is-active' : ''}`}
-                                            onClick={() => toggleParam('skill', item.slug)}
-                                        >
-                                            {item.title}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                            {filterControls}
+                            <button
+                                type="button"
+                                className="shop-filters-apply"
+                                onClick={() => setFiltersOpen(false)}
+                            >
+                                نمایش نتایج
+                            </button>
                         </div>
                     </aside>
 
@@ -222,7 +282,7 @@ const ShopPage = () => {
 
                         {!hasFilters && !loading && !error && home && forYourChild.length > 0 && (
                             <section>
-                                <div className="shop-section-title">
+                                <div className="shop-results-bar">
                                     <h2>مناسب برای کودک شما</h2>
                                 </div>
                                 <div className="shop-grid">
@@ -234,21 +294,26 @@ const ShopPage = () => {
                         )}
 
                         <section>
-                            <div className="shop-section-title">
+                            <div className="shop-results-bar">
                                 <h2>{hasFilters ? 'نتایج' : 'جدیدترین‌ها'}</h2>
-                                <label className="shop-sort-label">
-                                    مرتب‌سازی
-                                    <select
-                                        className="shop-sort"
-                                        value={sort}
-                                        onChange={(e) => setParam('sort', e.target.value)}
-                                        aria-label="مرتب‌سازی"
-                                    >
-                                        {SORT_OPTIONS.map((option) => (
-                                            <option key={option.id} value={option.id}>{option.label}</option>
-                                        ))}
-                                    </select>
-                                </label>
+                                <div className="shop-results-meta">
+                                    {!loading && !error && (
+                                        <span className="shop-results-count">{products.length} کالا</span>
+                                    )}
+                                    <label className="shop-sort-label">
+                                        مرتب‌سازی
+                                        <select
+                                            className="shop-sort"
+                                            value={sort}
+                                            onChange={(e) => setParam('sort', e.target.value)}
+                                            aria-label="مرتب‌سازی"
+                                        >
+                                            {SORT_OPTIONS.map((option) => (
+                                                <option key={option.id} value={option.id}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </div>
                             </div>
 
                             {!loading && !error && products.length === 0 && (
@@ -266,6 +331,12 @@ const ShopPage = () => {
                     </div>
                 </div>
             </main>
+            <ShopCategorySheet
+                open={categoriesOpen}
+                onClose={() => setCategoriesOpen(false)}
+                onSelect={(name) => setParam('category', name)}
+                selected={category}
+            />
             <Footer />
         </div>
     );

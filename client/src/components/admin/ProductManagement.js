@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
-import { AGE_BANDS, findCategoryPath } from '../../utils/shop';
+import { AGE_BANDS, GENDER_OPTIONS, findCategoryPath } from '../../utils/shop';
 import CategoryCascade from '../CategoryCascade';
 import './ProductManagement.css';
 
@@ -18,6 +18,7 @@ const emptyForm = {
     brand: '',
     safetyWarning: '',
     skillIds: [],
+    gender: 'unisex',
 };
 
 const getAdmin = () => {
@@ -85,6 +86,7 @@ const ProductManagement = () => {
             brand: product.brand || '',
             safetyWarning: product.safetyWarning || '',
             skillIds: (product.skills || []).map((s) => s.id),
+            gender: product.gender || 'unisex',
         });
         setShowForm(true);
     };
@@ -109,6 +111,7 @@ const ProductManagement = () => {
         formData.append('compareAtPrice', form.compareAtPrice || '');
         formData.append('brand', form.brand || '');
         formData.append('safetyWarning', form.safetyWarning || '');
+        formData.append('gender', form.gender || 'unisex');
         formData.append('skillIds', JSON.stringify(form.skillIds || []));
         Array.from(form.images || []).forEach((file) => formData.append('images', file));
 
@@ -235,6 +238,17 @@ const ProductManagement = () => {
                                 <option value="">انتخاب رده سنی</option>
                                 {AGE_BANDS.map((band) => (
                                     <option key={band.id} value={band.id}>{band.label}</option>
+                                ))}
+                            </select>
+                        </label>
+                        <label>
+                            جنسیت
+                            <select
+                                value={form.gender}
+                                onChange={(e) => setForm((p) => ({ ...p, gender: e.target.value }))}
+                            >
+                                {GENDER_OPTIONS.map((item) => (
+                                    <option key={item.id} value={item.id}>{item.label}</option>
                                 ))}
                             </select>
                         </label>

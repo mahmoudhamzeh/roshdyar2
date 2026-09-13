@@ -1,0 +1,129 @@
+.shop-cat-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.shop-cat-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(28, 22, 12, 0.45);
+  cursor: pointer;
+}
+
+.shop-cat-sheet__panel {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: min(82vh, 640px);
+  background: #fffdf8;
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -16px 40px rgba(28, 22, 12, 0.18);
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.shop-cat-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+  border-bottom: 1px solid #eadfbf;
+}
+
+.shop-cat-sheet__head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #134e4a;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.shop-cat-sheet__head button {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: #f4ead4;
+  color: #3f3a2f;
+  cursor: pointer;
+}
+
+.shop-cat-sheet__tree {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0.75rem 1rem;
+  overflow-y: auto;
+}
+
+.shop-cat-sheet__tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shop-cat-sheet__row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding-right: calc(var(--depth, 0) * 1rem);
+  border-radius: 12px;
+}
+
+.shop-cat-sheet__row.is-active .shop-cat-sheet__pick {
+  color: #9a3412;
+  font-weight: 800;
+}
+
+.shop-cat-sheet__pick,
+.shop-cat-sheet__chevron {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.shop-cat-sheet__pick {
+  flex: 1;
+  text-align: right;
+  padding: 0.7rem 0.4rem;
+  font-weight: 700;
+  color: #3f3a2f;
+  font-size: 0.95rem;
+}
+
+.shop-cat-sheet__chevron {
+  width: 2rem;
+  height: 2rem;
+  color: #b45309;
+  border-radius: 8px;
+}
+
+.shop-cat-sheet__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.shop-cat-sheet__dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  margin: 0 0.65rem;
+  flex-shrink: 0;
+}
+
+@media (min-width: 769px) {
+  .shop-cat-sheet {
+    align-items: center;
+    padding: 1.5rem;
+  }
+
+  .shop-cat-sheet__panel {
+    border-radius: 20px;
+    max-height: min(78vh, 680px);
+  }
+}

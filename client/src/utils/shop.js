@@ -14,6 +14,15 @@ export const SORT_OPTIONS = [
     { id: 'price-desc', label: 'گران‌ترین' }
 ];
 
+export const GENDER_OPTIONS = [
+    { id: 'boy', label: 'پسرانه' },
+    { id: 'girl', label: 'دخترانه' },
+    { id: 'unisex', label: 'دختر و پسر' }
+];
+
+export const genderLabel = (id) =>
+    (GENDER_OPTIONS.find((item) => item.id === id) || {}).label || id;
+
 export const ageBandLabel = (id) =>
     (AGE_BANDS.find((band) => band.id === id) || {}).label || id;
 

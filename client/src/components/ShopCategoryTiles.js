@@ -24,7 +24,7 @@ const ICONS = {
     store: faStore
 };
 
-const ShopCategoryTiles = ({ tree = [], selected, onSelect }) => {
+const ShopCategoryTiles = ({ tree = [], selected, onSelect, onMore }) => {
     const [parentId, setParentId] = useState(null);
     const crumbs = useMemo(() => findCategoryPathById(tree, parentId), [tree, parentId]);
     const parent = crumbs[crumbs.length - 1] || findCategoryById(tree, parentId);
@@ -99,12 +99,12 @@ const ShopCategoryTiles = ({ tree = [], selected, onSelect }) => {
                     );
                 })}
                 {!parent && (
-                    <a className="shop-circle" href="/shop/categories">
+                    <button type="button" className="shop-circle" onClick={() => (onMore ? onMore() : onSelect('همه'))}>
                         <span className="shop-circle__icon" style={{ background: '#64748b' }}>
                             <FontAwesomeIcon icon={faEllipsis} />
                         </span>
                         <em>بیشتر</em>
-                    </a>
+                    </button>
                 )}
             </div>
         </section>

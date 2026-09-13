@@ -14,6 +14,41 @@ const SKILLS = [
     { slug: 'socio-emotional', title: 'هیجانی-اجتماعی', description: 'همدلی، همکاری و تنظیم هیجان' }
 ];
 
+const GENDER_OPTIONS = [
+    { id: 'boy', label: 'پسرانه' },
+    { id: 'girl', label: 'دخترانه' },
+    { id: 'unisex', label: 'دختر و پسر' }
+];
+
+function normalizeGender(value) {
+    const raw = String(value || '').trim().toLowerCase();
+    if (['boy', 'male', 'پسر', 'پسرانه'].includes(raw)) return 'boy';
+    if (['girl', 'female', 'دختر', 'دخترانه'].includes(raw)) return 'girl';
+    if (['unisex', 'both', 'all', 'دختر و پسر'].includes(raw)) return 'unisex';
+    return '';
+}
+
+function inferGenderFromCategory(name, tree) {
+    const walk = (nodes, acc) => {
+        for (const node of nodes || []) {
+            const next = [...acc, node];
+            if (node.name === name) return next;
+            const found = walk(node.children, next);
+            if (found) return found;
+        }
+        return null;
+    };
+    const path = walk(tree, []) || [];
+    const names = [...path.map((node) => node.name), name].filter(Boolean);
+    if (names.some((item) => /پسر/.test(item))) return 'boy';
+    if (names.some((item) => /دختر/.test(item))) return 'girl';
+    return 'unisex';
+}
+
+function resolveProductGender(value, categoryName, tree) {
+    return normalizeGender(value) || inferGenderFromCategory(categoryName, tree);
+}
+
 const INTERNAL_VENDOR = {
     slug: 'tatkids',
     displayName: 'مجموعه تات کیدز',
@@ -108,6 +143,7 @@ function catalogFilters(raw = {}) {
     const q = raw.q ? String(raw.q).trim().toLowerCase() : '';
     const ageBand = raw.age || raw.ageBand ? String(raw.age || raw.ageBand).trim() : '';
     const skill = raw.skill ? String(raw.skill).trim() : '';
+    const gender = normalizeGender(raw.gender);
     const sort = String(raw.sort || 'newest');
     return {
         category,
@@ -116,6 +152,7 @@ function catalogFilters(raw = {}) {
         q,
         ageBand,
         skill,
+        gender,
         sort
     };
 }
@@ -152,6 +189,7 @@ function buildCatalogSql(filters = {}, { activeOnly = true } = {}) {
             m.age_band,
             m.brand,
             m.safety_warning,
+            m.gender,
             (
                 SELECT AVG(c.rating * 1.0)
                 FROM product_comments c
@@ -210,6 +248,12 @@ function buildCatalogSql(filters = {}, { activeOnly = true } = {}) {
         )`;
         params.push(f.skill);
     }
+    if (f.gender === 'unisex') {
+        sql += " AND COALESCE(NULLIF(m.gender, ''), 'unisex') = 'unisex'";
+    } else if (f.gender === 'boy' || f.gender === 'girl') {
+        sql += " AND COALESCE(NULLIF(m.gender, ''), 'unisex') IN (?, 'unisex')";
+        params.push(f.gender);
+    }
     sql += ` ORDER BY ${catalogOrderBy(f.sort)}`;
     return { sql, params };
 }
@@ -237,6 +281,7 @@ function mapCatalogRow(row, asBool) {
         ageBand: row.age_band || null,
         brand: row.brand || null,
         safetyWarning: row.safety_warning || null,
+        gender: normalizeGender(row.gender) || 'unisex',
         ratingAvg: row.rating_avg != null ? Number(row.rating_avg) : 0,
         ratingCount: Number(row.rating_count || 0),
         soldCount: Number(row.sold_count || 0),
@@ -247,8 +292,12 @@ function mapCatalogRow(row, asBool) {
 module.exports = {
     AGE_BANDS,
     SKILLS,
+    GENDER_OPTIONS,
     INTERNAL_VENDOR,
     CATEGORY_DEFAULTS,
+    normalizeGender,
+    inferGenderFromCategory,
+    resolveProductGender,
     monthsFromBirthDate,
     ageBandFromMonths,
     ageBandFromBirthDate,

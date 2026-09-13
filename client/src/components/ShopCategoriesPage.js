@@ -1,34 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import { useHistory } from 'react-router-dom';
-import ShopCategoryTiles from './ShopCategoryTiles';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
+import ShopCategorySheet from './ShopCategorySheet';
 import './ShopPage.css';
 import './ShopWorld.css';
 
+const isMobileView = () =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
 const ShopCategoriesPage = () => {
     const history = useHistory();
-    const [tree, setTree] = useState([]);
+    const [open, setOpen] = useState(() => !isMobileView());
 
     useEffect(() => {
-        fetch('/api/shop/categories')
-            .then((res) => (res.ok ? res.json() : []))
-            .then((data) => setTree(Array.isArray(data) ? data : []))
-            .catch(() => setTree([]));
-    }, []);
+        if (!isMobileView()) return undefined;
+        history.replace('/shop');
+        const timer = window.setTimeout(() => {
+            window.dispatchEvent(new Event('tatkids-open-shop-categories'));
+        }, 0);
+        return () => window.clearTimeout(timer);
+    }, [history]);
 
     return (
         <div className="shop-page shop-world">
             <MainNavbar />
             <main className="shop-main">
-                <h1>دسته‌بندی درختی فروشگاه</h1>
-                <p>گروه اصلی را بزنید تا زیرگروه باز شود.</p>
-                <ShopCategoryTiles
-                    tree={tree}
-                    selected=""
-                    onSelect={(name) => history.push(`/shop?category=${encodeURIComponent(name)}`)}
-                />
+                <h1>دسته‌بندی فروشگاه</h1>
+                <p>گروه مورد نظر را انتخاب کنید تا محصولات همان دسته نمایش داده شود.</p>
             </main>
+            <ShopCategorySheet
+                open={open}
+                onClose={() => {
+                    setOpen(false);
+                    history.push('/shop');
+                }}
+                onSelect={(name) => {
+                    history.push(name && name !== 'همه'
+                        ? `/shop?category=${encodeURIComponent(name)}`
+                        : '/shop');
+                }}
+            />
             <Footer />
         </div>
     );
