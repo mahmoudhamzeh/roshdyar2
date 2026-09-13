@@ -72,6 +72,14 @@ function assertPgFkTypes() {
         /ALTER TABLE magazine_posts ALTER COLUMN source_id TYPE BIGINT/.test(storeSrc),
         'existing PG magazine_posts.source_id must be widened to BIGINT'
     );
+    assert.ok(
+        /\$13::bigint/.test(storeSrc) && /\$16::bigint/.test(storeSrc),
+        'legacy magazine insert must bind source_id as bigint, not int4'
+    );
+    assert.ok(
+        !/VALUES \(\$1,'article'/.test(storeSrc),
+        'do not copy Date.now() news ids into magazine_posts.id'
+    );
 }
 
 async function run() {

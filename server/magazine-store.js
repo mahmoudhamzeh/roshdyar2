@@ -1411,23 +1411,21 @@ async function migrateLegacyPg(q, one, many) {
         const image = item.image_url || placeholderImage(`magazine-article-${item.id}.svg`, item.title, '#0f766e');
         await q(
             `INSERT INTO magazine_posts (
-                id, type, title, slug, summary, content, featured_image_url, category_id,
+                type, title, slug, summary, content, featured_image_url, category_id,
                 view_count, published, featured, featured_order, reading_time_minutes, seo_title, seo_description,
                 source_table, source_id, created_at, updated_at, published_at
-            ) VALUES ($1,'article',$2,$3,$4,$5,$6,$7,$8,1,$9,$10,$11,$12,$13,'news',$14,$15,$16,$17)`,
+            ) VALUES ('article',$1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,'news',$13::bigint,$14,$15,$16)`,
             [
-                item.id, item.title, slug, item.summary, content, image, category ? category.id : null,
+                item.title, slug, item.summary, content, image, category ? category.id : null,
                 Math.max(12, 80 - (index * 7)), index < 4 ? 1 : 0, index < 4 ? index + 1 : 0,
                 seed.readingTimeMinutes(content, item.summary), `${item.title} | مجله سلامت تات کیدز`,
-                item.summary, item.id, item.created_at, item.updated_at || item.created_at, item.created_at
+                item.summary, String(item.id), item.created_at, item.updated_at || item.created_at, item.created_at
             ]
         );
     }
     const videos = await many('SELECT * FROM videos ORDER BY id');
-    const maxNews = news.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0);
     for (let index = 0; index < videos.length; index += 1) {
         const item = videos[index];
-        const id = maxNews + index + 1;
         const category = await one('SELECT id FROM magazine_categories WHERE slug = $1', ['education']);
         const slug = await uniqueSlugPg(one, 'magazine_posts', seed.slugify(item.title, `video-${item.id}`));
         const content = seed.videoHtml(item.title);
@@ -1435,18 +1433,18 @@ async function migrateLegacyPg(q, one, many) {
         const embed = seed.toEmbedUrl(item.url);
         await q(
             `INSERT INTO magazine_posts (
-                id, type, title, slug, summary, content, featured_image_url, category_id,
+                type, title, slug, summary, content, featured_image_url, category_id,
                 video_url, video_embed_url, captions_url, video_qualities, duration_seconds, view_count,
                 published, reading_time_minutes, seo_title, seo_description, source_table, source_id,
                 created_at, updated_at, published_at
-            ) VALUES ($1,'video',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,1,$14,$15,$16,'videos',$17,$18,$18,$18)`,
+            ) VALUES ('video',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,1,$13,$14,$15,'videos',$16::bigint,$17,$17,$17)`,
             [
-                id, item.title, slug, item.summary, content, image, category ? category.id : null,
+                item.title, slug, item.summary, content, image, category ? category.id : null,
                 item.url, embed, media.captions,
                 JSON.stringify([{ label: 'خودکار', url: embed || item.url }]),
                 180 + (index * 25), 40 + (index * 5),
                 seed.readingTimeMinutes(content, item.summary), `${item.title} | ویدیو مجله سلامت`,
-                item.summary, item.id, item.created_at
+                item.summary, String(item.id), item.created_at
             ]
         );
     }
@@ -1887,9 +1885,9 @@ async function runSqlBatch(q, sql) {
 }
 
 async function widenMagazinePgBigints(q) {
+    await q('ALTER TABLE magazine_posts ALTER COLUMN source_id TYPE BIGINT USING source_id::bigint');
     // Older production tables used INTEGER; news/video ids are Date.now() (ms) and overflow int4.
     const statements = [
-        'ALTER TABLE magazine_posts ALTER COLUMN source_id TYPE BIGINT USING source_id::bigint',
         'ALTER TABLE magazine_posts ALTER COLUMN id TYPE BIGINT USING id::bigint',
         'ALTER TABLE magazine_posts ALTER COLUMN category_id TYPE BIGINT USING category_id::bigint',
         'ALTER TABLE magazine_categories ALTER COLUMN id TYPE BIGINT USING id::bigint',
