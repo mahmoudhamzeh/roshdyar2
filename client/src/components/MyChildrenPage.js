@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useHistory } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faFolderOpen, faPen, faPlus, faTrash, faChevronLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons';
+import { getChildDisplayName } from '../utils/childName';
+import ChildAvatar from './ChildAvatar';
 import './MyChildrenPage.css';
 
 const MyChildrenPage = () => {
@@ -10,8 +14,6 @@ const MyChildrenPage = () => {
         try {
             const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
             if (!loggedInUser) {
-                console.error("No user logged in.");
-                // Optionally redirect to login
                 history.push('/register');
                 return;
             }
@@ -37,16 +39,17 @@ const MyChildrenPage = () => {
         fetchChildren();
     }, [fetchChildren]);
 
-    const handleDelete = async (childId) => {
+    const handleDelete = async (event, childId) => {
+        event.stopPropagation();
         if (window.confirm('آیا از حذف این کودک مطمئن هستید؟')) {
             try {
                 await fetch(`/api/children/${childId}`, { method: 'DELETE' });
-                fetchChildren(); // Refresh list
-            } catch (error) { alert('خطا در حذف کودک'); }
+                fetchChildren();
+            } catch (error) {
+                alert('خطا در حذف کودک');
+            }
         }
     };
-
-    const ArrowRightIcon = () => (<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>);
 
     const calculateAge = (birthDateStr) => {
         if (!birthDateStr) return 'نامشخص';
@@ -67,33 +70,79 @@ const MyChildrenPage = () => {
     return (
         <div className="children-page-final">
             <nav className="page-nav-final">
-                <button onClick={() => history.push('/dashboard')} className="home-btn-final">
-                    <ArrowRightIcon />
-                    <span>صفحه اصلی</span>
+                <button type="button" onClick={() => history.push('/dashboard')} className="home-btn-final" aria-label="بازگشت به خانه">
+                    <FontAwesomeIcon icon={faArrowRight} />
+                    <span>خانه</span>
                 </button>
                 <h1>کودکان من</h1>
+                <span className="page-nav-final-spacer" aria-hidden="true" />
             </nav>
             <div className="children-content-final">
-                <button onClick={() => history.push('/add-child')} className="add-child-btn-final">+ افزودن کودک جدید</button>
+                <button type="button" onClick={() => history.push('/add-child')} className="add-child-btn-final">
+                    <FontAwesomeIcon icon={faPlus} />
+                    افزودن کودک جدید
+                </button>
                 <div className="children-list-final">
-                    {children.length === 0 ? <p className="no-children-message">هنوز کودکی اضافه نشده است.</p> :
-                     children.map(child => {
-                        const avatarUrl = child.avatar && child.avatar.startsWith('/uploads') ? `${child.avatar}` : (child.avatar || 'https://i.pravatar.cc/100');
-                        return (
-                            <div key={child.id} className="child-card-final" data-id={child.id}>
-                                <img src={avatarUrl} alt={child.name} className="child-avatar-final" />
-                                <div className="child-info-final">
-                                    <h3>{child.name || `${child.firstName} ${child.lastName}`}</h3>
-                                    <p>سن: {calculateAge(child.birthDate)}</p>
-                                </div>
-                                <div className="child-card-actions">
-                                    <button onClick={() => history.push(`/health-profile/${child.id}`)} className="view-profile-btn-final">مشاهده پرونده</button>
-                                    <button onClick={() => history.push(`/edit-child/${child.id}`)} className="edit-btn-final">ویرایش</button>
-                                    <button onClick={() => handleDelete(child.id)} className="delete-btn-final">حذف</button>
-                                </div>
-                            </div>
-                        );
-                    })}
+                    {children.length === 0 ? (
+                        <p className="no-children-message">هنوز کودکی اضافه نشده است.</p>
+                    ) : (
+                        children.map((child) => {
+                            const displayName = getChildDisplayName(child);
+                            const genderLabel = child.gender === 'girl' ? 'دختر' : child.gender === 'boy' ? 'پسر' : '';
+                            return (
+                                <article
+                                    key={child.id}
+                                    className={`child-card-final ${child.gender === 'girl' ? 'is-girl' : 'is-boy'}`}
+                                    onClick={() => history.push(`/health-profile/${child.id}`)}
+                                >
+                                    <ChildAvatar child={child} size="md" />
+                                    <div className="child-info-final">
+                                        <div className="child-info-heading">
+                                            <h3>{displayName}</h3>
+                                            <FontAwesomeIcon icon={faChevronLeft} className="child-card-chevron" />
+                                        </div>
+                                        <p>
+                                            {calculateAge(child.birthDate)}
+                                            {genderLabel ? ` · ${genderLabel}` : ''}
+                                        </p>
+                                        <div className="child-card-actions">
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    history.push(`/health-profile/${child.id}`);
+                                                }}
+                                                className="view-profile-btn-final"
+                                            >
+                                                <FontAwesomeIcon icon={faFolderOpen} />
+                                                پرونده
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    history.push(`/edit-child/${child.id}`);
+                                                }}
+                                                className="edit-btn-final"
+                                            >
+                                                <FontAwesomeIcon icon={faPen} />
+                                                ویرایش
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={(event) => handleDelete(event, child.id)}
+                                                className="delete-btn-final"
+                                                aria-label={`حذف ${displayName}`}
+                                            >
+                                                <FontAwesomeIcon icon={faTrash} />
+                                                حذف
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>
+                            );
+                        })
+                    )}
                 </div>
             </div>
         </div>
