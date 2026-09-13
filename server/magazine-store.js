@@ -1886,6 +1886,38 @@ async function runSqlBatch(q, sql) {
     }
 }
 
+async function widenMagazinePgBigints(q) {
+    // Older production tables used INTEGER; news/video ids are Date.now() (ms) and overflow int4.
+    const statements = [
+        'ALTER TABLE magazine_posts ALTER COLUMN source_id TYPE BIGINT USING source_id::bigint',
+        'ALTER TABLE magazine_posts ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE magazine_posts ALTER COLUMN category_id TYPE BIGINT USING category_id::bigint',
+        'ALTER TABLE magazine_categories ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE magazine_categories ALTER COLUMN parent_id TYPE BIGINT USING parent_id::bigint',
+        'ALTER TABLE magazine_tags ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE magazine_authors ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE magazine_authors ALTER COLUMN user_id TYPE BIGINT USING user_id::bigint',
+        'ALTER TABLE magazine_post_tags ALTER COLUMN post_id TYPE BIGINT USING post_id::bigint',
+        'ALTER TABLE magazine_post_tags ALTER COLUMN tag_id TYPE BIGINT USING tag_id::bigint',
+        'ALTER TABLE magazine_post_authors ALTER COLUMN post_id TYPE BIGINT USING post_id::bigint',
+        'ALTER TABLE magazine_post_authors ALTER COLUMN author_id TYPE BIGINT USING author_id::bigint',
+        'ALTER TABLE magazine_related_posts ALTER COLUMN post_id TYPE BIGINT USING post_id::bigint',
+        'ALTER TABLE magazine_related_posts ALTER COLUMN related_post_id TYPE BIGINT USING related_post_id::bigint',
+        'ALTER TABLE magazine_comments ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE magazine_comments ALTER COLUMN post_id TYPE BIGINT USING post_id::bigint',
+        'ALTER TABLE magazine_comments ALTER COLUMN parent_id TYPE BIGINT USING parent_id::bigint',
+        'ALTER TABLE magazine_comments ALTER COLUMN user_id TYPE BIGINT USING user_id::bigint',
+        'ALTER TABLE magazine_banners ALTER COLUMN id TYPE BIGINT USING id::bigint'
+    ];
+    for (const statement of statements) {
+        try {
+            await q(statement);
+        } catch (err) {
+            console.error('Magazine column widen skipped:', statement, err && err.message);
+        }
+    }
+}
+
 function ensureMagazineSchemaSqlite(db) {
     try {
         db.transaction(() => {
@@ -1902,6 +1934,7 @@ function ensureMagazineSchemaSqlite(db) {
 async function ensureMagazineSchemaPg(q, one, many) {
     try {
         await runSqlBatch(q, TABLES_PG);
+        await widenMagazinePgBigints(q);
         await seedTaxonomyPg(q, one);
         await migrateLegacyPg(q, one, many);
         await rewriteHeroLinksPg(q, one, many);
@@ -1917,6 +1950,7 @@ module.exports = {
     TABLES_PG,
     ensureMagazineSchemaSqlite,
     ensureMagazineSchemaPg,
+    widenMagazinePgBigints,
     sqliteApi,
     pgApi,
     mapPost,

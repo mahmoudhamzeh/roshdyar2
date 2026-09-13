@@ -900,6 +900,23 @@ async function maybeImportFromSqlite() {
     return copySqliteDatabase(DEFAULT_SQLITE_PATH);
 }
 
+async function widenLegacyIntColumns() {
+    const statements = [
+        'ALTER TABLE otp_codes ALTER COLUMN expires_at TYPE BIGINT USING expires_at::bigint',
+        'ALTER TABLE otp_codes ALTER COLUMN sent_at TYPE BIGINT USING sent_at::bigint',
+        'ALTER TABLE news ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE videos ALTER COLUMN id TYPE BIGINT USING id::bigint',
+        'ALTER TABLE podcasts ALTER COLUMN id TYPE BIGINT USING id::bigint'
+    ];
+    for (const statement of statements) {
+        try {
+            await q(statement);
+        } catch (err) {
+            console.error('Integer widen skipped:', statement, err && err.message);
+        }
+    }
+}
+
 async function connect() {
     if (pool) return pool;
     if (connecting) return connecting;
@@ -925,6 +942,7 @@ async function connect() {
             }
             await shopStore.ensureShopSchemaPg(q, one, many);
             await magazineStore.ensureMagazineSchemaPg(q, one, many);
+            await widenLegacyIntColumns();
             await pool.query('DELETE FROM otp_codes WHERE expires_at < $1', [Date.now()]);
             console.log(`Connected to PostgreSQL schema v${SCHEMA_VERSION}`);
             return pool;

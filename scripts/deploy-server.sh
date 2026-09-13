@@ -84,9 +84,16 @@ else
 fi
 
 echo "==> Health"
-if curl -sfS --max-time 8 http://127.0.0.1:5000/api/health; then
-  echo
-else
+ok=0
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  if curl -sfS --max-time 8 http://127.0.0.1:5000/api/health; then
+    echo
+    ok=1
+    break
+  fi
+  sleep 2
+done
+if [ "$ok" != 1 ]; then
   echo
   echo "Health check failed — Node is not answering on :5000 (nginx will show 502)." >&2
   if command -v pm2 >/dev/null 2>&1; then
