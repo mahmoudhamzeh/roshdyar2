@@ -10,7 +10,7 @@ import { addToCart, formatPrice } from '../utils/cart';
 import { ageBandLabel, displayCommentAuthor, genderLabel } from '../utils/shop';
 import { formatToShamsi } from '../utils/dateConverter';
 import ProductImageGallery from './ProductImageGallery';
-import { getLoggedInUser } from '../api';
+import { getAuthToken, getLoggedInUser } from '../api';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
 
@@ -135,9 +135,9 @@ const ProductDetailPage = () => {
 
     const handleReviewSubmit = async (event) => {
         event.preventDefault();
-        if (!getLoggedInUser()) {
+        if (!getLoggedInUser() && !getAuthToken()) {
             setMessage('برای ثبت امتیاز ابتدا وارد شوید');
-            history.push('/login');
+            history.push(`/login?next=/shop/${id}`);
             return;
         }
         const text = comment.trim();
@@ -157,7 +157,7 @@ const ProductDetailPage = () => {
             const data = await res.json().catch(() => ({}));
             if (res.status === 401) {
                 setMessage(data.message || 'برای ثبت امتیاز وارد شوید');
-                history.push('/login');
+                history.push(`/login?next=/shop/${id}`);
                 return;
             }
             if (!res.ok) {
