@@ -8,6 +8,7 @@ import ShopBreadcrumb from './ShopBreadcrumb';
 import ShopRating from './ShopRating';
 import { addToCart, formatPrice } from '../utils/cart';
 import { ageBandLabel, displayCommentAuthor, genderLabel } from '../utils/shop';
+import { formatToShamsi } from '../utils/dateConverter';
 import ProductImageGallery from './ProductImageGallery';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
@@ -20,12 +21,7 @@ const SECTIONS = [
 ];
 const RATING_WORDS = ['', 'خیلی بد', 'بد', 'معمولی', 'خوب', 'عالی'];
 
-const commentDate = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('fa-IR');
-};
+const commentDate = (value) => formatToShamsi(value);
 
 const authorInitial = (name) => String(name || 'ک').trim().charAt(0);
 
