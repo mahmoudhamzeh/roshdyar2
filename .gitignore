@@ -18,6 +18,12 @@ server/data/
 # Cache
 /client/node_modules/.cache/
 
+# Local debug captures (never part of a release)
+*_screenshot.png
+verify_layout_fix.png
+server/console.log
+server/gitignore.gitignore
+
 # Jules scratch
 jules-scratch/
 
