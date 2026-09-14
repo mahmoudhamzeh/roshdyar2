@@ -429,7 +429,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 2000;
   display: flex;
   background: #fff;
   border-top: 1px solid #dce7e4;
@@ -460,7 +460,7 @@
 .vendor-more {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 3000;
 }
 
 .vendor-more-backdrop {
@@ -477,7 +477,7 @@
   bottom: 0;
   background: #fff;
   border-radius: 18px 18px 0 0;
-  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
+  padding: 1rem 1rem calc(5.2rem + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
