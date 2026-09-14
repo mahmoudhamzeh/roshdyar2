@@ -55,7 +55,7 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
                     onClick={openZoom}
                     aria-label="بزرگ‌نمایی تصویر محصول"
                 >
-                    <img src={current} alt={name} decoding="async" />
+                    <img src={current} alt={name} decoding="async" fetchpriority="high" />
                 </button>
                 {urls.length > 1 && (
                     <>

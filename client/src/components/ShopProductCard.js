@@ -14,7 +14,12 @@ const ShopProductCard = ({ product, index = 0 }) => (
     >
         <div className="shop-product-image">
             {product.imageUrl ? (
-                <img src={product.imageUrl} alt={product.name} loading="lazy" decoding="async" />
+                <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    loading={index < 4 ? 'eager' : 'lazy'}
+                    decoding="async"
+                />
             ) : (
                 <div className="shop-product-placeholder">
                     <FontAwesomeIcon icon={faStore} />

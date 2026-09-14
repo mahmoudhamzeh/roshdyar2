@@ -105,12 +105,17 @@ const VendorPanelPage = () => {
         }
         const cats = await fetch('/api/shop/categories').then((r) => (r.ok ? r.json() : []));
         setCategories(Array.isArray(cats) ? cats : (cats.tree || []));
+        if (vendor) {
+            const ticketRes = await fetch('/api/tickets');
+            setTickets(ticketRes.ok ? await ticketRes.json() : []);
+            if (vendor.docs && vendor.docs.length) setStep(3);
+            else if (vendor.bankSheba) setStep(3);
+        }
         if (vendor && vendor.status === 'active') {
-            const [offerRes, orderRes, financeRes, ticketRes, catalogRes, invoiceRes] = await Promise.all([
+            const [offerRes, orderRes, financeRes, catalogRes, invoiceRes] = await Promise.all([
                 fetch('/api/vendor/offers'),
                 fetch('/api/vendor/orders'),
                 fetch('/api/vendor/finance'),
-                fetch('/api/tickets'),
                 fetch('/api/vendor/catalog'),
                 fetch('/api/vendor/invoices')
             ]);
@@ -119,7 +124,6 @@ const VendorPanelPage = () => {
             setListings(Array.isArray(offerData) ? [] : (offerData.listings || []));
             setOrders(orderRes.ok ? await orderRes.json() : []);
             setFinance(financeRes.ok ? await financeRes.json() : null);
-            setTickets(ticketRes.ok ? await ticketRes.json() : []);
             setCatalog(catalogRes.ok ? await catalogRes.json() : []);
             setInvoices(invoiceRes.ok ? await invoiceRes.json() : []);
         }
@@ -281,22 +285,26 @@ const VendorPanelPage = () => {
     };
 
     const onboarding = !me || me.status !== 'active';
+    const isActive = me && me.status === 'active';
     const reviewLabel = (status) => ({
         pending: 'در انتظار تأیید ادمین',
         approved: 'تأییدشده',
         rejected: 'رد شده'
     }[status] || status);
 
-    const tabs = useMemo(() => ([
-        { id: 'profile', label: 'پروفایل', icon: faUser },
-        { id: 'products', label: 'محصولات', icon: faBoxOpen },
-        { id: 'tickets', label: 'تیکت پشتیبانی', icon: faHeadset },
-        { id: 'orders', label: 'سفارش‌ها', icon: faClipboardList },
-        { id: 'sales', label: 'گزارش فروش', icon: faChartLine },
-        { id: 'finance', label: 'گزارش مالی', icon: faWallet },
-        { id: 'invoices', label: 'فاکتورها', icon: faFileInvoice },
-        { id: 'wallet', label: 'کیف پول', icon: faWallet }
-    ]), []);
+    const tabs = useMemo(() => {
+        const all = [
+            { id: 'profile', label: 'پروفایل', icon: faUser },
+            { id: 'tickets', label: 'تیکت پشتیبانی', icon: faHeadset },
+            { id: 'products', label: 'محصولات', icon: faBoxOpen, needsActive: true },
+            { id: 'orders', label: 'سفارش‌ها', icon: faClipboardList, needsActive: true },
+            { id: 'sales', label: 'گزارش فروش', icon: faChartLine, needsActive: true },
+            { id: 'finance', label: 'گزارش مالی', icon: faWallet, needsActive: true },
+            { id: 'invoices', label: 'فاکتورها', icon: faFileInvoice, needsActive: true },
+            { id: 'wallet', label: 'کیف پول', icon: faWallet, needsActive: true }
+        ];
+        return all.filter((item) => isActive || !item.needsActive);
+    }, [isActive]);
 
     return (
         <div className="shop-page shop-world vendor-panel-page">
@@ -401,9 +409,13 @@ const VendorPanelPage = () => {
                     </section>
                 )}
 
-                {me && me.status === 'active' && (
+                {me && (
                     <section className="vendor-workspace">
-                        <p className="vendor-active-line">فروشگاه فعال: {me.displayName} · کمیسیون {me.commissionPct}٪</p>
+                        <p className="vendor-active-line">
+                            {isActive
+                                ? `فروشگاه فعال: ${me.displayName} · کمیسیون ${me.commissionPct}٪`
+                                : `فروشگاه «${me.displayName || 'شما'}» در انتظار تأیید است. پروفایل و تیکت پشتیبانی در دسترس است؛ محصولات و تسویه پس از تأیید فعال می‌شود.`}
+                        </p>
                         <div className="vendor-tabs">
                             {tabs.map((item) => (
                                 <button key={item.id} type="button" className={tab === item.id ? 'is-on' : ''} onClick={() => setTab(item.id)}>
@@ -422,11 +434,11 @@ const VendorPanelPage = () => {
                                 <p>تلفن: {me.phone || '—'}</p>
                                 <p>{[me.province, me.city, me.address].filter(Boolean).join('، ') || 'نشانی ثبت نشده'}</p>
                                 <p>شبا: {me.bankSheba || '—'}</p>
-                                <p>وضعیت: فعال · کمیسیون {me.commissionPct}٪</p>
+                                <p>وضعیت: {isActive ? `فعال · کمیسیون ${me.commissionPct}٪` : (me.status === 'pending' ? 'در انتظار تأیید کارشناس' : me.status)}</p>
                             </div>
                         )}
 
-                        {tab === 'products' && (
+                        {isActive && tab === 'products' && (
                             <>
                                 <div className="vendor-kind">
                                     <label className={productMode === 'existing' ? 'is-on' : ''}>
@@ -563,7 +575,7 @@ const VendorPanelPage = () => {
                             </div>
                         )}
 
-                        {tab === 'orders' && (
+                        {isActive && tab === 'orders' && (
                             <div className="vendor-orders">
                                 {orders.length === 0 && <p>سفارشی برای این فروشگاه ثبت نشده است.</p>}
                                 {orders.map((order) => (
@@ -589,7 +601,7 @@ const VendorPanelPage = () => {
                             </div>
                         )}
 
-                        {tab === 'sales' && finance && (
+                        {isActive && tab === 'sales' && finance && (
                             <div className="vendor-report">
                                 <p>جمع فروش: <strong>{formatPrice(finance.salesTotal)}</strong></p>
                                 {finance.sales.length === 0 ? <p>هنوز فروشی ثبت نشده است.</p> : (
@@ -602,7 +614,7 @@ const VendorPanelPage = () => {
                             </div>
                         )}
 
-                        {tab === 'finance' && finance && (
+                        {isActive && tab === 'finance' && finance && (
                             <div className="vendor-report">
                                 <p>کمیسیون کسرشده: <strong>{formatPrice(finance.commissionTotal)}</strong></p>
                                 <p>مانده امانی: <strong>{formatPrice(finance.holdTotal)}</strong></p>
@@ -617,7 +629,7 @@ const VendorPanelPage = () => {
                             </div>
                         )}
 
-                        {tab === 'invoices' && (
+                        {isActive && tab === 'invoices' && (
                             <div className="vendor-report">
                                 <h3>فاکتور سفارش‌ها</h3>
                                 {invoices.length === 0 && <p>فاکتوری ثبت نشده است.</p>}
@@ -631,7 +643,7 @@ const VendorPanelPage = () => {
                             </div>
                         )}
 
-                        {tab === 'wallet' && finance && (
+                        {isActive && tab === 'wallet' && finance && (
                             <div className="vendor-report">
                                 <h3>کیف پول تسویه</h3>
                                 <p>قابل برداشت: <strong>{formatPrice(finance.walletAvailable || 0)}</strong></p>

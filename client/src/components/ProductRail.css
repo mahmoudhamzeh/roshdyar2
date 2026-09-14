@@ -8,14 +8,14 @@
 }
 
 .product-rail-scroller {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(220px, 1fr);
+  display: flex;
   gap: 0.85rem;
   overflow-x: auto;
   padding-bottom: 0.4rem;
 }
 
 .product-rail-scroller .shop-product {
-  min-width: 220px;
+  flex: 0 0 240px;
+  min-width: 240px;
+  max-width: 240px;
 }

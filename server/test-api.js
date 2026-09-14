@@ -373,6 +373,23 @@ async function run() {
         assert.strictEqual(vendorApply.data.status, 'pending');
         assert.strictEqual(vendorApply.data.profileComplete, false);
 
+        const pendingBlocked = await request('POST', '/api/vendor/products', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { name: 'کالای زودهنگام', category: 'لگو', price: 1000, stock: 1 }
+        });
+        assert.strictEqual(pendingBlocked.status, 403, JSON.stringify(pendingBlocked.data));
+
+        const pendingTicket = await request('POST', '/api/tickets', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                groupName: 'فروشنده',
+                subgroup: 'مدارک',
+                subject: 'وضعیت بررسی مدارک',
+                content: 'درخواست فروشندگی من چه زمانی بررسی می‌شود؟'
+            }
+        });
+        assert.strictEqual(pendingTicket.status, 201, JSON.stringify(pendingTicket.data));
+
         const blockApprove = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
             body: { status: 'active' }

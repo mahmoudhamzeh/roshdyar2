@@ -49,7 +49,7 @@ app.use('/uploads', express.static(uploadsDir, {
     lastModified: true,
     maxAge: '7d',
     setHeaders(res) {
-        res.setHeader('Cache-Control', 'public, max-age=604800');
+        res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
     }
 }));
 
