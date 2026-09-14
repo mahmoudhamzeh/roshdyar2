@@ -26,7 +26,7 @@ export const ATTR_FIELD_META = {
         type: 'select',
         options: ['روزمره', 'ورزشی', 'صندل', 'چکمه', 'مجلسی']
     },
-    expiryDate: { label: 'تاریخ انقضا', type: 'date' },
+    expiryDate: { label: 'تاریخ انقضا', type: 'text', placeholder: 'مثلاً ۱۴۰۵/۰۶/۰۱ یا 2027-03-01' },
     netWeight: { label: 'وزن / حجم خالص', type: 'text', placeholder: 'مثلاً ۲۰۰ گرم' },
     ingredients: { label: 'ترکیبات کلیدی', type: 'text', placeholder: 'مثلاً ویتامین D، آهن' },
     dosage: { label: 'مقدار مصرف', type: 'text', placeholder: 'مثلاً روزانه ۱ قطره' },
