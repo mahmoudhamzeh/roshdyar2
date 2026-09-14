@@ -13,6 +13,7 @@ import {
     faSeedling,
 } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
+import ChildAvatar from './ChildAvatar';
 import './ServiceTiles.css';
 
 const services = [
@@ -167,12 +168,7 @@ const ServiceTiles = () => {
                             className={`child-item-modal ${selectedChild === child.id ? 'selected' : ''}`}
                             onClick={() => setSelectedChild(child.id)}
                         >
-                            <img
-                                src={child.avatar && child.avatar.startsWith('/uploads')
-                                    ? `${child.avatar}`
-                                    : (child.avatar || 'https://i.pravatar.cc/50')}
-                                alt={getChildDisplayName(child)}
-                            />
+                            <ChildAvatar child={child} size="sm" />
                             <div className="child-name">{getChildDisplayName(child)}</div>
                         </div>
                     ))}

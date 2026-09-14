@@ -1,0 +1,48 @@
+.child-avatar {
+  display: inline-block;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: #ecfeff;
+  vertical-align: middle;
+}
+
+.child-avatar--sm {
+  width: 44px;
+  height: 44px;
+}
+
+.child-avatar--md {
+  width: 64px;
+  height: 64px;
+}
+
+.child-avatar--lg {
+  width: 96px;
+  height: 96px;
+}
+
+.child-avatar--xl {
+  width: 110px;
+  height: 110px;
+}
+
+.child-avatar--illus {
+  line-height: 0;
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.7);
+}
+
+.child-avatar--illus svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.child-avatar--boy {
+  background: #e0f2fe;
+}
+
+.child-avatar--girl {
+  background: #fce7f3;
+}

@@ -116,7 +116,11 @@ export const discountPercent = (price, compareAt) => {
 };
 
 export const CATEGORY_VISUALS = [
-    { match: /تغذیه|غذا|میوه/, color: '#ea580c', icon: 'apple' },
+    { match: /موسیقی|آهنگ/, color: '#7c3aed', icon: 'music' },
+    { match: /لگو/, color: '#ea580c', icon: 'puzzle' },
+    { match: /دخترانه|دختر/, color: '#db2777', icon: 'heart' },
+    { match: /پسرانه|پسر/, color: '#2563eb', icon: 'puzzle' },
+    { match: /تغذیه|غذا|میوه|میان/, color: '#ea580c', icon: 'apple' },
     { match: /اسباب|بازی|ساخت|چوب|حرکت/, color: '#0f766e', icon: 'puzzle' },
     { match: /پوشاک|لباس|نوزاد|کودک/, color: '#db2777', icon: 'shirt' },
     { match: /کتاب|داستان|آموزش/, color: '#2563eb', icon: 'book' },

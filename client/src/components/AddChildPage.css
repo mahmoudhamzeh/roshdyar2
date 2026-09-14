@@ -225,6 +225,8 @@
   object-fit: cover;
   border: 4px solid var(--brand-soft);
   background-color: var(--surface-2);
+  overflow: hidden;
+  display: inline-block;
 }
 
 .avatar-placeholder {

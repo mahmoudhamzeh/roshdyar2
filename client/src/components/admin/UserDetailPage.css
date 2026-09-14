@@ -34,7 +34,8 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.child-card img {
+.child-card img,
+.child-card .child-avatar {
     width: 80px;
     height: 80px;
     border-radius: 50%;

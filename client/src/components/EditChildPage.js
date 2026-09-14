@@ -11,9 +11,9 @@ import {
     faBaby,
     faHeartbeat,
     faFileMedical,
-    faCamera,
     faCheck
 } from '@fortawesome/free-solid-svg-icons';
+import ChildAvatar, { childPhotoSrc } from './ChildAvatar';
 import './AddChildPage.css';
 
 const STEPS = [
@@ -71,8 +71,9 @@ const EditChildPage = () => {
 
                 setFormData(data);
                 setBirthDate(parseBirthDate(data.birthDate));
-                if (data.avatar) {
-                    setPreview(data.avatar.startsWith('/uploads') ? `${data.avatar}` : data.avatar);
+                const photo = childPhotoSrc(data.avatar);
+                if (photo) {
+                    setPreview(photo.startsWith('/uploads') ? photo : photo);
                 }
             } catch {
                 alert('موفق به دریافت اطلاعات کودک نشدیم.');
@@ -290,10 +291,11 @@ const EditChildPage = () => {
                                     {preview ? (
                                         <img src={preview} alt="پیش‌نمایش" className="avatar-preview" />
                                     ) : (
-                                        <div className="avatar-placeholder">
-                                            <FontAwesomeIcon icon={faCamera} />
-                                            <span>عکس</span>
-                                        </div>
+                                        <ChildAvatar
+                                            child={{ gender: formData.gender, firstName: formData.firstName }}
+                                            size="xl"
+                                            className="avatar-preview"
+                                        />
                                     )}
                                 </div>
                                 <label htmlFor="avatar" className="avatar-pick-btn">تغییر عکس پروفایل</label>

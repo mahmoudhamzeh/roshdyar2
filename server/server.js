@@ -1883,19 +1883,26 @@ app.post('/api/shop/products/:id/comments', async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
     const body = String(req.body.body || req.body.comment || '').trim();
-    if (body.length < 3) return res.status(400).json({ message: 'متن نظر خیلی کوتاه است' });
+    const parsedRating = Number(req.body.rating);
+    const hasRating = Number.isFinite(parsedRating) && parsedRating >= 1 && parsedRating <= 5;
+    const text = body.length >= 3 ? body : '';
+    if (!hasRating && !text) {
+        return res.status(400).json({ message: 'امتیاز یا متن نظر را وارد کنید' });
+    }
     const product = await store.products.getById(req.params.id);
     if (!product || product.active === false) return res.status(404).json({ message: 'محصول یافت نشد' });
     const comment = await store.productComments.create({
         productId: product.id,
         userId: user.id,
-        body,
-        rating: req.body.rating
+        body: text,
+        rating: hasRating ? parsedRating : null
     });
     res.status(201).json({
         ...comment,
         pending: true,
-        message: 'نظر شما ثبت شد و پس از تأیید کارشناس نمایش داده می‌شود'
+        message: text
+            ? 'از نظر شما متشکریم. دیدگاه‌تان پس از تأیید کارشناس نمایش داده می‌شود'
+            : 'از امتیاز شما متشکریم. پس از تأیید کارشناس روی محصول دیده می‌شود'
     });
 });
 
