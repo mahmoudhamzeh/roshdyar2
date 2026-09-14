@@ -44,7 +44,14 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 app.use(cors());
 app.use(bodyParser.json());
-app.use('/uploads', express.static(uploadsDir, { etag: false, lastModified: false }));
+app.use('/uploads', express.static(uploadsDir, {
+    etag: true,
+    lastModified: true,
+    maxAge: '7d',
+    setHeaders(res) {
+        res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    }
+}));
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadsDir),
@@ -172,10 +179,16 @@ const API_CATALOG = {
             'POST /api/shop/vendors/apply',
             'POST /api/shop/vendors/me/docs',
             'GET /api/vendor/offers',
+            'GET /api/vendor/catalog',
+            'POST /api/vendor/offers',
+            'PUT /api/vendor/offers/:id',
             'POST /api/vendor/products',
+            'PUT /api/vendor/products/:id',
             'GET /api/vendor/orders',
             'PUT /api/vendor/orders/items/:itemId',
-            'GET /api/vendor/finance'
+            'GET /api/vendor/finance',
+            'GET /api/vendor/invoices',
+            'POST /api/vendor/wallet/withdraw'
         ],
         reminders: [
             'POST /api/generate-reminders/:userId',
@@ -1544,6 +1557,7 @@ const TICKET_GROUPS = {
     'حساب کاربری': ['ورود و ثبت‌نام', 'پروفایل', 'رمز عبور'],
     'کودکان و پرونده': ['ثبت کودک', 'واکسیناسیون', 'نمودار رشد', 'پرونده سلامت'],
     'فروشگاه': ['سفارش', 'پرداخت', 'محصول'],
+    'فروشنده': ['محصول', 'سفارش', 'مالی و تسویه', 'مدارک'],
     'فنی': ['خطای سایت', 'پیشنهاد'],
     'سایر': ['عمومی']
 };
@@ -1789,6 +1803,20 @@ const parseSkillIds = (body) => {
     return undefined;
 };
 
+function pickRelatedProducts(product, catalog) {
+    const others = (catalog || []).filter((item) => Number(item.id) !== Number(product.id));
+    const similar = others
+        .filter((item) => item.category && item.category === product.category)
+        .slice(0, 8);
+    const similarIds = new Set(similar.map((item) => Number(item.id)));
+    const rest = others.filter((item) => !similarIds.has(Number(item.id)));
+    const ageMatch = product.ageBand
+        ? rest.filter((item) => item.ageBand === product.ageBand)
+        : [];
+    const recommended = [...ageMatch, ...rest.filter((item) => item.ageBand !== product.ageBand)].slice(0, 8);
+    return { similar, recommended };
+}
+
 app.get('/api/shop/categories', async (req, res) => {
     const tree = await store.productCategories.tree();
     res.json(tree.length ? tree : SHOP_CATEGORIES.map((name) => ({ name, children: [] })));
@@ -1971,7 +1999,9 @@ app.get('/api/shop/products/:id', async (req, res) => {
         return res.status(404).json({ message: 'محصول یافت نشد' });
     }
     const offers = await store.shop.listOffers(product.id);
-    res.json({ ...product, offers });
+    const catalog = await store.products.listActive({});
+    const related = pickRelatedProducts(product, catalog);
+    res.json({ ...product, offers, similar: related.similar, recommended: related.recommended });
 });
 
 app.get('/api/admin/products', isAdmin, async (req, res) => {
@@ -2576,8 +2606,69 @@ app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
 });
 
 app.get('/api/vendor/offers', requireVendor, async (req, res) => {
-    const all = await store.products.listAll();
-    res.json((all || []).filter((p) => Number(p.vendorId) === Number(req.vendor.id)));
+    const mine = await store.shop.listOffersByVendor(req.vendor.id);
+    const created = [];
+    const listings = [];
+    for (const offer of mine || []) {
+        const productOffers = await store.shop.listOffers(offer.productId);
+        const firstId = Math.min(...(productOffers || []).map((item) => Number(item.id)).filter(Number.isFinite));
+        const ownsSku = Number(offer.id) === firstId;
+        const product = await store.products.getById(offer.productId);
+        if (ownsSku && product) created.push(product);
+        else listings.push(offer);
+    }
+    res.json({ created, listings });
+});
+
+app.get('/api/vendor/catalog', requireVendor, async (req, res) => {
+    const q = String(req.query.q || '').trim();
+    const all = await store.products.listActive({ q });
+    const mine = await store.shop.listOffersByVendor(req.vendor.id);
+    const mineIds = new Set((mine || []).map((item) => Number(item.productId)));
+    res.json((all || []).filter((item) => !mineIds.has(Number(item.id))).slice(0, 40));
+});
+
+app.post('/api/vendor/offers', requireVendor, async (req, res) => {
+    const productId = parseInt(req.body.productId, 10);
+    const product = await store.products.getById(productId);
+    if (!product || product.active === false) {
+        return res.status(404).json({ message: 'کالای موجود یافت نشد' });
+    }
+    const parsedPrice = parsePrice(req.body.price);
+    if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
+    const parsedStock = parseInt(req.body.stock, 10);
+    if (!Number.isFinite(parsedStock) || parsedStock < 0) {
+        return res.status(400).json({ message: 'موجودی معتبر نیست' });
+    }
+    const offer = await store.shop.upsertOffer({
+        productId,
+        vendorId: req.vendor.id,
+        price: parsedPrice,
+        stock: parsedStock,
+        compareAtPrice: req.body.compareAtPrice
+    });
+    res.status(201).json(offer);
+});
+
+app.put('/api/vendor/offers/:id', requireVendor, async (req, res) => {
+    const current = await store.shop.getOffer(req.params.id);
+    if (!current || Number(current.vendorId) !== Number(req.vendor.id)) {
+        return res.status(404).json({ message: 'آگهی فروش یافت نشد' });
+    }
+    const parsedPrice = req.body.price != null ? parsePrice(req.body.price) : current.price;
+    if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
+    const parsedStock = req.body.stock != null ? parseInt(req.body.stock, 10) : current.stock;
+    if (!Number.isFinite(parsedStock) || parsedStock < 0) {
+        return res.status(400).json({ message: 'موجودی معتبر نیست' });
+    }
+    const offer = await store.shop.upsertOffer({
+        productId: current.productId,
+        vendorId: req.vendor.id,
+        price: parsedPrice,
+        stock: parsedStock,
+        compareAtPrice: req.body.compareAtPrice != null ? req.body.compareAtPrice : current.compareAtPrice
+    });
+    res.json(offer);
 });
 
 app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async (req, res) => {
@@ -2609,6 +2700,41 @@ app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async
     res.status(201).json(await store.products.getById(created.id));
 });
 
+app.put('/api/vendor/products/:id', requireVendor, upload.array('images', 8), async (req, res) => {
+    const current = await store.products.getById(req.params.id);
+    if (!current || Number(current.vendorId) !== Number(req.vendor.id)) {
+        return res.status(404).json({ message: 'محصول یافت نشد' });
+    }
+    if (current.reviewStatus === 'approved') {
+        return res.status(400).json({ message: 'برای کالای تأییدشده فقط قیمت و موجودی از بخش آگهی قابل تغییر است' });
+    }
+    const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
+    const parsedPrice = price != null && price !== '' ? parsePrice(price) : current.price;
+    if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
+    const parsedStock = stock === undefined || stock === '' ? current.stock : parseInt(stock, 10);
+    const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    const updated = await store.products.update(req.params.id, {
+        name: name != null ? String(name).trim() : current.name,
+        description: description != null ? String(description).trim() : current.description,
+        category: category != null ? String(category).trim() : current.category,
+        price: parsedPrice,
+        stock: Number.isFinite(parsedStock) ? parsedStock : current.stock,
+        imageUrl: uploaded[0] || current.imageUrl,
+        ageBand,
+        brand,
+        safetyWarning,
+        compareAtPrice,
+        gender,
+        skillIds: parseSkillIds(req.body),
+        vendorId: req.vendor.id,
+        reviewStatus: 'pending',
+        reviewNote: '',
+        active: false
+    });
+    if (uploaded.length) await store.productImages.replace(updated.id, uploaded);
+    res.json(await store.products.getById(updated.id));
+});
+
 app.get('/api/vendor/orders', requireVendor, async (req, res) => {
     res.json(await store.orders.listByVendor(req.vendor.id));
 });
@@ -2623,6 +2749,24 @@ app.get('/api/vendor/finance', requireVendor, async (req, res) => {
     res.json(await store.shop.vendorFinance(req.vendor.id));
 });
 
+app.get('/api/vendor/invoices', requireVendor, async (req, res) => {
+    const orders = await store.orders.listByVendor(req.vendor.id);
+    res.json((orders || []).map((order) => ({
+        id: `INV-${order.id}`,
+        orderId: order.id,
+        createdAt: order.createdAt,
+        status: order.status,
+        total: (order.items || []).reduce((sum, item) => sum + Number(item.lineTotal || 0), 0),
+        items: order.items || []
+    })));
+});
+
+app.post('/api/vendor/wallet/withdraw', requireVendor, async (req, res) => {
+    const result = await store.shop.requestPayout(req.vendor.id, req.body.amount, req.body.note);
+    if (result && result.error) return res.status(400).json({ message: result.error });
+    res.status(201).json(result);
+});
+
 app.patch('/api/admin/products/:id/review', isAdmin, async (req, res) => {
     const status = String(req.body.status || '').trim();
     if (!['approved', 'rejected', 'pending'].includes(status)) {
@@ -2630,7 +2774,8 @@ app.patch('/api/admin/products/:id/review', isAdmin, async (req, res) => {
     }
     const updated = await store.products.update(req.params.id, {
         reviewStatus: status,
-        active: status === 'approved'
+        active: status === 'approved',
+        reviewNote: status === 'rejected' ? String(req.body.note || req.body.reviewNote || '').trim() : ''
     });
     if (!updated) return res.status(404).json({ message: 'محصول یافت نشد' });
     res.json(updated);

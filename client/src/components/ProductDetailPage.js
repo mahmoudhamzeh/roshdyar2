@@ -10,9 +10,13 @@ import { addToCart, formatPrice } from '../utils/cart';
 import { ageBandLabel, displayCommentAuthor, genderLabel } from '../utils/shop';
 import { formatToShamsi } from '../utils/dateConverter';
 import ProductImageGallery from './ProductImageGallery';
+import QuantityStepper from './QuantityStepper';
+import CartAddedModal from './CartAddedModal';
+import ProductRail from './ProductRail';
 import { getAuthToken, getLoggedInUser } from '../api';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
+import './ProductRail.css';
 
 const API = '';
 const SECTIONS = [
@@ -41,6 +45,7 @@ const ProductDetailPage = () => {
     const [sendingReview, setSendingReview] = useState(false);
     const [offerId, setOfferId] = useState(null);
     const [activeSection, setActiveSection] = useState('intro');
+    const [addedOpen, setAddedOpen] = useState(false);
 
     const loadComments = async () => {
         const res = await fetch(`${API}/api/shop/products/${id}/comments`);
@@ -113,8 +118,7 @@ const ProductDetailPage = () => {
                 vendorName: selectedOffer.vendorName
             } : {})
         }, quantity);
-        setMessage('محصول به سبد اضافه شد');
-        window.setTimeout(() => setMessage(''), 2200);
+        setAddedOpen(true);
     };
 
     const handleVote = async (commentId, vote) => {
@@ -219,21 +223,33 @@ const ProductDetailPage = () => {
                                 {(product.offers || []).length > 0 && (
                                     <div className="product-offers">
                                         <p>فروشندگان این کالا</p>
-                                        {(product.offers || []).map((offer) => (
-                                            <label key={offer.id} className={offerId === offer.id ? 'is-active' : ''}>
-                                                <input
-                                                    type="radio"
-                                                    name="offer"
-                                                    checked={offerId === offer.id}
-                                                    onChange={() => {
+                                        <div className="product-offer-cards">
+                                            {(product.offers || []).map((offer) => (
+                                                <button
+                                                    type="button"
+                                                    key={offer.id}
+                                                    className={`product-offer-card ${offerId === offer.id ? 'is-active' : ''}`}
+                                                    onClick={() => {
                                                         setOfferId(offer.id);
                                                         setQuantity(1);
                                                     }}
-                                                />
-                                                {offer.vendorName} · {formatPrice(offer.price)}
-                                                {offer.stock < 1 ? ' · ناموجود' : ''}
-                                            </label>
-                                        ))}
+                                                >
+                                                    <strong>{offer.vendorName}</strong>
+                                                    <ShopRating
+                                                        value={offer.vendorRatingAvg}
+                                                        count={offer.vendorRatingCount}
+                                                        size="sm"
+                                                        showEmpty
+                                                    />
+                                                    <em>{formatPrice(offer.price)}</em>
+                                                    <span>
+                                                        {offer.stock < 1
+                                                            ? 'ناموجود'
+                                                            : `${offer.vendorSoldCount || 0} فروش · موجودی ${offer.stock}`}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                                 {product.ratingCount > 0 ? (
@@ -265,19 +281,12 @@ const ProductDetailPage = () => {
 
                                 {saleStock > 0 && (
                                     <div className="product-detail-actions">
-                                        <label>
-                                            تعداد
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                max={saleStock}
-                                                value={quantity}
-                                                onChange={(e) => {
-                                                    const val = parseInt(e.target.value, 10) || 1;
-                                                    setQuantity(Math.min(Math.max(val, 1), saleStock));
-                                                }}
-                                            />
-                                        </label>
+                                        <QuantityStepper
+                                            value={quantity}
+                                            min={1}
+                                            max={saleStock}
+                                            onChange={setQuantity}
+                                        />
                                         <button type="button" className="product-add-btn" onClick={handleAddToCart}>
                                             <FontAwesomeIcon icon={faCartPlus} />
                                             افزودن به سبد
@@ -480,9 +489,16 @@ const ProductDetailPage = () => {
                                 )}
                             </section>
                         </div>
+                        <ProductRail title="کالای مشابه" products={product.similar || []} />
+                        <ProductRail title="پیشنهاد برای شما" products={product.recommended || []} />
                     </>
                 )}
             </main>
+            <CartAddedModal
+                open={addedOpen}
+                productName={product && product.name}
+                onClose={() => setAddedOpen(false)}
+            />
             {thanks && (
                 <div className="product-thanks" role="dialog" aria-modal="true" aria-labelledby="product-thanks-title">
                     <button type="button" className="product-thanks__backdrop" aria-label="بستن" onClick={() => setThanks('')} />

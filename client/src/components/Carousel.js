@@ -46,7 +46,7 @@ const Carousel = ({ slides = [] }) => {
             {slides.map((slide) => (
                 // The library expects simple children. We pass the link as a custom prop 'url'.
                 <div key={slide.id} url={slide.link}>
-                    <img src={slide.image} alt={slide.title} onError={handleImageError} />
+                    <img src={slide.image} alt={slide.title} decoding="async" onError={handleImageError} />
                     <p className="legend">{slide.title}</p>
                 </div>
             ))}

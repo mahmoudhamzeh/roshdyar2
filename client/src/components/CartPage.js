@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash, faStore, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
+import QuantityStepper from './QuantityStepper';
 import {
     getCart,
     updateCartQuantity,
@@ -136,7 +137,7 @@ const CartPage = () => {
                                         <div key={cartLineKey(item)} className="cart-item">
                                             <div className="cart-item-image">
                                                 {item.imageUrl ? (
-                                                    <img src={`${API}${item.imageUrl}`} alt={item.name} />
+                                                    <img src={`${API}${item.imageUrl}`} alt={item.name} loading="lazy" decoding="async" />
                                                 ) : (
                                                     <FontAwesomeIcon icon={faStore} />
                                                 )}
@@ -146,19 +147,12 @@ const CartPage = () => {
                                                 <strong>{formatPrice(item.price)}</strong>
                                             </div>
                                             <div className="cart-item-qty">
-                                                <label>
-                                                    تعداد
-                                                    <input
-                                                        type="number"
-                                                        min="1"
-                                                        max={item.stock || 99}
-                                                        value={item.quantity}
-                                                        onChange={(e) => {
-                                                            const qty = parseInt(e.target.value, 10) || 1;
-                                                            refresh(updateCartQuantity(cartLineKey(item), qty));
-                                                        }}
-                                                    />
-                                                </label>
+                                                <QuantityStepper
+                                                    value={item.quantity}
+                                                    min={1}
+                                                    max={item.stock || 99}
+                                                    onChange={(qty) => refresh(updateCartQuantity(cartLineKey(item), qty))}
+                                                />
                                                 <button
                                                     type="button"
                                                     className="cart-remove"

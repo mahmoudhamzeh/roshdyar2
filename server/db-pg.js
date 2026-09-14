@@ -239,7 +239,8 @@ function rowToProduct(row) {
         active: asBool(row.active),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        reviewStatus: row.review_status || 'approved'
+        reviewStatus: row.review_status || 'approved',
+        reviewNote: row.review_note || ''
     };
 }
 
@@ -1924,6 +1925,9 @@ const products = {
         if (next.reviewStatus) {
             await q('UPDATE products SET review_status = $1 WHERE id = $2', [next.reviewStatus, Number(id)]);
         }
+        if (next.reviewNote !== undefined) {
+            await q('UPDATE products SET review_note = $1 WHERE id = $2', [next.reviewNote || '', Number(id)]);
+        }
         cacheInvalidate('products');
         await shopStore.syncProductCommercePg(q, one, Number(id), next);
         return products.getById(id);
@@ -2465,6 +2469,15 @@ module.exports = {
         },
         vendorFinance(vendorId) {
             return shopStore.vendorFinancePg(many, vendorId);
+        },
+        upsertOffer(payload) {
+            return shopStore.upsertOfferPg(q, one, payload);
+        },
+        listOffersByVendor(vendorId) {
+            return shopStore.listOffersByVendorPg(many, vendorId);
+        },
+        requestPayout(vendorId, amount, note) {
+            return shopStore.requestPayoutPg(q, many, vendorId, amount, note);
         },
         ageBands: shopStore.AGE_BANDS,
         skills: shopStore.SKILLS

@@ -38,13 +38,18 @@ const AmazingOffersRail = ({ products = [], campaign, viewAll = '/shop?sort=pric
                 <Link to={viewAll}>مشاهده همه</Link>
             </div>
             <div className="amazing-rail__scroller">
-                {products.map((product) => {
+                {products.map((product, index) => {
                     const off = discountPercent(product.price, product.compareAtPrice);
                     return (
                         <Link key={product.id} to={`/shop/${product.id}`} className="amazing-rail__card">
                             <div className="amazing-rail__media">
                                 {product.imageUrl ? (
-                                    <img src={product.imageUrl} alt={product.name} />
+                                    <img
+                                        src={product.imageUrl}
+                                        alt={product.name}
+                                        loading={index < 3 ? 'eager' : 'lazy'}
+                                        decoding="async"
+                                    />
                                 ) : (
                                     <FontAwesomeIcon icon={faStore} />
                                 )}

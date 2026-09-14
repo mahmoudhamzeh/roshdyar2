@@ -302,6 +302,39 @@
   font-weight: 800;
 }
 
+.product-offer-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.product-offer-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  background: #fff;
+  text-align: right;
+  cursor: pointer;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.product-offer-card em {
+  font-style: normal;
+  font-weight: 800;
+  color: var(--brand-deep);
+}
+
+.product-offer-card span {
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+.product-offer-card.is-active {
+  border-color: var(--brand);
+  background: var(--brand-wash, #ecfdf5);
+}
+
 .product-offers label {
   border: 1px solid #e4d8b8;
   border-radius: 10px;
