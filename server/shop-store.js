@@ -380,6 +380,12 @@ function mapOfferRow(row) {
         vendorKind: row.kind,
         vendorStatus: row.vendor_status || row.status,
         commissionPct: Number(row.commission_pct || 0),
+        vendorRatingAvg: Number(row.vendor_rating_avg || 0),
+        vendorRatingCount: Number(row.vendor_rating_count || 0),
+        vendorSoldCount: Number(row.vendor_sold_count || 0),
+        productName: row.product_name || null,
+        imageUrl: row.image_url || row.product_image || null,
+        reviewStatus: row.review_status || null,
         price: Number(row.price),
         compareAtPrice: row.compare_at_price != null ? Number(row.compare_at_price) : null,
         stock: Number(row.stock || 0),
@@ -589,6 +595,9 @@ function ensureShopSchemaSqlite(db) {
     if (!sqliteHasColumn(db, 'products', 'review_status')) {
         db.exec("ALTER TABLE products ADD COLUMN review_status TEXT NOT NULL DEFAULT 'approved'");
     }
+    if (!sqliteHasColumn(db, 'products', 'review_note')) {
+        db.exec('ALTER TABLE products ADD COLUMN review_note TEXT');
+    }
     seedDefaultsSqlite(db);
     backfillSqlite(db);
     seedShopExtrasSqlite(db);
@@ -658,9 +667,28 @@ function listCampaignSqlite(db) {
     return db.prepare('SELECT * FROM shop_campaigns WHERE active = 1 ORDER BY id DESC LIMIT 1').get() || null;
 }
 
+const OFFER_VENDOR_STATS = `
+    (
+        SELECT COALESCE(AVG(c.rating), 0)
+        FROM product_comments c
+        JOIN shop_offers ox ON ox.product_id = c.product_id
+        WHERE ox.vendor_id = v.id AND c.status = 'approved' AND c.rating IS NOT NULL
+    ) AS vendor_rating_avg,
+    (
+        SELECT COUNT(c.id)
+        FROM product_comments c
+        JOIN shop_offers ox ON ox.product_id = c.product_id
+        WHERE ox.vendor_id = v.id AND c.status = 'approved' AND c.rating IS NOT NULL
+    ) AS vendor_rating_count,
+    (
+        SELECT COALESCE(SUM(quantity), 0) FROM order_items WHERE vendor_id = v.id
+    ) AS vendor_sold_count
+`;
+
 function listOffersForProductSqlite(db, productId) {
     return db.prepare(`
-        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status, v.commission_pct
+        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status, v.commission_pct,
+            ${OFFER_VENDOR_STATS}
         FROM shop_offers o
         JOIN shop_vendors v ON v.id = o.vendor_id
         WHERE o.product_id = ? AND o.status = 'active' AND v.status = 'active'
@@ -815,7 +843,9 @@ function vendorFinanceSqlite(db, vendorId) {
         commissionTotal: byKind.commission || 0,
         holdTotal: byKind.vendor_hold || 0,
         refundTotal: byKind.refund || 0,
+        payoutTotal: byKind.vendor_payout || 0,
         payable: (byKind.vendor_hold || 0) + (byKind.refund || 0),
+        walletAvailable: Math.max(0, (byKind.vendor_hold || 0) + (byKind.refund || 0) - (byKind.vendor_payout || 0)),
         byKind,
         recent,
         sales
@@ -910,6 +940,62 @@ function insertLedgerSqlite(db, { kind, orderId, orderItemId, vendorId, amount, 
     );
 }
 
+function upsertOfferSqlite(db, { productId, vendorId, price, stock, compareAtPrice, status = 'active' }) {
+    const compareAt = compareAtPrice != null && compareAtPrice !== '' ? Number(compareAtPrice) : null;
+    const existing = db.prepare(
+        'SELECT id FROM shop_offers WHERE product_id = ? AND vendor_id = ?'
+    ).get(Number(productId), Number(vendorId));
+    if (existing) {
+        db.prepare(`
+            UPDATE shop_offers SET price = ?, compare_at_price = ?, stock = ?, status = ?
+            WHERE id = ?
+        `).run(Number(price), Number.isFinite(compareAt) ? compareAt : null, Number(stock || 0), status, existing.id);
+        return getOfferByIdSqlite(db, existing.id);
+    }
+    const info = db.prepare(`
+        INSERT INTO shop_offers (product_id, vendor_id, price, compare_at_price, stock, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+        Number(productId),
+        Number(vendorId),
+        Number(price),
+        Number.isFinite(compareAt) ? compareAt : null,
+        Number(stock || 0),
+        status
+    );
+    return getOfferByIdSqlite(db, Number(info.lastInsertRowid));
+}
+
+function listOffersByVendorSqlite(db, vendorId) {
+    return db.prepare(`
+        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status, v.commission_pct,
+            p.name AS product_name, p.image_url, p.review_status
+        FROM shop_offers o
+        JOIN shop_vendors v ON v.id = o.vendor_id
+        JOIN products p ON p.id = o.product_id
+        WHERE o.vendor_id = ?
+        ORDER BY o.id DESC
+    `).all(Number(vendorId)).map(mapOfferRow);
+}
+
+function requestPayoutSqlite(db, vendorId, amount, note) {
+    const value = Number(amount);
+    const finance = vendorFinanceSqlite(db, vendorId);
+    if (!Number.isFinite(value) || value < 10000) {
+        return { error: 'مبلغ تسویه باید حداقل ۱۰٬۰۰۰ تومان باشد' };
+    }
+    if (value > finance.walletAvailable) {
+        return { error: 'موجودی قابل تسویه کافی نیست' };
+    }
+    insertLedgerSqlite(db, {
+        kind: 'vendor_payout',
+        vendorId,
+        amount: value,
+        note: note || 'درخواست تسویه کیف پول'
+    });
+    return { ok: true, finance: vendorFinanceSqlite(db, vendorId) };
+}
+
 async function ensureShopSchemaPg(q, one, many) {
     await q(SHOP_TABLES_PG);
     await q('ALTER TABLE product_comments ADD COLUMN IF NOT EXISTS rating INTEGER');
@@ -935,6 +1021,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS bank_sheba TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS bank_account TEXT');
     await q("ALTER TABLE products ADD COLUMN IF NOT EXISTS review_status TEXT NOT NULL DEFAULT 'approved'");
+    await q('ALTER TABLE products ADD COLUMN IF NOT EXISTS review_note TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS user_id BIGINT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS phone TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS docs_note TEXT');
@@ -1100,7 +1187,8 @@ async function listCampaignPg(one) {
 
 async function listOffersForProductPg(many, productId) {
     return (await many(`
-        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status, v.commission_pct
+        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status, v.commission_pct,
+            ${OFFER_VENDOR_STATS}
         FROM shop_offers o
         JOIN shop_vendors v ON v.id = o.vendor_id
         WHERE o.product_id = $1 AND o.status = 'active' AND v.status = 'active'
@@ -1244,7 +1332,9 @@ async function vendorFinancePg(many, vendorId) {
         commissionTotal: byKind.commission || 0,
         holdTotal: byKind.vendor_hold || 0,
         refundTotal: byKind.refund || 0,
+        payoutTotal: byKind.vendor_payout || 0,
         payable: (byKind.vendor_hold || 0) + (byKind.refund || 0),
+        walletAvailable: Math.max(0, (byKind.vendor_hold || 0) + (byKind.refund || 0) - (byKind.vendor_payout || 0)),
         byKind,
         recent,
         sales
@@ -1345,6 +1435,57 @@ async function insertLedgerPg(q, { kind, orderId, orderItemId, vendorId, amount,
     );
 }
 
+async function upsertOfferPg(q, one, { productId, vendorId, price, stock, compareAtPrice, status = 'active' }) {
+    const compareAt = compareAtPrice != null && compareAtPrice !== '' ? Number(compareAtPrice) : null;
+    const existing = await one(
+        'SELECT id FROM shop_offers WHERE product_id = $1 AND vendor_id = $2',
+        [Number(productId), Number(vendorId)]
+    );
+    if (existing) {
+        await q(
+            `UPDATE shop_offers SET price = $1, compare_at_price = $2, stock = $3, status = $4 WHERE id = $5`,
+            [Number(price), Number.isFinite(compareAt) ? compareAt : null, Number(stock || 0), status, existing.id]
+        );
+        return getOfferByIdPg(one, existing.id);
+    }
+    const row = await one(
+        `INSERT INTO shop_offers (product_id, vendor_id, price, compare_at_price, stock, status)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [Number(productId), Number(vendorId), Number(price), Number.isFinite(compareAt) ? compareAt : null, Number(stock || 0), status]
+    );
+    return getOfferByIdPg(one, row.id);
+}
+
+async function listOffersByVendorPg(many, vendorId) {
+    return (await many(`
+        SELECT o.*, v.display_name, v.kind, v.status AS vendor_status, v.commission_pct,
+            p.name AS product_name, p.image_url, p.review_status
+        FROM shop_offers o
+        JOIN shop_vendors v ON v.id = o.vendor_id
+        JOIN products p ON p.id = o.product_id
+        WHERE o.vendor_id = $1
+        ORDER BY o.id DESC
+    `, [Number(vendorId)])).map(mapOfferRow);
+}
+
+async function requestPayoutPg(q, many, vendorId, amount, note) {
+    const value = Number(amount);
+    const finance = await vendorFinancePg(many, vendorId);
+    if (!Number.isFinite(value) || value < 10000) {
+        return { error: 'مبلغ تسویه باید حداقل ۱۰٬۰۰۰ تومان باشد' };
+    }
+    if (value > finance.walletAvailable) {
+        return { error: 'موجودی قابل تسویه کافی نیست' };
+    }
+    await insertLedgerPg(q, {
+        kind: 'vendor_payout',
+        vendorId,
+        amount: value,
+        note: note || 'درخواست تسویه کیف پول'
+    });
+    return { ok: true, finance: await vendorFinancePg(many, vendorId) };
+}
+
 module.exports = {
     AGE_BANDS,
     SKILLS,
@@ -1373,6 +1514,9 @@ module.exports = {
     updateVendorSqlite,
     addVendorDocSqlite,
     vendorFinanceSqlite,
+    upsertOfferSqlite,
+    listOffersByVendorSqlite,
+    requestPayoutSqlite,
     isVendorProfileComplete,
     ensureShopSchemaPg,
     listSkillsPg,
@@ -1392,5 +1536,8 @@ module.exports = {
     applyVendorPg,
     updateVendorPg,
     addVendorDocPg,
-    vendorFinancePg
+    vendorFinancePg,
+    upsertOfferPg,
+    listOffersByVendorPg,
+    requestPayoutPg
 };

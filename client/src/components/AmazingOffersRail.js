@@ -44,7 +44,7 @@ const AmazingOffersRail = ({ products = [], campaign, viewAll = '/shop?sort=pric
                         <Link key={product.id} to={`/shop/${product.id}`} className="amazing-rail__card">
                             <div className="amazing-rail__media">
                                 {product.imageUrl ? (
-                                    <img src={product.imageUrl} alt={product.name} />
+                                    <img src={product.imageUrl} alt={product.name} loading="lazy" decoding="async" />
                                 ) : (
                                     <FontAwesomeIcon icon={faStore} />
                                 )}

@@ -329,20 +329,38 @@ const ProductManagement = () => {
                             </div>
                             <div className="product-admin-actions">
                                 {product.reviewStatus === 'pending' && (
-                                    <button
-                                        type="button"
-                                        className="btn-edit"
-                                        onClick={async () => {
-                                            await fetch(`${API}/api/admin/products/${product.id}/review`, {
-                                                method: 'PATCH',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ status: 'approved' })
-                                            });
-                                            fetchProducts();
-                                        }}
-                                    >
-                                        تأیید محصول
-                                    </button>
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="btn-edit"
+                                            onClick={async () => {
+                                                await fetch(`${API}/api/admin/products/${product.id}/review`, {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ status: 'approved' })
+                                                });
+                                                fetchProducts();
+                                            }}
+                                        >
+                                            تأیید محصول
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn-delete"
+                                            onClick={async () => {
+                                                const note = window.prompt('دلیل رد یا نیاز به اصلاح را بنویسید');
+                                                if (note == null) return;
+                                                await fetch(`${API}/api/admin/products/${product.id}/review`, {
+                                                    method: 'PATCH',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ status: 'rejected', note })
+                                                });
+                                                fetchProducts();
+                                            }}
+                                        >
+                                            رد / اصلاح
+                                        </button>
+                                    </>
                                 )}
                                 <button type="button" className="btn-edit" onClick={() => handleEdit(product)}>
                                     ویرایش

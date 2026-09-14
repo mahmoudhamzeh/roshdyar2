@@ -233,7 +233,8 @@ function rowToProduct(row) {
         active: asBool(row.active),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        reviewStatus: row.review_status || 'approved'
+        reviewStatus: row.review_status || 'approved',
+        reviewNote: row.review_note || ''
     };
 }
 
@@ -1996,6 +1997,9 @@ const products = {
         if (next.reviewStatus) {
             db.prepare('UPDATE products SET review_status = ? WHERE id = ?').run(next.reviewStatus, Number(id));
         }
+        if (next.reviewNote !== undefined) {
+            db.prepare('UPDATE products SET review_note = ? WHERE id = ?').run(next.reviewNote || '', Number(id));
+        }
         cacheInvalidate('products');
         shopStore.syncProductCommerceSqlite(db, Number(id), next);
         return products.getById(id);
@@ -2582,6 +2586,18 @@ module.exports = {
         vendorFinance(vendorId) {
             connect();
             return shopStore.vendorFinanceSqlite(db, vendorId);
+        },
+        upsertOffer(payload) {
+            connect();
+            return shopStore.upsertOfferSqlite(db, payload);
+        },
+        listOffersByVendor(vendorId) {
+            connect();
+            return shopStore.listOffersByVendorSqlite(db, vendorId);
+        },
+        requestPayout(vendorId, amount, note) {
+            connect();
+            return shopStore.requestPayoutSqlite(db, vendorId, amount, note);
         },
         ageBands: shopStore.AGE_BANDS,
         skills: shopStore.SKILLS

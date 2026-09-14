@@ -452,6 +452,90 @@ async function run() {
         });
         assert.strictEqual(finance.status, 200, JSON.stringify(finance.data));
         assert.ok(finance.data.sales);
+        assert.ok(finance.data.walletAvailable != null);
+
+        const vendorOffers = await request('GET', '/api/vendor/offers', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(vendorOffers.status, 200, JSON.stringify(vendorOffers.data));
+        assert.ok(Array.isArray(vendorOffers.data.created));
+        assert.ok(Array.isArray(vendorOffers.data.listings));
+
+        const vendorCatalog = await request('GET', '/api/vendor/catalog', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(vendorCatalog.status, 200, JSON.stringify(vendorCatalog.data));
+        assert.ok(Array.isArray(vendorCatalog.data) && vendorCatalog.data.length >= 1);
+        const existingSku = vendorCatalog.data.find((item) => Number(item.id) !== Number(vendorProduct.data.id));
+        assert.ok(existingSku, 'catalog must contain another product');
+
+        const sellExisting = await request('POST', '/api/vendor/offers', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { productId: existingSku.id, price: 210000, stock: 3 }
+        });
+        assert.strictEqual(sellExisting.status, 201, JSON.stringify(sellExisting.data));
+        assert.strictEqual(Number(sellExisting.data.productId), Number(existingSku.id));
+
+        const pdp = await request('GET', `/api/shop/products/${existingSku.id}`);
+        assert.strictEqual(pdp.status, 200, JSON.stringify(pdp.data));
+        assert.ok(Array.isArray(pdp.data.offers) && pdp.data.offers.length >= 1);
+        assert.ok(pdp.data.offers.some((offer) => Number(offer.vendorId) === Number(vendorApply.data.id)));
+        assert.ok(Array.isArray(pdp.data.similar));
+        assert.ok(Array.isArray(pdp.data.recommended));
+
+        const vendorTicket = await request('POST', '/api/tickets', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                groupName: 'فروشنده',
+                subgroup: 'محصول',
+                subject: 'سؤال فروشنده',
+                content: 'چطور قیمت کالای موجود را عوض کنم؟'
+            }
+        });
+        assert.strictEqual(vendorTicket.status, 201, JSON.stringify(vendorTicket.data));
+
+        const pendingTwo = await request('POST', '/api/vendor/products', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                name: 'کتاب پارچه‌ای فروشنده',
+                description: 'نیاز به بررسی عکس',
+                category: 'لگو',
+                price: 80000,
+                stock: 2
+            }
+        });
+        assert.strictEqual(pendingTwo.status, 201, JSON.stringify(pendingTwo.data));
+        const rejected = await request('PATCH', `/api/admin/products/${pendingTwo.data.id}/review`, {
+            headers: auth,
+            body: { status: 'rejected', note: 'عکس واضح‌تر لازم است' }
+        });
+        assert.strictEqual(rejected.status, 200, JSON.stringify(rejected.data));
+        assert.strictEqual(rejected.data.reviewStatus, 'rejected');
+        assert.strictEqual(rejected.data.reviewNote, 'عکس واضح‌تر لازم است');
+
+        const resubmit = await request('PUT', `/api/vendor/products/${pendingTwo.data.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                name: 'کتاب پارچه‌ای فروشنده',
+                category: 'لگو',
+                price: 85000,
+                stock: 2
+            }
+        });
+        assert.strictEqual(resubmit.status, 200, JSON.stringify(resubmit.data));
+        assert.strictEqual(resubmit.data.reviewStatus, 'pending');
+
+        const invoices = await request('GET', '/api/vendor/invoices', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(invoices.status, 200, JSON.stringify(invoices.data));
+        assert.ok(Array.isArray(invoices.data));
+
+        const withdraw = await request('POST', '/api/vendor/wallet/withdraw', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { amount: 5000 }
+        });
+        assert.strictEqual(withdraw.status, 400);
 
         const loginAgain = await request('POST', '/api/login', {
             body: { login: 'Amin', password: 'admin' }

@@ -42,7 +42,7 @@ const ShopHeroSlider = ({ banners = [] }) => {
         <section className="shop-hero-slider" aria-label="بنرهای فروشگاه">
             <button type="button" className="shop-hero-slider__slide" onClick={go}>
                 {current.imageUrl ? (
-                    <img src={current.imageUrl} alt={current.title || 'بنر فروشگاه'} />
+                    <img src={current.imageUrl} alt={current.title || 'بنر فروشگاه'} decoding="async" />
                 ) : (
                     <div className="shop-hero-slider__fallback" />
                 )}

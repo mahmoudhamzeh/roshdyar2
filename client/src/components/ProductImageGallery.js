@@ -55,7 +55,7 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
                     onClick={openZoom}
                     aria-label="بزرگ‌نمایی تصویر محصول"
                 >
-                    <img src={current} alt={name} />
+                    <img src={current} alt={name} decoding="async" />
                 </button>
                 {urls.length > 1 && (
                     <>
@@ -82,7 +82,7 @@ const ProductImageGallery = ({ images = [], imageUrl, name, api = '' }) => {
                             onClick={() => setIndex(i)}
                             aria-label={`نمایش تصویر ${i + 1}`}
                         >
-                            <img src={src} alt="" />
+                            <img src={src} alt="" loading="lazy" decoding="async" />
                         </button>
                     ))}
                 </div>

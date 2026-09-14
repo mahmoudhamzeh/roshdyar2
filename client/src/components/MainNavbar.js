@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faShoppingCart } from '@fortawesome/free-solid-svg-icons';
 import Reminders from './Reminders';
 import BrandLogo from './BrandLogo';
+import { getCartCount } from '../utils/cart';
 import './MainNavbar.css';
 
 const MainNavbar = () => {
     const [isAdmin, setIsAdmin] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [cartCount, setCartCount] = useState(getCartCount());
 
     useEffect(() => {
         const syncAuth = () => {
@@ -25,6 +29,16 @@ const MainNavbar = () => {
         return () => {
             window.removeEventListener('auth-changed', syncAuth);
             window.removeEventListener('storage', syncAuth);
+        };
+    }, []);
+
+    useEffect(() => {
+        const syncCart = () => setCartCount(getCartCount());
+        window.addEventListener('cart-updated', syncCart);
+        window.addEventListener('storage', syncCart);
+        return () => {
+            window.removeEventListener('cart-updated', syncCart);
+            window.removeEventListener('storage', syncCart);
         };
     }, []);
 
@@ -74,6 +88,10 @@ const MainNavbar = () => {
                 </div>
 
                 <div className="navbar-right">
+                    <Link to="/cart" className="navbar-cart" aria-label="سبد خرید">
+                        <FontAwesomeIcon icon={faShoppingCart} />
+                        {cartCount > 0 && <span className="navbar-cart-count">{cartCount}</span>}
+                    </Link>
                     <div className="navbar-profile">
                         <Reminders />
                         <Link to="/profile" className="btn btn-profile desktop-only-profile">پروفایل من</Link>
@@ -118,6 +136,7 @@ const MainNavbar = () => {
                     <Link to="/dashboard" onClick={closeMenu}>داشبورد</Link>
                     <Link to="/news" onClick={closeMenu}>مجله سلامت</Link>
                     <Link to="/shop" onClick={closeMenu}>فروشگاه</Link>
+                    <Link to="/cart" onClick={closeMenu}>سبد خرید {cartCount > 0 ? `(${cartCount})` : ''}</Link>
                     <p className="navbar-drawer-label">حساب</p>
                     <Link to="/profile" onClick={closeMenu}>پروفایل من</Link>
                     {isAdmin && (
