@@ -1,23 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useHistory } from 'react-router-dom';
 import { FontAwesomeIcon as Icon } from '@fortawesome/react-fontawesome';
 import {
     faBoxOpen,
     faChartLine,
     faClipboardList,
+    faEllipsis,
     faFileInvoice,
     faHeadset,
+    faHome,
     faPaperPlane,
+    faRightFromBracket,
     faStore,
     faUser,
     faWallet
 } from '@fortawesome/free-solid-svg-icons';
-import MainNavbar from './MainNavbar';
-import Footer from './Footer';
+import { clearAuthSession } from '../api';
 import { formatPrice } from '../utils/cart';
 import { findCategoryPath } from '../utils/shop';
 import CategoryCascade from './CategoryCascade';
-import './ShopWorld.css';
 import './VendorPanelPage.css';
 
 const DOC_KINDS = [
@@ -80,7 +81,7 @@ const VendorPanelPage = () => {
     const [me, setMe] = useState(null);
     const [form, setForm] = useState(emptyApply);
     const [step, setStep] = useState(1);
-    const [tab, setTab] = useState('profile');
+    const [tab, setTab] = useState('home');
     const [products, setProducts] = useState([]);
     const [listings, setListings] = useState([]);
     const [catalog, setCatalog] = useState([]);
@@ -100,6 +101,8 @@ const VendorPanelPage = () => {
     const [payoutAmount, setPayoutAmount] = useState('');
     const [editingProduct, setEditingProduct] = useState(null);
     const [editingOffer, setEditingOffer] = useState(null);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const history = useHistory();
 
     const load = async () => {
         const vendor = await fetch('/api/shop/vendors/me').then((r) => (r.ok ? r.json() : null));
@@ -347,6 +350,21 @@ const VendorPanelPage = () => {
         });
     };
 
+    const logout = () => {
+        clearAuthSession();
+        window.dispatchEvent(new Event('auth-changed'));
+        history.push('/login');
+    };
+
+    const openTab = (id) => {
+        if (id === 'more') {
+            setMoreOpen(true);
+            return;
+        }
+        setMoreOpen(false);
+        setTab(id);
+    };
+
     const onboarding = !me || me.status !== 'active';
     const isActive = me && me.status === 'active';
     const reviewLabel = (status) => ({
@@ -357,6 +375,7 @@ const VendorPanelPage = () => {
 
     const tabs = useMemo(() => {
         const all = [
+            { id: 'home', label: 'خانه', icon: faHome },
             { id: 'profile', label: 'پروفایل', icon: faUser },
             { id: 'tickets', label: 'پشتیبانی', icon: faHeadset },
             { id: 'products', label: 'محصولات', icon: faBoxOpen, needsActive: true },
@@ -368,6 +387,20 @@ const VendorPanelPage = () => {
         ];
         return all.filter((item) => isActive || !item.needsActive);
     }, [isActive]);
+
+    const mobileNav = isActive
+        ? [
+            { id: 'home', label: 'خانه', icon: faHome },
+            { id: 'products', label: 'کالا', icon: faBoxOpen },
+            { id: 'orders', label: 'سفارش', icon: faClipboardList },
+            { id: 'finance', label: 'مالی', icon: faWallet },
+            { id: 'more', label: 'بیشتر', icon: faEllipsis }
+        ]
+        : [
+            { id: 'home', label: 'خانه', icon: faHome },
+            { id: 'profile', label: 'پروفایل', icon: faUser },
+            { id: 'tickets', label: 'پشتیبانی', icon: faHeadset }
+        ];
 
     const statusText = !me
         ? 'ثبت‌نام نشده'
@@ -441,8 +474,24 @@ const VendorPanelPage = () => {
     );
 
     return (
-        <div className="shop-page shop-world vendor-panel-page">
-            <MainNavbar />
+        <div className="vendor-app">
+            <header className="vendor-topbar">
+                <div className="vendor-topbar-brand">
+                    <span className="vendor-topbar-mark"><Icon icon={faStore} /></span>
+                    <div>
+                        <strong>پنل فروشندگان</strong>
+                        <em>TatKids Seller</em>
+                    </div>
+                </div>
+                <div className="vendor-topbar-actions">
+                    {me && <span className="vendor-topbar-shop">{me.displayName}</span>}
+                    <Link to="/dashboard" className="vendor-topbar-parent">اپ والدین</Link>
+                    <button type="button" className="vendor-topbar-logout" onClick={logout}>
+                        <Icon icon={faRightFromBracket} />
+                        خروج
+                    </button>
+                </div>
+            </header>
             <main className="vendor-main">
                 {message && <p className="vendor-toast">{message}</p>}
 
@@ -511,7 +560,7 @@ const VendorPanelPage = () => {
                                         key={item.id}
                                         type="button"
                                         className={tab === item.id ? 'is-on' : ''}
-                                        onClick={() => setTab(item.id)}
+                                        onClick={() => openTab(item.id)}
                                     >
                                         <Icon icon={item.icon} />
                                         {item.label}
@@ -521,6 +570,50 @@ const VendorPanelPage = () => {
                         </aside>
 
                         <div className="vendor-content">
+                            {tab === 'home' && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>خانه فروشنده</h2>
+                                        <p>{isActive ? 'گزارش سریع فروشگاه شما' : 'وضعیت پرونده فروشندگی'}</p>
+                                    </header>
+                                    <div className="vendor-home-status">
+                                        <strong>{me.displayName}</strong>
+                                        <span className={`vendor-pill vendor-pill-${me.status}`}>{statusText}</span>
+                                    </div>
+                                    {isActive && finance && (
+                                        <div className="vendor-stats">
+                                            <div className="vendor-stat">
+                                                <span>جمع فروش</span>
+                                                <strong>{formatPrice(finance.salesTotal)}</strong>
+                                            </div>
+                                            <div className="vendor-stat">
+                                                <span>قابل برداشت</span>
+                                                <strong>{formatPrice(finance.walletAvailable || 0)}</strong>
+                                            </div>
+                                            <div className="vendor-stat">
+                                                <span>سفارش‌ها</span>
+                                                <strong>{orders.length}</strong>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!isActive && (
+                                        <p className="vendor-muted">تا تأیید کارشناس، از پروفایل و پشتیبانی استفاده کنید. محصولات و تسویه بعد از فعال شدن باز می‌شود.</p>
+                                    )}
+                                    <div className="vendor-home-actions">
+                                        <button type="button" className="vendor-btn vendor-btn-primary" onClick={() => openTab('profile')}>پروفایل فروشگاه</button>
+                                        {isActive && (
+                                            <>
+                                                <button type="button" className="vendor-btn" onClick={() => openTab('products')}>مدیریت کالا</button>
+                                                <button type="button" className="vendor-btn" onClick={() => openTab('orders')}>سفارش‌ها</button>
+                                            </>
+                                        )}
+                                        {!isActive && (
+                                            <button type="button" className="vendor-btn" onClick={() => openTab('tickets')}>تیکت پشتیبانی</button>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
+
                             {tab === 'profile' && (
                                 <section className="vendor-card">
                                     <header className="vendor-card-head">
@@ -886,7 +979,47 @@ const VendorPanelPage = () => {
                     </div>
                 )}
             </main>
-            <Footer />
+
+            {moreOpen && (
+                <div className="vendor-more" role="dialog" aria-label="بخش‌های بیشتر">
+                    <button type="button" className="vendor-more-backdrop" aria-label="بستن" onClick={() => setMoreOpen(false)} />
+                    <div className="vendor-more-sheet">
+                        <h3>بخش‌های پنل</h3>
+                        {[
+                            { id: 'profile', label: 'پروفایل' },
+                            { id: 'tickets', label: 'پشتیبانی' },
+                            { id: 'sales', label: 'گزارش فروش', needsActive: true },
+                            { id: 'invoices', label: 'فاکتورها', needsActive: true },
+                            { id: 'wallet', label: 'کیف پول', needsActive: true }
+                        ].filter((item) => isActive || !item.needsActive).map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => openTab(item.id)}
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+                        <Link to="/dashboard" onClick={() => setMoreOpen(false)}>ورود به اپ والدین</Link>
+                    </div>
+                </div>
+            )}
+
+            {me && (
+            <nav className="vendor-bottom-nav" aria-label="منوی فروشنده">
+                {mobileNav.map((item) => (
+                    <button
+                        key={item.id}
+                        type="button"
+                        className={item.id === 'more' ? (moreOpen ? 'is-on' : '') : (tab === item.id && !moreOpen ? 'is-on' : '')}
+                        onClick={() => openTab(item.id)}
+                    >
+                        <Icon icon={item.icon} />
+                        <span>{item.label}</span>
+                    </button>
+                ))}
+            </nav>
+            )}
         </div>
     );
 };

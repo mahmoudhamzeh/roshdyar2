@@ -23,7 +23,7 @@ const Footer = () => {
                         <li><a href="/register">ورود / ثبت‌نام</a></li>
                         <li><a href="/news">مجله سلامت</a></li>
                         <li><a href="/shop">فروشگاه</a></li>
-                        <li><a href="/vendor">فروشنده شو</a></li>
+                        <li><a href="/vendor">ورود به پنل فروشندگان</a></li>
                     </ul>
                 </div>
                 <div className="footer-section">
