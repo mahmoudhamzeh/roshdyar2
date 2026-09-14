@@ -251,9 +251,7 @@ body.vendor-world .magazine-mini-player {
 }
 
 .vendor-bottom-nav button span {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
