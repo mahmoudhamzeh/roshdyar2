@@ -1,24 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { Link, useHistory } from 'react-router-dom';
+import { FontAwesomeIcon as Icon } from '@fortawesome/react-fontawesome';
 import {
     faBoxOpen,
     faChartLine,
     faClipboardList,
+    faEllipsis,
     faFileInvoice,
     faHeadset,
+    faHome,
+    faPaperPlane,
+    faRightFromBracket,
     faStore,
     faUser,
     faWallet
 } from '@fortawesome/free-solid-svg-icons';
-import MainNavbar from './MainNavbar';
-import Footer from './Footer';
+import { clearAuthSession } from '../api';
 import { formatPrice } from '../utils/cart';
 import { findCategoryPath } from '../utils/shop';
 import CategoryCascade from './CategoryCascade';
-import './ShopWorld.css';
 import './VendorPanelPage.css';
-import './admin/ProductManagement.css';
 
 const DOC_KINDS = [
     { id: 'national_card', label: 'کارت ملی / شناسنامه' },
@@ -35,6 +36,14 @@ const LINE_STATUSES = [
     { id: 'delivered', label: 'تحویل‌شده' },
     { id: 'cancelled', label: 'لغو' }
 ];
+
+const LEDGER_LABELS = {
+    sale: 'فروش',
+    commission: 'کمیسیون',
+    vendor_hold: 'مانده امانی',
+    refund: 'بازگشت',
+    vendor_payout: 'تسویه'
+};
 
 const emptyApply = {
     displayName: '',
@@ -54,11 +63,25 @@ const emptyApply = {
     docsNote: ''
 };
 
+const emptyProduct = {
+    name: '', description: '', category: '', price: '', stock: '', compareAtPrice: '', images: null
+};
+
+const Field = ({ label, children, as = 'label' }) => {
+    const Tag = as;
+    return (
+        <Tag className="vendor-field">
+            <span>{label}</span>
+            {children}
+        </Tag>
+    );
+};
+
 const VendorPanelPage = () => {
     const [me, setMe] = useState(null);
     const [form, setForm] = useState(emptyApply);
     const [step, setStep] = useState(1);
-    const [tab, setTab] = useState('profile');
+    const [tab, setTab] = useState('home');
     const [products, setProducts] = useState([]);
     const [listings, setListings] = useState([]);
     const [catalog, setCatalog] = useState([]);
@@ -70,15 +93,16 @@ const VendorPanelPage = () => {
     const [message, setMessage] = useState('');
     const [docKind, setDocKind] = useState('national_card');
     const [docFiles, setDocFiles] = useState(null);
-    const [productForm, setProductForm] = useState({
-        name: '', description: '', category: '', price: '', stock: '', compareAtPrice: '', images: null
-    });
+    const [productForm, setProductForm] = useState(emptyProduct);
     const [productMode, setProductMode] = useState('existing');
     const [existingOffer, setExistingOffer] = useState({ productId: '', price: '', stock: '' });
     const [catalogQuery, setCatalogQuery] = useState('');
     const [ticketForm, setTicketForm] = useState({ subject: '', content: '', subgroup: 'محصول' });
     const [payoutAmount, setPayoutAmount] = useState('');
     const [editingProduct, setEditingProduct] = useState(null);
+    const [editingOffer, setEditingOffer] = useState(null);
+    const [moreOpen, setMoreOpen] = useState(false);
+    const history = useHistory();
 
     const load = async () => {
         const vendor = await fetch('/api/shop/vendors/me').then((r) => (r.ok ? r.json() : null));
@@ -133,9 +157,18 @@ const VendorPanelPage = () => {
         load();
     }, []);
 
+    useEffect(() => {
+        document.body.classList.add('vendor-world');
+        document.documentElement.classList.add('vendor-world');
+        return () => {
+            document.body.classList.remove('vendor-world');
+            document.documentElement.classList.remove('vendor-world');
+        };
+    }, []);
+
     const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
-    const saveProfile = async (e) => {
+    const saveProfile = async (e, notifySupport = false) => {
         e.preventDefault();
         const res = await fetch('/api/shop/vendors/apply', {
             method: 'POST',
@@ -148,6 +181,21 @@ const VendorPanelPage = () => {
             return;
         }
         setMe(data);
+        if (notifySupport) {
+            await fetch('/api/tickets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    groupName: 'فروشنده',
+                    subgroup: 'مدارک',
+                    subject: 'ویرایش اطلاعات فروشگاه',
+                    content: `درخواست بررسی اطلاعات به‌روزشده فروشگاه «${form.displayName}».\nتلفن: ${form.phone || '—'}\nشبا: ${form.bankSheba || '—'}\nنشانی: ${form.address || '—'}`
+                })
+            });
+            setMessage('اطلاعات ویرایش شد و برای پشتیبانی ارسال شد.');
+            load();
+            return;
+        }
         setMessage('اطلاعات ذخیره شد.');
         setStep(3);
     };
@@ -172,13 +220,12 @@ const VendorPanelPage = () => {
         setMessage('مدرک ثبت شد. پس از تکمیل، اپراتور درخواست را بررسی می‌کند.');
     };
 
-    const createProduct = async (e) => {
-        e.preventDefault();
+    const submitProductForm = async (url, method) => {
         const path = findCategoryPath(categories, productForm.category);
         const leaf = path[path.length - 1];
         if (!productForm.category || (leaf && (leaf.children || []).length)) {
             setMessage('گروه و زیرگروه محصول را تا آخرین سطح انتخاب کنید.');
-            return;
+            return false;
         }
         const body = new FormData();
         Object.entries(productForm).forEach(([key, value]) => {
@@ -187,15 +234,22 @@ const VendorPanelPage = () => {
         if (productForm.images) {
             Array.from(productForm.images).forEach((file) => body.append('images', file));
         }
-        const res = await fetch('/api/vendor/products', { method: 'POST', body });
+        const res = await fetch(url, { method, body });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
             setMessage(data.message || 'ثبت محصول ناموفق بود');
-            return;
+            return false;
         }
-        setProductForm({ name: '', description: '', category: '', price: '', stock: '', compareAtPrice: '', images: null });
+        return true;
+    };
+
+    const createProduct = async (e) => {
+        e.preventDefault();
+        const ok = await submitProductForm('/api/vendor/products', 'POST');
+        if (!ok) return;
+        setProductForm(emptyProduct);
         load();
-        setMessage('محصول ثبت شد و پس از تأیید پشتیبانی در فروشگاه دیده می‌شود.');
+        setMessage('محصول ثبت شد و برای تأیید پشتیبانی ارسال شد.');
     };
 
     const createExistingOffer = async (e) => {
@@ -218,23 +272,30 @@ const VendorPanelPage = () => {
     const resubmitProduct = async (e) => {
         e.preventDefault();
         if (!editingProduct) return;
-        const body = new FormData();
-        Object.entries(productForm).forEach(([key, value]) => {
-            if (key !== 'images' && value != null) body.append(key, value);
+        const ok = await submitProductForm(`/api/vendor/products/${editingProduct.id}`, 'PUT');
+        if (!ok) return;
+        setEditingProduct(null);
+        setProductForm(emptyProduct);
+        load();
+        setMessage('ویرایش برای بررسی پشتیبانی ارسال شد.');
+    };
+
+    const saveListing = async (e) => {
+        e.preventDefault();
+        if (!editingOffer) return;
+        const res = await fetch(`/api/vendor/offers/${editingOffer.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ price: editingOffer.price, stock: editingOffer.stock })
         });
-        if (productForm.images) {
-            Array.from(productForm.images).forEach((file) => body.append('images', file));
-        }
-        const res = await fetch(`/api/vendor/products/${editingProduct.id}`, { method: 'PUT', body });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            setMessage(data.message || 'ارسال اصلاحیه ناموفق بود');
+            setMessage(data.message || 'به‌روزرسانی آگهی ناموفق بود');
             return;
         }
-        setEditingProduct(null);
-        setProductForm({ name: '', description: '', category: '', price: '', stock: '', compareAtPrice: '', images: null });
+        setEditingOffer(null);
         load();
-        setMessage('اصلاحیه برای بررسی دوباره ارسال شد.');
+        setMessage('قیمت و موجودی به‌روز شد.');
     };
 
     const sendTicket = async (e) => {
@@ -284,18 +345,48 @@ const VendorPanelPage = () => {
         load();
     };
 
+    const startEditProduct = (product) => {
+        setProductMode('new');
+        setEditingProduct(product);
+        setProductForm({
+            name: product.name || '',
+            description: product.description || '',
+            category: product.category || '',
+            price: product.price || '',
+            stock: product.stock || '',
+            compareAtPrice: product.compareAtPrice || '',
+            images: null
+        });
+    };
+
+    const logout = () => {
+        clearAuthSession();
+        window.dispatchEvent(new Event('auth-changed'));
+        history.push('/login');
+    };
+
+    const openTab = (id) => {
+        if (id === 'more') {
+            setMoreOpen((open) => !open);
+            return;
+        }
+        setMoreOpen(false);
+        setTab(id);
+    };
+
     const onboarding = !me || me.status !== 'active';
     const isActive = me && me.status === 'active';
     const reviewLabel = (status) => ({
-        pending: 'در انتظار تأیید ادمین',
+        pending: 'در انتظار تأیید',
         approved: 'تأییدشده',
         rejected: 'رد شده'
     }[status] || status);
 
     const tabs = useMemo(() => {
         const all = [
+            { id: 'home', label: 'خانه', icon: faHome },
             { id: 'profile', label: 'پروفایل', icon: faUser },
-            { id: 'tickets', label: 'تیکت پشتیبانی', icon: faHeadset },
+            { id: 'tickets', label: 'پشتیبانی', icon: faHeadset },
             { id: 'products', label: 'محصولات', icon: faBoxOpen, needsActive: true },
             { id: 'orders', label: 'سفارش‌ها', icon: faClipboardList, needsActive: true },
             { id: 'sales', label: 'گزارش فروش', icon: faChartLine, needsActive: true },
@@ -306,363 +397,638 @@ const VendorPanelPage = () => {
         return all.filter((item) => isActive || !item.needsActive);
     }, [isActive]);
 
+    const mobileNav = isActive
+        ? [
+            { id: 'home', label: 'خانه', icon: faHome },
+            { id: 'products', label: 'کالا', icon: faBoxOpen },
+            { id: 'orders', label: 'سفارش', icon: faClipboardList },
+            { id: 'finance', label: 'مالی', icon: faWallet },
+            { id: 'more', label: 'بیشتر', icon: faEllipsis }
+        ]
+        : [
+            { id: 'home', label: 'خانه', icon: faHome },
+            { id: 'profile', label: 'پروفایل', icon: faUser },
+            { id: 'tickets', label: 'پشتیبانی', icon: faHeadset }
+        ];
+
+    const statusText = !me
+        ? 'ثبت‌نام نشده'
+        : me.status === 'active'
+            ? 'فعال'
+            : me.status === 'pending'
+                ? 'در انتظار تأیید'
+                : me.status === 'suspended'
+                    ? 'تعلیق‌شده'
+                    : me.status;
+
+    const profileForm = (
+        <form className="vendor-form" onSubmit={(e) => saveProfile(e, !!me)}>
+            <div className="vendor-kind">
+                <label className={form.personKind === 'individual' ? 'is-on' : ''}>
+                    <input type="radio" checked={form.personKind === 'individual'} onChange={() => setField('personKind', 'individual')} />
+                    حقیقی
+                </label>
+                <label className={form.personKind === 'company' ? 'is-on' : ''}>
+                    <input type="radio" checked={form.personKind === 'company'} onChange={() => setField('personKind', 'company')} />
+                    حقوقی
+                </label>
+            </div>
+            <div className="vendor-form-grid">
+                <Field label="نام فروشگاه روی ویترین">
+                    <input value={form.displayName} onChange={(e) => setField('displayName', e.target.value)} required />
+                </Field>
+                <Field label="نام صاحب حساب / مدیرعامل">
+                    <input value={form.ownerName} onChange={(e) => setField('ownerName', e.target.value)} required />
+                </Field>
+                <Field label={form.personKind === 'company' ? 'شناسه ملی شرکت' : 'کد ملی'}>
+                    <input value={form.nationalId} onChange={(e) => setField('nationalId', e.target.value)} required />
+                </Field>
+                <Field label="شماره تماس">
+                    <input value={form.phone} onChange={(e) => setField('phone', e.target.value)} required />
+                </Field>
+                {form.personKind === 'company' && (
+                    <>
+                        <Field label="نام حقوقی شرکت">
+                            <input value={form.legalName} onChange={(e) => setField('legalName', e.target.value)} required />
+                        </Field>
+                        <Field label="شماره ثبت">
+                            <input value={form.registrationNo} onChange={(e) => setField('registrationNo', e.target.value)} required />
+                        </Field>
+                    </>
+                )}
+                <Field label="استان">
+                    <input value={form.province} onChange={(e) => setField('province', e.target.value)} />
+                </Field>
+                <Field label="شهر">
+                    <input value={form.city} onChange={(e) => setField('city', e.target.value)} />
+                </Field>
+                <Field label="نام بانک">
+                    <input value={form.bankName} onChange={(e) => setField('bankName', e.target.value)} required />
+                </Field>
+                <Field label="شماره شبا">
+                    <input value={form.bankSheba} onChange={(e) => setField('bankSheba', e.target.value)} required />
+                </Field>
+            </div>
+            <Field label="نشانی کامل">
+                <textarea value={form.address} onChange={(e) => setField('address', e.target.value)} rows="3" required />
+            </Field>
+            <Field label="توضیح مجوزها و نوع کالا">
+                <textarea value={form.docsNote} onChange={(e) => setField('docsNote', e.target.value)} rows="2" />
+            </Field>
+            <button type="submit" className="vendor-btn vendor-btn-primary">
+                <Icon icon={faPaperPlane} />
+                {me ? 'ویرایش و ارسال برای پشتیبانی' : 'ذخیره اطلاعات'}
+            </button>
+        </form>
+    );
+
     return (
-        <div className="shop-page shop-world vendor-panel-page">
-            <MainNavbar />
-            <main className="shop-main vendor-main">
-                <header className="vendor-hero">
-                    <FontAwesomeIcon icon={faStore} />
+        <div className="vendor-app">
+            <header className="vendor-topbar">
+                <div className="vendor-topbar-brand">
+                    <span className="vendor-topbar-mark"><Icon icon={faStore} /></span>
                     <div>
-                        <h1>پنل فروشندگان تات کیدز</h1>
-                        <p>ثبت‌نام حقیقی یا حقوقی، بارگذاری مدارک، مدیریت کالا و تسویه.</p>
+                        <strong>پنل فروشندگان</strong>
+                        <em>TatKids Seller</em>
                     </div>
-                </header>
+                </div>
+                <div className="vendor-topbar-actions">
+                    {me && <span className="vendor-topbar-shop">{me.displayName}</span>}
+                    <Link to="/dashboard" className="vendor-topbar-parent">اپ والدین</Link>
+                    <button type="button" className="vendor-topbar-logout" onClick={logout}>
+                        <Icon icon={faRightFromBracket} />
+                        خروج
+                    </button>
+                </div>
+            </header>
+            <main className="vendor-main">
                 {message && <p className="vendor-toast">{message}</p>}
 
-                {onboarding && (
-                    <section className="vendor-onboard">
+                {onboarding && !me && (
+                    <section className="vendor-onboard vendor-card">
+                        <h2>شروع فروشندگی</h2>
+                        <p>اطلاعات فروشگاه را وارد کنید تا پرونده برای بررسی پشتیبانی ساخته شود.</p>
+                        {profileForm}
+                    </section>
+                )}
+
+                {onboarding && me && me.status !== 'active' && (
+                    <section className="vendor-onboard vendor-card">
+                        <div className="vendor-onboard-head">
+                            <h2>تکمیل پرونده فروشندگی</h2>
+                            <span className={`vendor-pill vendor-pill-${me.status}`}>{statusText}</span>
+                        </div>
                         <ol className="vendor-steps">
-                            {['هویت', 'مالی', 'مدارک', 'بررسی'].map((label, index) => (
-                                <li key={label} className={step === index + 1 ? 'is-on' : ''}>{index + 1}. {label}</li>
+                            {['هویت و مالی', 'مدارک', 'بررسی'].map((label, index) => (
+                                <li key={label} className={step === index + 1 || (index === 2 && me.profileComplete) ? 'is-on' : ''}>
+                                    {index + 1}. {label}
+                                </li>
                             ))}
                         </ol>
-
-                        {(step === 1 || step === 2) && (
-                            <form className="product-form vendor-form" onSubmit={saveProfile}>
-                                {step === 1 && (
-                                    <>
-                                        <h3>۱. اطلاعات حقیقی یا حقوقی</h3>
-                                        <div className="vendor-kind">
-                                            <label className={form.personKind === 'individual' ? 'is-on' : ''}>
-                                                <input type="radio" checked={form.personKind === 'individual'} onChange={() => setField('personKind', 'individual')} />
-                                                حقیقی
-                                            </label>
-                                            <label className={form.personKind === 'company' ? 'is-on' : ''}>
-                                                <input type="radio" checked={form.personKind === 'company'} onChange={() => setField('personKind', 'company')} />
-                                                حقوقی
-                                            </label>
-                                        </div>
-                                        <input value={form.displayName} onChange={(e) => setField('displayName', e.target.value)} placeholder="نام فروشگاه روی ویترین" required />
-                                        <input value={form.ownerName} onChange={(e) => setField('ownerName', e.target.value)} placeholder="نام صاحب حساب / مدیرعامل" required />
-                                        <input value={form.nationalId} onChange={(e) => setField('nationalId', e.target.value)} placeholder={form.personKind === 'company' ? 'شناسه ملی شرکت' : 'کد ملی'} required />
-                                        {form.personKind === 'company' && (
-                                            <>
-                                                <input value={form.legalName} onChange={(e) => setField('legalName', e.target.value)} placeholder="نام حقوقی شرکت" required />
-                                                <input value={form.registrationNo} onChange={(e) => setField('registrationNo', e.target.value)} placeholder="شماره ثبت" required />
-                                                <input value={form.economicCode} onChange={(e) => setField('economicCode', e.target.value)} placeholder="کد اقتصادی" />
-                                            </>
-                                        )}
-                                        <input value={form.phone} onChange={(e) => setField('phone', e.target.value)} placeholder="شماره تماس" required />
-                                        <div className="product-form-row">
-                                            <input value={form.province} onChange={(e) => setField('province', e.target.value)} placeholder="استان" />
-                                            <input value={form.city} onChange={(e) => setField('city', e.target.value)} placeholder="شهر" />
-                                        </div>
-                                        <textarea value={form.address} onChange={(e) => setField('address', e.target.value)} placeholder="نشانی کامل" rows="3" required />
-                                        <button type="button" onClick={() => setStep(2)}>ادامه اطلاعات مالی</button>
-                                    </>
-                                )}
-                                {step === 2 && (
-                                    <>
-                                        <h3>۲. اطلاعات مالی و تسویه</h3>
-                                        <input value={form.bankName} onChange={(e) => setField('bankName', e.target.value)} placeholder="نام بانک" required />
-                                        <input value={form.bankSheba} onChange={(e) => setField('bankSheba', e.target.value)} placeholder="شماره شبا IR..." required />
-                                        <input value={form.bankAccount} onChange={(e) => setField('bankAccount', e.target.value)} placeholder="شماره حساب" />
-                                        <textarea value={form.docsNote} onChange={(e) => setField('docsNote', e.target.value)} placeholder="توضیح مجوزها و نوع کالا" rows="3" />
-                                        <div className="product-form-actions">
-                                            <button type="button" className="btn-cancel" onClick={() => setStep(1)}>بازگشت</button>
-                                            <button type="submit">ذخیره و رفتن به مدارک</button>
-                                        </div>
-                                    </>
-                                )}
-                            </form>
-                        )}
-
-                        {step === 3 && (
-                            <form className="product-form vendor-form" onSubmit={uploadDocs}>
-                                <h3>۳. مدارک احراز هویت</h3>
-                                <p>دست‌کم دو مدرک لازم است: کارت شناسایی و تأییدیه شبا. برای حقوقی، آگهی تأسیس هم بارگذاری شود.</p>
+                        <p className="vendor-muted">
+                            {me.profileComplete
+                                ? 'پرونده کامل است و منتظر تأیید کارشناس می‌ماند. پروفایل و تیکت پشتیبانی همین حالا در دسترس است.'
+                                : 'برای تکمیل، هویت، شبا و حداقل دو مدرک لازم است.'}
+                        </p>
+                        <form className="vendor-form" onSubmit={uploadDocs}>
+                            <Field label="نوع مدرک">
                                 <select value={docKind} onChange={(e) => setDocKind(e.target.value)}>
                                     {DOC_KINDS.map((item) => (
                                         <option key={item.id} value={item.id}>{item.label}</option>
                                     ))}
                                 </select>
+                            </Field>
+                            <Field label="فایل مدرک">
                                 <input type="file" accept="image/*,.pdf" multiple onChange={(e) => setDocFiles(e.target.files)} />
-                                <button type="submit">بارگذاری مدرک</button>
-                                <ul className="vendor-docs">
-                                    {(me && me.docs ? me.docs : []).map((doc) => (
-                                        <li key={doc.id}>
-                                            <a href={doc.fileUrl} target="_blank" rel="noreferrer">{doc.originalName || doc.kind}</a>
-                                            <span>{DOC_KINDS.find((item) => item.id === doc.kind)?.label || doc.kind}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </form>
-                        )}
-
-                        {me && (
-                            <aside className="vendor-status-card">
-                                <h3>وضعیت درخواست</h3>
-                                <p>{me.status === 'pending' ? 'در انتظار تأیید کارشناس' : me.status === 'suspended' ? 'تعلیق‌شده' : me.status}</p>
-                                <p>{me.profileComplete ? 'پرونده کامل است.' : 'برای تکمیل، هویت، شبا و حداقل دو مدرک لازم است.'}</p>
-                            </aside>
-                        )}
+                            </Field>
+                            <button type="submit" className="vendor-btn vendor-btn-primary">بارگذاری مدرک</button>
+                            <ul className="vendor-docs">
+                                {(me.docs || []).map((doc) => (
+                                    <li key={doc.id}>
+                                        <a href={doc.fileUrl} target="_blank" rel="noreferrer">{doc.originalName || doc.kind}</a>
+                                        <span>{DOC_KINDS.find((item) => item.id === doc.kind)?.label || doc.kind}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </form>
                     </section>
                 )}
 
                 {me && (
-                    <section className="vendor-workspace">
-                        <p className="vendor-active-line">
-                            {isActive
-                                ? `فروشگاه فعال: ${me.displayName} · کمیسیون ${me.commissionPct}٪`
-                                : `فروشگاه «${me.displayName || 'شما'}» در انتظار تأیید است. پروفایل و تیکت پشتیبانی در دسترس است؛ محصولات و تسویه پس از تأیید فعال می‌شود.`}
-                        </p>
-                        <div className="vendor-tabs">
-                            {tabs.map((item) => (
-                                <button key={item.id} type="button" className={tab === item.id ? 'is-on' : ''} onClick={() => setTab(item.id)}>
-                                    <FontAwesomeIcon icon={item.icon} />
-                                    {item.label}
-                                </button>
-                            ))}
-                        </div>
-
-                        {tab === 'profile' && (
-                            <div className="vendor-report">
-                                <h3>اطلاعات پروفایل فروشگاه</h3>
-                                <p>نام فروشگاه: <strong>{me.displayName}</strong></p>
-                                <p>نوع: {me.personKind === 'company' ? 'حقوقی' : 'حقیقی'}</p>
-                                <p>صاحب حساب: {me.ownerName || '—'}</p>
-                                <p>تلفن: {me.phone || '—'}</p>
-                                <p>{[me.province, me.city, me.address].filter(Boolean).join('، ') || 'نشانی ثبت نشده'}</p>
-                                <p>شبا: {me.bankSheba || '—'}</p>
-                                <p>وضعیت: {isActive ? `فعال · کمیسیون ${me.commissionPct}٪` : (me.status === 'pending' ? 'در انتظار تأیید کارشناس' : me.status)}</p>
+                    <div className="vendor-shell">
+                        <aside className="vendor-side">
+                            <div className="vendor-side-shop">
+                                <span className="vendor-side-icon"><Icon icon={faStore} /></span>
+                                <h1>{me.displayName || 'فروشگاه شما'}</h1>
+                                <span className={`vendor-pill vendor-pill-${me.status}`}>{statusText}</span>
+                                {isActive && <p>کمیسیون {me.commissionPct}٪</p>}
                             </div>
-                        )}
+                            <nav className="vendor-side-nav">
+                                {tabs.map((item) => (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        className={tab === item.id ? 'is-on' : ''}
+                                        onClick={() => openTab(item.id)}
+                                    >
+                                        <Icon icon={item.icon} />
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </nav>
+                        </aside>
 
-                        {isActive && tab === 'products' && (
-                            <>
-                                <div className="vendor-kind">
-                                    <label className={productMode === 'existing' ? 'is-on' : ''}>
-                                        <input type="radio" checked={productMode === 'existing'} onChange={() => setProductMode('existing')} />
-                                        انتخاب از کالای موجود
-                                    </label>
-                                    <label className={productMode === 'new' ? 'is-on' : ''}>
-                                        <input type="radio" checked={productMode === 'new'} onChange={() => setProductMode('new')} />
-                                        تعریف محصول جدید
-                                    </label>
-                                </div>
-                                {productMode === 'existing' && (
-                                    <form className="product-form vendor-form" onSubmit={createExistingOffer}>
-                                        <h3>فروش کالای موجود</h3>
-                                        <p>فقط قیمت و موجودی خودتان را ثبت می‌کنید؛ مشخصات کالا قابل تغییر نیست.</p>
-                                        <input
-                                            value={catalogQuery}
-                                            onChange={(e) => setCatalogQuery(e.target.value)}
-                                            placeholder="جستجوی نام کالا"
-                                        />
-                                        <select
-                                            value={existingOffer.productId}
-                                            onChange={(e) => setExistingOffer((p) => ({ ...p, productId: e.target.value }))}
-                                            required
-                                        >
-                                            <option value="">انتخاب کالا</option>
-                                            {catalog
-                                                .filter((item) => !catalogQuery || item.name.includes(catalogQuery))
-                                                .map((item) => (
-                                                    <option key={item.id} value={item.id}>
-                                                        {item.name} · {formatPrice(item.price)}
-                                                    </option>
-                                                ))}
-                                        </select>
-                                        <div className="product-form-row">
-                                            <input value={existingOffer.price} onChange={(e) => setExistingOffer((p) => ({ ...p, price: e.target.value }))} placeholder="قیمت فروش شما" required />
-                                            <input value={existingOffer.stock} onChange={(e) => setExistingOffer((p) => ({ ...p, stock: e.target.value }))} placeholder="موجودی شما" required />
-                                        </div>
-                                        <button type="submit">ثبت آگهی فروش</button>
-                                    </form>
-                                )}
-                                {productMode === 'new' && (
-                                    <form className="product-form vendor-form" onSubmit={editingProduct ? resubmitProduct : createProduct}>
-                                        <h3>{editingProduct ? 'اصلاح و ارسال دوباره' : 'تعریف محصول جدید'}</h3>
-                                        <p>پس از بارگذاری عکس و مشخصات کامل، برای تأیید پشتیبانی ارسال می‌شود.</p>
-                                        <input value={productForm.name} onChange={(e) => setProductForm((p) => ({ ...p, name: e.target.value }))} placeholder="نام محصول" required />
-                                        <textarea value={productForm.description} onChange={(e) => setProductForm((p) => ({ ...p, description: e.target.value }))} placeholder="توضیح" />
-                                        <CategoryCascade
-                                            tree={categories}
-                                            value={productForm.category}
-                                            onChange={(name) => setProductForm((p) => ({ ...p, category: name }))}
-                                            emptyLabel="انتخاب گروه"
-                                            required
-                                            forceLeaf
-                                        />
-                                        <div className="product-form-row">
-                                            <input value={productForm.price} onChange={(e) => setProductForm((p) => ({ ...p, price: e.target.value }))} placeholder="قیمت فروش" required />
-                                            <input value={productForm.compareAtPrice} onChange={(e) => setProductForm((p) => ({ ...p, compareAtPrice: e.target.value }))} placeholder="قیمت قبل از تخفیف" />
-                                            <input value={productForm.stock} onChange={(e) => setProductForm((p) => ({ ...p, stock: e.target.value }))} placeholder="موجودی" />
-                                        </div>
-                                        <input type="file" accept="image/*" multiple onChange={(e) => setProductForm((p) => ({ ...p, images: e.target.files }))} />
-                                        <button type="submit">{editingProduct ? 'ارسال اصلاحیه' : 'ارسال برای تأیید پشتیبانی'}</button>
-                                    </form>
-                                )}
-                                <div className="products-admin-list">
-                                    <h3>کالاهای تعریف‌شده شما</h3>
-                                    {products.map((product) => (
-                                        <div key={`p-${product.id}`} className="product-admin-item">
-                                            <div>
-                                                <h3>{product.name}</h3>
-                                                <p>{formatPrice(product.price)} · موجودی {product.stock} · {reviewLabel(product.reviewStatus)}</p>
-                                                {product.reviewStatus === 'rejected' && product.reviewNote && (
-                                                    <p>دلیل رد: {product.reviewNote}</p>
-                                                )}
+                        <div className="vendor-content">
+                            {tab === 'home' && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>خانه فروشنده</h2>
+                                        <p>{isActive ? 'گزارش سریع فروشگاه شما' : 'وضعیت پرونده فروشندگی'}</p>
+                                    </header>
+                                    <div className="vendor-home-status">
+                                        <strong>{me.displayName}</strong>
+                                        <span className={`vendor-pill vendor-pill-${me.status}`}>{statusText}</span>
+                                    </div>
+                                    {isActive && finance && (
+                                        <div className="vendor-stats">
+                                            <div className="vendor-stat">
+                                                <span>جمع فروش</span>
+                                                <strong>{formatPrice(finance.salesTotal)}</strong>
                                             </div>
-                                            {product.reviewStatus === 'rejected' && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setProductMode('new');
-                                                        setEditingProduct(product);
-                                                        setProductForm({
-                                                            name: product.name || '',
-                                                            description: product.description || '',
-                                                            category: product.category || '',
-                                                            price: product.price || '',
-                                                            stock: product.stock || '',
-                                                            compareAtPrice: product.compareAtPrice || '',
-                                                            images: null
-                                                        });
-                                                    }}
-                                                >
-                                                    اصلاح و ارسال دوباره
-                                                </button>
-                                            )}
-                                            {product.active && <Link to={`/shop/${product.id}`}>مشاهده</Link>}
-                                        </div>
-                                    ))}
-                                    <h3>آگهی روی کالای موجود</h3>
-                                    {listings.map((offer) => (
-                                        <div key={`o-${offer.id}`} className="product-admin-item">
-                                            <div>
-                                                <h3>{offer.productName || `کالا #${offer.productId}`}</h3>
-                                                <p>{formatPrice(offer.price)} · موجودی {offer.stock}</p>
+                                            <div className="vendor-stat">
+                                                <span>قابل برداشت</span>
+                                                <strong>{formatPrice(finance.walletAvailable || 0)}</strong>
                                             </div>
-                                            <Link to={`/shop/${offer.productId}`}>مشاهده</Link>
+                                            <div className="vendor-stat">
+                                                <span>سفارش‌ها</span>
+                                                <strong>{orders.length}</strong>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            </>
-                        )}
+                                    )}
+                                    {!isActive && (
+                                        <p className="vendor-muted">تا تأیید کارشناس، از پروفایل و پشتیبانی استفاده کنید. محصولات و تسویه بعد از فعال شدن باز می‌شود.</p>
+                                    )}
+                                    <div className="vendor-home-actions">
+                                        <button type="button" className="vendor-btn vendor-btn-primary" onClick={() => openTab('profile')}>پروفایل فروشگاه</button>
+                                        {isActive && (
+                                            <>
+                                                <button type="button" className="vendor-btn" onClick={() => openTab('products')}>مدیریت کالا</button>
+                                                <button type="button" className="vendor-btn" onClick={() => openTab('orders')}>سفارش‌ها</button>
+                                            </>
+                                        )}
+                                        {!isActive && (
+                                            <button type="button" className="vendor-btn" onClick={() => openTab('tickets')}>تیکت پشتیبانی</button>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
 
-                        {tab === 'tickets' && (
-                            <div className="vendor-report">
-                                <form className="product-form vendor-form" onSubmit={sendTicket}>
-                                    <h3>ارسال تیکت به پشتیبانی</h3>
-                                    <select value={ticketForm.subgroup} onChange={(e) => setTicketForm((p) => ({ ...p, subgroup: e.target.value }))}>
-                                        {['محصول', 'سفارش', 'مالی و تسویه', 'مدارک'].map((item) => (
-                                            <option key={item} value={item}>{item}</option>
-                                        ))}
-                                    </select>
-                                    <input value={ticketForm.subject} onChange={(e) => setTicketForm((p) => ({ ...p, subject: e.target.value }))} placeholder="موضوع" required />
-                                    <textarea value={ticketForm.content} onChange={(e) => setTicketForm((p) => ({ ...p, content: e.target.value }))} placeholder="متن پیام" rows="4" required />
-                                    <button type="submit">ارسال تیکت</button>
-                                </form>
-                                <ul>
-                                    {tickets.length === 0 && <li>تیکتی ثبت نشده است.</li>}
-                                    {tickets.map((ticket) => (
-                                        <li key={ticket.id}>
-                                            #{ticket.id} · {ticket.subject} · {ticket.status || ticket.groupName}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
+                            {tab === 'profile' && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>اطلاعات پروفایل</h2>
+                                        <p>در صورت تغییر مشخصات، درخواست برای پشتیبانی ارسال می‌شود.</p>
+                                    </header>
+                                    {profileForm}
+                                </section>
+                            )}
 
-                        {isActive && tab === 'orders' && (
-                            <div className="vendor-orders">
-                                {orders.length === 0 && <p>سفارشی برای این فروشگاه ثبت نشده است.</p>}
-                                {orders.map((order) => (
-                                    <article key={order.id} className="vendor-order-card">
-                                        <h3>سفارش #{order.id}</h3>
-                                        <ul>
-                                            {(order.items || []).map((item) => (
-                                                <li key={item.id || item.productId}>
-                                                    <span>{item.name} × {item.quantity} — {formatPrice(item.lineTotal)}</span>
+                            {isActive && tab === 'products' && (
+                                <>
+                                    <section className="vendor-card">
+                                        <header className="vendor-card-head">
+                                            <h2>تعریف یا فروش کالا</h2>
+                                            <p>از کالای موجود فقط قیمت و موجودی می‌گذارید؛ محصول جدید برای تأیید پشتیبانی می‌رود.</p>
+                                        </header>
+                                        <div className="vendor-kind">
+                                            <label className={productMode === 'existing' ? 'is-on' : ''}>
+                                                <input type="radio" checked={productMode === 'existing'} onChange={() => { setProductMode('existing'); setEditingProduct(null); }} />
+                                                انتخاب از کالای موجود
+                                            </label>
+                                            <label className={productMode === 'new' ? 'is-on' : ''}>
+                                                <input type="radio" checked={productMode === 'new'} onChange={() => setProductMode('new')} />
+                                                تعریف محصول جدید
+                                            </label>
+                                        </div>
+                                        {productMode === 'existing' && (
+                                            <form className="vendor-form" onSubmit={createExistingOffer}>
+                                                <Field label="جستجوی نام کالا">
+                                                    <input value={catalogQuery} onChange={(e) => setCatalogQuery(e.target.value)} />
+                                                </Field>
+                                                <Field label="کالا">
                                                     <select
-                                                        value={item.lineStatus || 'pending'}
-                                                        onChange={(e) => updateLine(item.id, e.target.value)}
+                                                        value={existingOffer.productId}
+                                                        onChange={(e) => setExistingOffer((p) => ({ ...p, productId: e.target.value }))}
+                                                        required
                                                     >
-                                                        {LINE_STATUSES.map((opt) => (
-                                                            <option key={opt.id} value={opt.id}>{opt.label}</option>
-                                                        ))}
+                                                        <option value="">انتخاب کالا</option>
+                                                        {catalog
+                                                            .filter((item) => !catalogQuery || item.name.includes(catalogQuery))
+                                                            .map((item) => (
+                                                                <option key={item.id} value={item.id}>
+                                                                    {item.name} · {formatPrice(item.price)}
+                                                                </option>
+                                                            ))}
                                                     </select>
+                                                </Field>
+                                                <div className="vendor-form-grid">
+                                                    <Field label="قیمت فروش شما">
+                                                        <input value={existingOffer.price} onChange={(e) => setExistingOffer((p) => ({ ...p, price: e.target.value }))} required />
+                                                    </Field>
+                                                    <Field label="موجودی شما">
+                                                        <input value={existingOffer.stock} onChange={(e) => setExistingOffer((p) => ({ ...p, stock: e.target.value }))} required />
+                                                    </Field>
+                                                </div>
+                                                <button type="submit" className="vendor-btn vendor-btn-primary">ثبت آگهی فروش</button>
+                                            </form>
+                                        )}
+                                        {productMode === 'new' && (
+                                            <form className="vendor-form" onSubmit={editingProduct ? resubmitProduct : createProduct}>
+                                                <p className="vendor-muted">
+                                                    {editingProduct
+                                                        ? 'پس از ویرایش، محصول دوباره برای پشتیبانی ارسال می‌شود.'
+                                                        : 'عکس و مشخصات کامل را بفرستید تا پس از تأیید روی سایت دیده شود.'}
+                                                </p>
+                                                <Field label="نام محصول">
+                                                    <input value={productForm.name} onChange={(e) => setProductForm((p) => ({ ...p, name: e.target.value }))} required />
+                                                </Field>
+                                                <Field label="توضیح">
+                                                    <textarea value={productForm.description} onChange={(e) => setProductForm((p) => ({ ...p, description: e.target.value }))} rows="3" />
+                                                </Field>
+                                                <Field as="div" label="گروه کالا">
+                                                    <CategoryCascade
+                                                        tree={categories}
+                                                        value={productForm.category}
+                                                        onChange={(name) => setProductForm((p) => ({ ...p, category: name }))}
+                                                        emptyLabel="انتخاب گروه"
+                                                        required
+                                                        forceLeaf
+                                                    />
+                                                </Field>
+                                                <div className="vendor-form-grid">
+                                                    <Field label="قیمت فروش">
+                                                        <input value={productForm.price} onChange={(e) => setProductForm((p) => ({ ...p, price: e.target.value }))} required />
+                                                    </Field>
+                                                    <Field label="قیمت قبل از تخفیف">
+                                                        <input value={productForm.compareAtPrice} onChange={(e) => setProductForm((p) => ({ ...p, compareAtPrice: e.target.value }))} />
+                                                    </Field>
+                                                    <Field label="موجودی">
+                                                        <input value={productForm.stock} onChange={(e) => setProductForm((p) => ({ ...p, stock: e.target.value }))} />
+                                                    </Field>
+                                                </div>
+                                                <Field label="عکس محصول">
+                                                    <input type="file" accept="image/*" multiple onChange={(e) => setProductForm((p) => ({ ...p, images: e.target.files }))} />
+                                                </Field>
+                                                <div className="vendor-form-actions">
+                                                    {editingProduct && (
+                                                        <button
+                                                            type="button"
+                                                            className="vendor-btn"
+                                                            onClick={() => { setEditingProduct(null); setProductForm(emptyProduct); }}
+                                                        >
+                                                            انصراف
+                                                        </button>
+                                                    )}
+                                                    <button type="submit" className="vendor-btn vendor-btn-primary">
+                                                        <Icon icon={faPaperPlane} />
+                                                        {editingProduct ? 'ویرایش و ارسال برای پشتیبانی' : 'ارسال برای تأیید پشتیبانی'}
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </section>
+
+                                    <section className="vendor-card">
+                                        <header className="vendor-card-head">
+                                            <h2>کالاهای تعریف‌شده شما</h2>
+                                        </header>
+                                        {products.length === 0 && <p className="vendor-empty">هنوز محصول جدیدی تعریف نکرده‌اید.</p>}
+                                        <ul className="vendor-list">
+                                            {products.map((product) => (
+                                                <li key={`p-${product.id}`}>
+                                                    <div>
+                                                        <strong>{product.name}</strong>
+                                                        <p>{formatPrice(product.price)} · موجودی {product.stock}</p>
+                                                        {product.reviewStatus === 'rejected' && product.reviewNote && (
+                                                            <p className="vendor-warn">دلیل رد: {product.reviewNote}</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="vendor-list-actions">
+                                                        <span className={`vendor-pill vendor-pill-${product.reviewStatus}`}>{reviewLabel(product.reviewStatus)}</span>
+                                                        <button type="button" className="vendor-btn" onClick={() => startEditProduct(product)}>
+                                                            ویرایش و ارسال برای پشتیبانی
+                                                        </button>
+                                                        {product.active && <Link to={`/shop/${product.id}`}>مشاهده</Link>}
+                                                    </div>
                                                 </li>
                                             ))}
                                         </ul>
-                                    </article>
-                                ))}
-                            </div>
-                        )}
+                                    </section>
 
-                        {isActive && tab === 'sales' && finance && (
-                            <div className="vendor-report">
-                                <p>جمع فروش: <strong>{formatPrice(finance.salesTotal)}</strong></p>
-                                {finance.sales.length === 0 ? <p>هنوز فروشی ثبت نشده است.</p> : (
-                                    <ul>
-                                        {finance.sales.map((row) => (
-                                            <li key={row.name}>{row.name} · {row.quantity} عدد · {formatPrice(row.total)}</li>
+                                    <section className="vendor-card">
+                                        <header className="vendor-card-head">
+                                            <h2>آگهی روی کالای موجود</h2>
+                                        </header>
+                                        {listings.length === 0 && <p className="vendor-empty">آگهی‌ای روی کالای موجود ندارید.</p>}
+                                        <ul className="vendor-list">
+                                            {listings.map((offer) => (
+                                                <li key={`o-${offer.id}`}>
+                                                    <div>
+                                                        <strong>{offer.productName || `کالا #${offer.productId}`}</strong>
+                                                        <p>{formatPrice(offer.price)} · موجودی {offer.stock}</p>
+                                                    </div>
+                                                    <div className="vendor-list-actions">
+                                                        <button
+                                                            type="button"
+                                                            className="vendor-btn"
+                                                            onClick={() => setEditingOffer({
+                                                                id: offer.id,
+                                                                price: offer.price,
+                                                                stock: offer.stock
+                                                            })}
+                                                        >
+                                                            ویرایش قیمت و موجودی
+                                                        </button>
+                                                        <Link to={`/shop/${offer.productId}`}>مشاهده</Link>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                        {editingOffer && (
+                                            <form className="vendor-form" onSubmit={saveListing}>
+                                                <div className="vendor-form-grid">
+                                                    <Field label="قیمت">
+                                                        <input value={editingOffer.price} onChange={(e) => setEditingOffer((p) => ({ ...p, price: e.target.value }))} required />
+                                                    </Field>
+                                                    <Field label="موجودی">
+                                                        <input value={editingOffer.stock} onChange={(e) => setEditingOffer((p) => ({ ...p, stock: e.target.value }))} required />
+                                                    </Field>
+                                                </div>
+                                                <div className="vendor-form-actions">
+                                                    <button type="button" className="vendor-btn" onClick={() => setEditingOffer(null)}>انصراف</button>
+                                                    <button type="submit" className="vendor-btn vendor-btn-primary">ذخیره آگهی</button>
+                                                </div>
+                                            </form>
+                                        )}
+                                    </section>
+                                </>
+                            )}
+
+                            {tab === 'tickets' && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>تیکت پشتیبانی</h2>
+                                        <p>سؤال یا مشکل فروشندگی را برای واحد پشتیبانی بفرستید.</p>
+                                    </header>
+                                    <form className="vendor-form" onSubmit={sendTicket}>
+                                        <Field label="موضوع واحد">
+                                            <select value={ticketForm.subgroup} onChange={(e) => setTicketForm((p) => ({ ...p, subgroup: e.target.value }))}>
+                                                {['محصول', 'سفارش', 'مالی و تسویه', 'مدارک'].map((item) => (
+                                                    <option key={item} value={item}>{item}</option>
+                                                ))}
+                                            </select>
+                                        </Field>
+                                        <Field label="عنوان">
+                                            <input value={ticketForm.subject} onChange={(e) => setTicketForm((p) => ({ ...p, subject: e.target.value }))} required />
+                                        </Field>
+                                        <Field label="متن پیام">
+                                            <textarea value={ticketForm.content} onChange={(e) => setTicketForm((p) => ({ ...p, content: e.target.value }))} rows="4" required />
+                                        </Field>
+                                        <button type="submit" className="vendor-btn vendor-btn-primary">
+                                            <Icon icon={faPaperPlane} />
+                                            ارسال تیکت
+                                        </button>
+                                    </form>
+                                    <ul className="vendor-list">
+                                        {tickets.length === 0 && <li className="vendor-empty">تیکتی ثبت نشده است.</li>}
+                                        {tickets.map((ticket) => (
+                                            <li key={ticket.id}>
+                                                <div>
+                                                    <strong>#{ticket.id} · {ticket.subject}</strong>
+                                                    <p>{ticket.groupName} / {ticket.subgroup}</p>
+                                                </div>
+                                                <span className="vendor-pill">{ticket.status || 'open'}</span>
+                                            </li>
                                         ))}
                                     </ul>
-                                )}
-                            </div>
-                        )}
+                                </section>
+                            )}
 
-                        {isActive && tab === 'finance' && finance && (
-                            <div className="vendor-report">
-                                <p>کمیسیون کسرشده: <strong>{formatPrice(finance.commissionTotal)}</strong></p>
-                                <p>مانده امانی: <strong>{formatPrice(finance.holdTotal)}</strong></p>
-                                <p>بازگشت/بدهی: <strong>{formatPrice(finance.refundTotal)}</strong></p>
-                                <p>تسویه‌شده: <strong>{formatPrice(finance.payoutTotal || 0)}</strong></p>
-                                <h3>اسناد مالی</h3>
-                                <ul>
-                                    {finance.recent.map((row) => (
-                                        <li key={row.id}>{row.kind} · {formatPrice(row.amount)} · {row.note}</li>
+                            {isActive && tab === 'orders' && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>سفارش‌ها</h2>
+                                    </header>
+                                    {orders.length === 0 && <p className="vendor-empty">سفارشی برای این فروشگاه ثبت نشده است.</p>}
+                                    {orders.map((order) => (
+                                        <article key={order.id} className="vendor-order">
+                                            <h3>سفارش #{order.id}</h3>
+                                            <ul>
+                                                {(order.items || []).map((item) => (
+                                                    <li key={item.id || item.productId}>
+                                                        <span>{item.name} × {item.quantity} — {formatPrice(item.lineTotal)}</span>
+                                                        <select
+                                                            value={item.lineStatus || 'pending'}
+                                                            onChange={(e) => updateLine(item.id, e.target.value)}
+                                                        >
+                                                            {LINE_STATUSES.map((opt) => (
+                                                                <option key={opt.id} value={opt.id}>{opt.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </article>
                                     ))}
-                                </ul>
-                            </div>
-                        )}
+                                </section>
+                            )}
 
-                        {isActive && tab === 'invoices' && (
-                            <div className="vendor-report">
-                                <h3>فاکتور سفارش‌ها</h3>
-                                {invoices.length === 0 && <p>فاکتوری ثبت نشده است.</p>}
-                                <ul>
-                                    {invoices.map((invoice) => (
-                                        <li key={invoice.id}>
-                                            {invoice.id} · سفارش #{invoice.orderId} · {formatPrice(invoice.total)} · {invoice.status}
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
+                            {isActive && tab === 'sales' && finance && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>گزارش فروش</h2>
+                                    </header>
+                                    <div className="vendor-stats">
+                                        <div className="vendor-stat">
+                                            <span>جمع فروش</span>
+                                            <strong>{formatPrice(finance.salesTotal)}</strong>
+                                        </div>
+                                    </div>
+                                    {finance.sales.length === 0 ? <p className="vendor-empty">هنوز فروشی ثبت نشده است.</p> : (
+                                        <ul className="vendor-list">
+                                            {finance.sales.map((row) => (
+                                                <li key={row.name}>
+                                                    <strong>{row.name}</strong>
+                                                    <span>{row.quantity} عدد · {formatPrice(row.total)}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </section>
+                            )}
 
-                        {isActive && tab === 'wallet' && finance && (
-                            <div className="vendor-report">
-                                <h3>کیف پول تسویه</h3>
-                                <p>قابل برداشت: <strong>{formatPrice(finance.walletAvailable || 0)}</strong></p>
-                                <p>در حال نگهداری: {formatPrice(finance.holdTotal)}</p>
-                                <form className="product-form vendor-form" onSubmit={requestPayout}>
-                                    <input
-                                        value={payoutAmount}
-                                        onChange={(e) => setPayoutAmount(e.target.value)}
-                                        placeholder="مبلغ تسویه (تومان)"
-                                        required
-                                    />
-                                    <button type="submit">درخواست تسویه</button>
-                                </form>
-                            </div>
-                        )}
-                    </section>
+                            {isActive && tab === 'finance' && finance && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>گزارش مالی</h2>
+                                    </header>
+                                    <div className="vendor-stats">
+                                        <div className="vendor-stat">
+                                            <span>کمیسیون</span>
+                                            <strong>{formatPrice(finance.commissionTotal)}</strong>
+                                        </div>
+                                        <div className="vendor-stat">
+                                            <span>مانده امانی</span>
+                                            <strong>{formatPrice(finance.holdTotal)}</strong>
+                                        </div>
+                                        <div className="vendor-stat">
+                                            <span>بازگشت</span>
+                                            <strong>{formatPrice(finance.refundTotal)}</strong>
+                                        </div>
+                                        <div className="vendor-stat">
+                                            <span>تسویه‌شده</span>
+                                            <strong>{formatPrice(finance.payoutTotal || 0)}</strong>
+                                        </div>
+                                    </div>
+                                    <ul className="vendor-list">
+                                        {finance.recent.map((row) => (
+                                            <li key={row.id}>
+                                                <strong>{LEDGER_LABELS[row.kind] || row.kind}</strong>
+                                                <span>{formatPrice(row.amount)} · {row.note}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </section>
+                            )}
+
+                            {isActive && tab === 'invoices' && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>فاکتورها</h2>
+                                    </header>
+                                    {invoices.length === 0 && <p className="vendor-empty">فاکتوری ثبت نشده است.</p>}
+                                    <ul className="vendor-list">
+                                        {invoices.map((invoice) => (
+                                            <li key={invoice.id}>
+                                                <div>
+                                                    <strong>{invoice.id}</strong>
+                                                    <p>سفارش #{invoice.orderId}</p>
+                                                </div>
+                                                <span>{formatPrice(invoice.total)} · {invoice.status}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </section>
+                            )}
+
+                            {isActive && tab === 'wallet' && finance && (
+                                <section className="vendor-card">
+                                    <header className="vendor-card-head">
+                                        <h2>کیف پول تسویه</h2>
+                                    </header>
+                                    <div className="vendor-stats">
+                                        <div className="vendor-stat">
+                                            <span>قابل برداشت</span>
+                                            <strong>{formatPrice(finance.walletAvailable || 0)}</strong>
+                                        </div>
+                                        <div className="vendor-stat">
+                                            <span>در حال نگهداری</span>
+                                            <strong>{formatPrice(finance.holdTotal)}</strong>
+                                        </div>
+                                    </div>
+                                    <form className="vendor-form" onSubmit={requestPayout}>
+                                        <Field label="مبلغ تسویه (تومان)">
+                                            <input value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} required />
+                                        </Field>
+                                        <button type="submit" className="vendor-btn vendor-btn-primary">درخواست تسویه</button>
+                                    </form>
+                                </section>
+                            )}
+                        </div>
+                    </div>
                 )}
             </main>
-            <Footer />
+
+            {moreOpen && (
+                <div className="vendor-more" role="dialog" aria-label="بخش‌های بیشتر">
+                    <button type="button" className="vendor-more-backdrop" aria-label="بستن" onClick={() => setMoreOpen(false)} />
+                    <div className="vendor-more-sheet">
+                        <h3>بخش‌های پنل</h3>
+                        {[
+                            { id: 'profile', label: 'پروفایل' },
+                            { id: 'tickets', label: 'پشتیبانی' },
+                            { id: 'sales', label: 'گزارش فروش', needsActive: true },
+                            { id: 'invoices', label: 'فاکتورها', needsActive: true },
+                            { id: 'wallet', label: 'کیف پول', needsActive: true }
+                        ].filter((item) => isActive || !item.needsActive).map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => openTab(item.id)}
+                            >
+                                {item.label}
+                            </button>
+                        ))}
+                        <Link to="/dashboard" onClick={() => setMoreOpen(false)}>ورود به اپ والدین</Link>
+                    </div>
+                </div>
+            )}
+
+            {me && (
+            <nav className="vendor-bottom-nav" aria-label="منوی فروشنده">
+                {mobileNav.map((item) => (
+                    <button
+                        key={item.id}
+                        type="button"
+                        className={item.id === 'more' ? (moreOpen ? 'is-on' : '') : (tab === item.id && !moreOpen ? 'is-on' : '')}
+                        onClick={() => openTab(item.id)}
+                    >
+                        <Icon icon={item.icon} />
+                        <span>{item.label}</span>
+                    </button>
+                ))}
+            </nav>
+            )}
         </div>
     );
 };

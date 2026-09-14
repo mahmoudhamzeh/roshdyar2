@@ -464,6 +464,27 @@ async function run() {
         assert.strictEqual(approveProduct.data.reviewStatus, 'approved');
         assert.strictEqual(approveProduct.data.active, true);
 
+        const editApproved = await request('PUT', `/api/vendor/products/${vendorProduct.data.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: {
+                name: 'حلقه چوبی فروشنده',
+                description: 'توضیح اصلاح‌شده برای پشتیبانی',
+                category: 'لگو',
+                price: 125000,
+                stock: 4
+            }
+        });
+        assert.strictEqual(editApproved.status, 200, JSON.stringify(editApproved.data));
+        assert.strictEqual(editApproved.data.reviewStatus, 'pending');
+        assert.strictEqual(editApproved.data.active, true);
+        const stillOnSite = await request('GET', `/api/shop/products/${vendorProduct.data.id}`);
+        assert.strictEqual(stillOnSite.status, 200);
+        const reapprove = await request('PATCH', `/api/admin/products/${vendorProduct.data.id}/review`, {
+            headers: auth,
+            body: { status: 'approved' }
+        });
+        assert.strictEqual(reapprove.status, 200, JSON.stringify(reapprove.data));
+
         const finance = await request('GET', '/api/vendor/finance', {
             headers: { Authorization: `Bearer ${verify.data.token}` }
         });

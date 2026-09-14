@@ -41,7 +41,8 @@ const MobileBottomNav = () => {
             location.pathname.startsWith('/login') ||
             location.pathname.startsWith('/register') ||
             location.pathname.startsWith('/admin') ||
-            location.pathname.startsWith('/news');
+            location.pathname.startsWith('/news') ||
+            location.pathname.startsWith('/vendor');
         document.body.classList.toggle('has-mobile-bottom-nav', !hide);
         document.body.classList.toggle('shop-world-nav', !hide && shopWorld);
         return () => {
@@ -60,7 +61,8 @@ const MobileBottomNav = () => {
         location.pathname.startsWith('/login') ||
         location.pathname.startsWith('/register') ||
         location.pathname.startsWith('/admin') ||
-        location.pathname.startsWith('/news')
+        location.pathname.startsWith('/news') ||
+        location.pathname.startsWith('/vendor')
     ) {
         return null;
     }

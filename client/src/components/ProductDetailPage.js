@@ -220,37 +220,11 @@ const ProductDetailPage = () => {
                                 <span className="product-detail-cat">{product.category}</span>
                                 {product.ageBand && <span className="shop-age-badge">{ageBandLabel(product.ageBand)}</span>}
                                 <h1>{product.name}</h1>
-                                {(product.offers || []).length > 0 && (
-                                    <div className="product-offers">
-                                        <p>فروشندگان این کالا</p>
-                                        <div className="product-offer-cards">
-                                            {(product.offers || []).map((offer) => (
-                                                <button
-                                                    type="button"
-                                                    key={offer.id}
-                                                    className={`product-offer-card ${offerId === offer.id ? 'is-active' : ''}`}
-                                                    onClick={() => {
-                                                        setOfferId(offer.id);
-                                                        setQuantity(1);
-                                                    }}
-                                                >
-                                                    <strong>{offer.vendorName}</strong>
-                                                    <ShopRating
-                                                        value={offer.vendorRatingAvg}
-                                                        count={offer.vendorRatingCount}
-                                                        size="sm"
-                                                        showEmpty
-                                                    />
-                                                    <em>{formatPrice(offer.price)}</em>
-                                                    <span>
-                                                        {offer.stock < 1
-                                                            ? 'ناموجود'
-                                                            : `${offer.vendorSoldCount || 0} فروش · موجودی ${offer.stock}`}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
+                                {selectedOffer && (
+                                    <p className="product-detail-vendor">
+                                        فروشنده: <strong>{selectedOffer.vendorName}</strong>
+                                        {(product.offers || []).length > 1 ? ' · برای خرید از فروشگاه دیگر، فهرست پایین را ببینید' : ''}
+                                    </p>
                                 )}
                                 {product.ratingCount > 0 ? (
                                     <ShopRating
@@ -303,6 +277,51 @@ const ProductDetailPage = () => {
                                 {message && <p className="product-toast">{message}</p>}
                             </div>
                         </article>
+
+                        {(product.offers || []).length > 0 && (
+                            <section className="product-sellers" aria-label="فروشندگان این کالا">
+                                <header className="product-sellers-head">
+                                    <h2>فروشندگان این کالا</h2>
+                                    <p>امتیاز فروشگاه، قیمت و موجودی را ببینید و از فروشنده دلخواه خرید کنید.</p>
+                                </header>
+                                <div className="product-sellers-list">
+                                    <div className="product-sellers-cols" aria-hidden="true">
+                                        <span>فروشگاه</span>
+                                        <span>امتیاز</span>
+                                        <span>فروش</span>
+                                        <span>موجودی</span>
+                                        <span>قیمت</span>
+                                        <span />
+                                    </div>
+                                    {(product.offers || []).map((offer) => {
+                                        const selected = offerId === offer.id;
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={offer.id}
+                                                className={`product-seller-row ${selected ? 'is-active' : ''}`}
+                                                onClick={() => {
+                                                    setOfferId(offer.id);
+                                                    setQuantity(1);
+                                                }}
+                                            >
+                                                <strong>{offer.vendorName}</strong>
+                                                <ShopRating
+                                                    value={offer.vendorRatingAvg}
+                                                    count={offer.vendorRatingCount}
+                                                    size="sm"
+                                                    showEmpty
+                                                />
+                                                <span>{offer.vendorSoldCount || 0} فروش</span>
+                                                <span>{offer.stock < 1 ? 'ناموجود' : `${offer.stock} عدد`}</span>
+                                                <em>{formatPrice(offer.price)}</em>
+                                                <b>{selected ? 'انتخاب‌شده' : 'خرید از این فروشگاه'}</b>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        )}
 
                         <nav className="product-section-nav" aria-label="بخش‌های محصول">
                             {SECTIONS.map((item) => (
