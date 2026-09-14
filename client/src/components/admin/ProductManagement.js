@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
 import { AGE_BANDS, GENDER_OPTIONS, findCategoryPath } from '../../utils/shop';
 import CategoryCascade from '../CategoryCascade';
+import ProductAttrFields from '../ProductAttrFields';
 import './ProductManagement.css';
 
 const API = '';
@@ -19,6 +20,7 @@ const emptyForm = {
     safetyWarning: '',
     skillIds: [],
     gender: 'unisex',
+    attrs: {},
 };
 
 const getAdmin = () => {
@@ -87,6 +89,7 @@ const ProductManagement = () => {
             safetyWarning: product.safetyWarning || '',
             skillIds: (product.skills || []).map((s) => s.id),
             gender: product.gender || 'unisex',
+            attrs: product.attrs && typeof product.attrs === 'object' ? product.attrs : {},
         });
         setShowForm(true);
     };
@@ -113,6 +116,7 @@ const ProductManagement = () => {
         formData.append('safetyWarning', form.safetyWarning || '');
         formData.append('gender', form.gender || 'unisex');
         formData.append('skillIds', JSON.stringify(form.skillIds || []));
+        formData.append('attrs', JSON.stringify(form.attrs || {}));
         Array.from(form.images || []).forEach((file) => formData.append('images', file));
 
         try {
@@ -189,13 +193,30 @@ const ProductManagement = () => {
                         rows="4"
                     />
                     <label>گروه و زیرگروه محصول</label>
+                    <p className="category-lead">اول گروه اصلی، بعد زیرگروه. تا آخرین سطح را انتخاب کنید.</p>
                     <CategoryCascade
                         tree={categories}
                         value={form.category}
-                        onChange={(name) => setForm((p) => ({ ...p, category: name }))}
-                        emptyLabel="انتخاب گروه"
+                        onChange={(name) => setForm((p) => ({ ...p, category: name, attrs: {} }))}
+                        emptyLabel="انتخاب گروه اصلی"
                         required
                         forceLeaf
+                        stacked
+                    />
+                    <label>
+                        برند
+                        <input
+                            type="text"
+                            value={form.brand}
+                            onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
+                            placeholder="مثلاً تات کیدز، فیروز"
+                        />
+                    </label>
+                    <ProductAttrFields
+                        tree={categories}
+                        category={form.category}
+                        attrs={form.attrs}
+                        onChange={(attrs) => setForm((p) => ({ ...p, attrs }))}
                     />
                     <div className="product-form-row">
                         <label>
@@ -253,12 +274,6 @@ const ProductManagement = () => {
                             </select>
                         </label>
                     </div>
-                    <input
-                        type="text"
-                        value={form.brand}
-                        onChange={(e) => setForm((p) => ({ ...p, brand: e.target.value }))}
-                        placeholder="برند"
-                    />
                     <input
                         type="text"
                         value={form.safetyWarning}

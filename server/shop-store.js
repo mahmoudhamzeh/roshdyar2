@@ -7,6 +7,7 @@ const {
     descendantCategoryNames,
     buildCatalogSql,
     mapCatalogRow,
+    parseProductAttrs,
     resolveProductGender
 } = require('./shop-model');
 
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS shop_product_meta (
     video_url TEXT,
     weight_g INTEGER,
     gender TEXT,
+    attrs TEXT,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 
@@ -153,7 +155,8 @@ CREATE TABLE IF NOT EXISTS shop_product_meta (
     safety_warning TEXT,
     video_url TEXT,
     weight_g INTEGER,
-    gender TEXT
+    gender TEXT,
+    attrs TEXT
 );
 
 CREATE TABLE IF NOT EXISTS shop_product_skills (
@@ -334,8 +337,8 @@ const CATEGORY_TREE_SEED = {
         { name: 'حرکتی' }
     ],
     'کتاب': [{ name: 'داستان' }, { name: 'آموزشی' }],
-    'تغذیه': [{ name: 'غذای کمکی' }, { name: 'میان‌وعده' }],
-    'پوشاک': [{ name: 'نوزاد' }, { name: 'کودک' }],
+    'تغذیه': [{ name: 'غذای کمکی' }, { name: 'میان‌وعده' }, { name: 'مکمل' }],
+    'پوشاک': [{ name: 'نوزاد' }, { name: 'کودک' }, { name: 'لباس' }, { name: 'کفش' }],
     'بهداشت': [{ name: 'حمام' }, { name: 'مراقبت پوست' }]
 };
 
@@ -561,6 +564,9 @@ function ensureShopSchemaSqlite(db) {
     }
     if (!sqliteHasColumn(db, 'shop_product_meta', 'gender')) {
         db.exec('ALTER TABLE shop_product_meta ADD COLUMN gender TEXT');
+    }
+    if (!sqliteHasColumn(db, 'shop_product_meta', 'attrs')) {
+        db.exec('ALTER TABLE shop_product_meta ADD COLUMN attrs TEXT');
     }
     [
         ['offer_id', 'INTEGER'],
@@ -885,15 +891,23 @@ function syncProductCommerceSqlite(db, productId, extra = {}) {
     const safetyWarning = extra.safetyWarning != null ? String(extra.safetyWarning).trim() : '';
     const tree = categoryTreeFromRows(db.prepare('SELECT id, name, parent_id FROM product_categories').all());
     const gender = resolveProductGender(extra.gender, product.category, tree);
+    let attrsJson = '{}';
+    if (extra.attrs !== undefined) {
+        attrsJson = JSON.stringify(parseProductAttrs(extra.attrs) || {});
+    } else {
+        const currentMeta = db.prepare('SELECT attrs FROM shop_product_meta WHERE product_id = ?').get(product.id);
+        if (currentMeta && currentMeta.attrs) attrsJson = currentMeta.attrs;
+    }
     db.prepare(`
-        INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning, gender)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning, gender, attrs)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(product_id) DO UPDATE SET
             age_band = excluded.age_band,
             brand = excluded.brand,
             safety_warning = excluded.safety_warning,
-            gender = excluded.gender
-    `).run(product.id, ageBand, brand || null, safetyWarning || null, gender);
+            gender = excluded.gender,
+            attrs = excluded.attrs
+    `).run(product.id, ageBand, brand || null, safetyWarning || null, gender, attrsJson);
 
     if (Array.isArray(extra.skillIds) || Array.isArray(extra.skillSlugs)) {
         db.prepare('DELETE FROM shop_product_skills WHERE product_id = ?').run(product.id);
@@ -1002,6 +1016,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q("ALTER TABLE product_comments ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'approved'");
     await q('ALTER TABLE product_categories ADD COLUMN IF NOT EXISTS active INTEGER NOT NULL DEFAULT 1');
     await q('ALTER TABLE shop_product_meta ADD COLUMN IF NOT EXISTS gender TEXT');
+    await q('ALTER TABLE shop_product_meta ADD COLUMN IF NOT EXISTS attrs TEXT');
     await q('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS offer_id BIGINT');
     await q('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vendor_id BIGINT');
     await q('ALTER TABLE order_items ADD COLUMN IF NOT EXISTS vendor_name TEXT');
@@ -1369,15 +1384,23 @@ async function syncProductCommercePg(q, one, productId, extra = {}) {
     const catResult = await q('SELECT id, name, parent_id FROM product_categories');
     const tree = categoryTreeFromRows(catResult.rows || []);
     const gender = resolveProductGender(extra.gender, product.category, tree);
+    let attrsJson = '{}';
+    if (extra.attrs !== undefined) {
+        attrsJson = JSON.stringify(parseProductAttrs(extra.attrs) || {});
+    } else {
+        const currentMeta = await one('SELECT attrs FROM shop_product_meta WHERE product_id = $1', [product.id]);
+        if (currentMeta && currentMeta.attrs) attrsJson = currentMeta.attrs;
+    }
     await q(
-        `INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning, gender)
-         VALUES ($1,$2,$3,$4,$5)
+        `INSERT INTO shop_product_meta (product_id, age_band, brand, safety_warning, gender, attrs)
+         VALUES ($1,$2,$3,$4,$5,$6)
          ON CONFLICT (product_id) DO UPDATE SET
             age_band = EXCLUDED.age_band,
             brand = EXCLUDED.brand,
             safety_warning = EXCLUDED.safety_warning,
-            gender = EXCLUDED.gender`,
-        [product.id, ageBand, brand || null, safetyWarning || null, gender]
+            gender = EXCLUDED.gender,
+            attrs = EXCLUDED.attrs`,
+        [product.id, ageBand, brand || null, safetyWarning || null, gender, attrsJson]
     );
     if (Array.isArray(extra.skillIds) || Array.isArray(extra.skillSlugs)) {
         await q('DELETE FROM shop_product_skills WHERE product_id = $1', [product.id]);

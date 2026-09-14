@@ -364,6 +364,8 @@ CREATE TABLE IF NOT EXISTS shop_product_meta (
     safety_warning TEXT,
     video_url TEXT,
     weight_g INTEGER,
+    gender TEXT,
+    attrs TEXT,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
 );
 

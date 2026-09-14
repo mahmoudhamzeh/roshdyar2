@@ -19,6 +19,7 @@ import { clearAuthSession } from '../api';
 import { formatPrice } from '../utils/cart';
 import { findCategoryPath } from '../utils/shop';
 import CategoryCascade from './CategoryCascade';
+import ProductAttrFields from './ProductAttrFields';
 import './VendorPanelPage.css';
 
 const DOC_KINDS = [
@@ -64,7 +65,7 @@ const emptyApply = {
 };
 
 const emptyProduct = {
-    name: '', description: '', category: '', price: '', stock: '', compareAtPrice: '', images: null
+    name: '', description: '', category: '', price: '', stock: '', compareAtPrice: '', images: null, brand: '', attrs: {}
 };
 
 const Field = ({ label, children, as = 'label' }) => {
@@ -229,7 +230,12 @@ const VendorPanelPage = () => {
         }
         const body = new FormData();
         Object.entries(productForm).forEach(([key, value]) => {
-            if (key !== 'images' && value != null) body.append(key, value);
+            if (key === 'images' || value == null) return;
+            if (key === 'attrs') {
+                body.append('attrs', JSON.stringify(value || {}));
+                return;
+            }
+            body.append(key, value);
         });
         if (productForm.images) {
             Array.from(productForm.images).forEach((file) => body.append('images', file));
@@ -355,7 +361,9 @@ const VendorPanelPage = () => {
             price: product.price || '',
             stock: product.stock || '',
             compareAtPrice: product.compareAtPrice || '',
-            images: null
+            images: null,
+            brand: product.brand || '',
+            attrs: product.attrs && typeof product.attrs === 'object' ? product.attrs : {}
         });
     };
 
@@ -695,16 +703,29 @@ const VendorPanelPage = () => {
                                                 <Field label="توضیح">
                                                     <textarea value={productForm.description} onChange={(e) => setProductForm((p) => ({ ...p, description: e.target.value }))} rows="3" />
                                                 </Field>
-                                                <Field as="div" label="گروه کالا">
+                                                <Field as="div" label="گروه و زیرگروه">
                                                     <CategoryCascade
                                                         tree={categories}
                                                         value={productForm.category}
-                                                        onChange={(name) => setProductForm((p) => ({ ...p, category: name }))}
-                                                        emptyLabel="انتخاب گروه"
+                                                        onChange={(name) => setProductForm((p) => ({ ...p, category: name, attrs: {} }))}
+                                                        emptyLabel="انتخاب گروه اصلی"
                                                         required
                                                         forceLeaf
+                                                        stacked
                                                     />
                                                 </Field>
+                                                <Field label="برند">
+                                                    <input
+                                                        value={productForm.brand || ''}
+                                                        onChange={(e) => setProductForm((p) => ({ ...p, brand: e.target.value }))}
+                                                    />
+                                                </Field>
+                                                <ProductAttrFields
+                                                    tree={categories}
+                                                    category={productForm.category}
+                                                    attrs={productForm.attrs || {}}
+                                                    onChange={(attrs) => setProductForm((p) => ({ ...p, attrs }))}
+                                                />
                                                 <div className="vendor-form-grid">
                                                     <Field label="قیمت فروش">
                                                         <input value={productForm.price} onChange={(e) => setProductForm((p) => ({ ...p, price: e.target.value }))} required />

@@ -139,6 +139,47 @@ async function run() {
             assert.ok(['boy', 'unisex'].includes(item.gender || 'unisex'), item.name);
         });
 
+        const adminCats = await request('GET', '/api/admin/product-categories', { headers: auth });
+        assert.strictEqual(adminCats.status, 200, JSON.stringify(adminCats.data));
+        const flatCats = [];
+        const walkCats = (nodes) => (nodes || []).forEach((node) => {
+            flatCats.push(node.name);
+            walkCats(node.children);
+        });
+        walkCats(adminCats.data);
+        assert.ok(flatCats.includes('کفش'), 'پوشاک should include کفش');
+        assert.ok(flatCats.includes('مکمل'), 'تغذیه should include مکمل');
+
+        const shoeProduct = await request('POST', '/api/admin/products', {
+            headers: auth,
+            body: {
+                name: 'کفش پیاده‌روی کودک',
+                category: 'کفش',
+                price: 280000,
+                stock: 5,
+                brand: 'تات کیدز',
+                attrs: { color: 'آبی', shoeSize: '24' }
+            }
+        });
+        assert.strictEqual(shoeProduct.status, 201, JSON.stringify(shoeProduct.data));
+        assert.strictEqual(shoeProduct.data.brand, 'تات کیدز');
+        assert.strictEqual(shoeProduct.data.attrs.color, 'آبی');
+        assert.strictEqual(shoeProduct.data.attrs.shoeSize, '24');
+
+        const supplement = await request('POST', '/api/admin/products', {
+            headers: auth,
+            body: {
+                name: 'قطره ویتامین د',
+                category: 'مکمل',
+                price: 90000,
+                stock: 8,
+                brand: 'فیروز',
+                attrs: { expiryDate: '2027-03-01', dosage: 'روزانه یک قطره' }
+            }
+        });
+        assert.strictEqual(supplement.status, 201, JSON.stringify(supplement.data));
+        assert.strictEqual(supplement.data.attrs.expiryDate, '2027-03-01');
+
         const children = await request('GET', '/api/children', {
             headers: auth
         });

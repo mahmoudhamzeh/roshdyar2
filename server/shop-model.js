@@ -134,6 +134,33 @@ function descendantCategoryNames(tree, name) {
     return flattenCategories([node]).map((item) => item.name);
 }
 
+function parseProductAttrs(raw) {
+    if (raw == null || raw === '') return undefined;
+    let value = raw;
+    if (typeof value === 'string') {
+        try {
+            value = JSON.parse(value);
+        } catch (err) {
+            return undefined;
+        }
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const out = {};
+    Object.keys(value).slice(0, 40).forEach((key) => {
+        const item = value[key];
+        if (item == null) return;
+        const text = String(item).trim().slice(0, 200);
+        if (!text) return;
+        out[String(key).slice(0, 40)] = text;
+    });
+    return out;
+}
+
+function storedProductAttrs(raw) {
+    const parsed = parseProductAttrs(raw);
+    return parsed || {};
+}
+
 function catalogFilters(raw = {}) {
     const category = raw.category && raw.category !== 'همه' ? String(raw.category).trim() : '';
     const categoryId = raw.categoryId ? Number(raw.categoryId) : null;
@@ -190,6 +217,7 @@ function buildCatalogSql(filters = {}, { activeOnly = true } = {}) {
             m.brand,
             m.safety_warning,
             m.gender,
+            m.attrs,
             (
                 SELECT AVG(c.rating * 1.0)
                 FROM product_comments c
@@ -282,6 +310,7 @@ function mapCatalogRow(row, asBool) {
         brand: row.brand || null,
         safetyWarning: row.safety_warning || null,
         gender: normalizeGender(row.gender) || 'unisex',
+        attrs: storedProductAttrs(row.attrs),
         ratingAvg: row.rating_avg != null ? Number(row.rating_avg) : 0,
         ratingCount: Number(row.rating_count || 0),
         soldCount: Number(row.sold_count || 0),
@@ -309,5 +338,7 @@ module.exports = {
     toPgPlaceholders,
     catalogFilters,
     buildCatalogSql,
-    mapCatalogRow
+    mapCatalogRow,
+    parseProductAttrs,
+    storedProductAttrs
 };
