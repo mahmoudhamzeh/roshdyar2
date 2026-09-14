@@ -265,7 +265,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
-  padding: 0.2rem 0 0.6rem;
+  padding: 0.2rem 0.45rem 0.6rem;
+  scrollbar-gutter: stable;
 }
 
 .cg-bubble {
@@ -275,6 +276,7 @@
   line-height: 1.7;
   white-space: pre-wrap;
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
 .cg-bubble.is-assistant {

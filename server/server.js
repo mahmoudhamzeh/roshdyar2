@@ -32,7 +32,7 @@ const {
     isCompletedOnDay
 } = require('./child-growth-data');
 const { deliverOtp } = require('./sms');
-const { analyzeConcernWithModel, chatGrowthAssistant } = require('./child-growth-ai');
+const { analyzeConcernWithModel, chatGrowthAssistant, buildAssistantContext } = require('./child-growth-ai');
 const { registerMagazineRoutes, overlayLegacyContent } = require('./magazine-routes');
 
 const app = express();
@@ -1055,32 +1055,38 @@ app.post('/api/children/:childId/concerns/chat', async (req, res) => {
             role: item.role === 'assistant' ? 'assistant' : 'user',
             content: String(item.content).slice(0, 1200)
         }));
+    const lastHist = history[history.length - 1];
     const userMessage = { role: 'user', content: text, at: new Date().toISOString() };
-    const nutrition = guide.nutrition && (guide.nutrition.overview || '');
-    const sleep = guide.sleep && (guide.sleep.overview || '');
+    const conversation = lastHist && lastHist.role === 'user' && lastHist.content === text
+        ? history
+        : [...history, userMessage];
+    const context = buildAssistantContext(guide, {
+        lastMeasurement: last,
+        child,
+        ageLabel: guide.child && guide.child.ageLabel
+    });
     const result = await chatGrowthAssistant(
         {
             name: getChildDisplayName(child),
             gender: child.gender,
-            ageInMonths: guide.child.ageInMonths
+            ageInMonths: guide.child.ageInMonths,
+            ageLabel: guide.child && guide.child.ageLabel
         },
-        [...history, userMessage],
-        {
-            bandTitle: guide.band && guide.band.title,
-            nutrition,
-            sleep,
-            heightLabel: last && last.height != null ? `قد ${last.height} سم` : '',
-            weightLabel: last && last.weight != null ? `وزن ${last.weight} کگ` : ''
-        }
+        conversation,
+        context
     );
     const assistantMessage = {
         role: 'assistant',
         content: result.reply,
         at: new Date().toISOString()
     };
-    const messages = [...history, userMessage, assistantMessage].slice(-24);
+    const messages = [...conversation.map((item, index) => (
+        index === conversation.length - 1 && item.role === 'user'
+            ? { ...item, at: item.at || new Date().toISOString() }
+            : item
+    )), assistantMessage].slice(-24);
     await store.children.saveGrowthState(req.params.childId, { chat: messages });
-    res.status(201).json({ reply: result.reply, source: result.source, messages });
+    res.status(201).json({ reply: result.reply, source: result.source, intent: result.intent, messages });
 });
 
 app.get('/api/children/:childId/concerns', async (req, res) => {

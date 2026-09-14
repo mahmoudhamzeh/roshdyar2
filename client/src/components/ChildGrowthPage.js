@@ -23,6 +23,7 @@ import {
     fetchAgeGuide,
     fetchGrowthChat,
     sendGrowthChat,
+    chatChipsForAge,
 } from '../utils/child-growth';
 import { buildOverallStatus, collectHealthTags, metricCaption, statusPhrase } from '../utils/child-snapshot';
 import ChildAvatar from './ChildAvatar';
@@ -34,13 +35,6 @@ const DOMAIN_TILES = [
     { id: 'food', title: 'تغذیه', color: '#c2410c', icon: faUtensils },
     { id: 'sleep', title: 'خواب', color: '#6d28d9', icon: faBed },
     { id: 'mood', title: 'رفتار', color: '#be185d', icon: faHeart },
-];
-
-const CHAT_CHIPS = [
-    'قد و وزنش مناسب است؟',
-    'در این سن چه چیزی بخورد؟',
-    'شب‌ها بدخواب است',
-    'هنوز تنهایی راه نمی‌رود',
 ];
 
 const ChildGrowthPage = () => {
@@ -200,6 +194,7 @@ const ChildGrowthPage = () => {
     const { child, band, activities, nutrition, sleep, disclaimer } = guide;
     const welcome = `سلام، من دستیار رشد ${child.name} هستم. از وضعیت کلی، غذا، خواب یا نگرانی‌تان بپرسید.`;
     const shownMessages = messages.length ? messages : [{ role: 'assistant', content: welcome }];
+    const chatChips = chatChipsForAge(child.ageInMonths);
     const foodTips = (nutrition?.priorities || nutrition?.guidance || []).slice(0, 3);
     const sleepTips = (sleep?.routine || []).slice(0, 3);
 
@@ -367,7 +362,7 @@ const ChildGrowthPage = () => {
                     <div ref={chatEndRef} />
                 </div>
                 <div className="cg-prompts">
-                    {CHAT_CHIPS.map((chip) => (
+                    {chatChips.map((chip) => (
                         <button type="button" key={chip} disabled={busyKey === 'chat'} onClick={() => sendChat(chip)}>
                             {chip}
                         </button>

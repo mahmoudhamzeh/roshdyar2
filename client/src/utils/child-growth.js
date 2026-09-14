@@ -96,6 +96,19 @@ export async function analyzeConcern(childId, concern, topic = 'متن آزاد'
     return data;
 }
 
+export function chatChipsForAge(ageInMonths) {
+    const months = Number(ageInMonths) || 0;
+    const chips = [
+        'قد و وزنش مناسب است؟',
+        'در این سن چه چیزی بخورد؟',
+        'شب‌ها بدخواب است',
+    ];
+    if (months < 24) chips.push('هنوز تنهایی راه نمی‌رود');
+    else if (months < 48) chips.push('کلمه‌های کمی می‌گوید');
+    else chips.push('برای تمرکز و مدرسه چه کار کنم؟');
+    return chips;
+}
+
 export async function sendGrowthChat(childId, message, history = []) {
     const res = await fetch(`/api/children/${childId}/concerns/chat`, {
         method: 'POST',
