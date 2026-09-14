@@ -1,3 +1,13 @@
+html.vendor-world,
+body.vendor-world {
+  background: #eef2f1;
+  background-image: none;
+}
+
+body.vendor-world .magazine-mini-player {
+  display: none !important;
+}
+
 .vendor-app {
   min-height: 100vh;
   min-height: 100dvh;
@@ -237,6 +247,14 @@
 
 .vendor-field span {
   line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.vendor-bottom-nav button span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .vendor-field .category-cascade {
@@ -459,8 +477,11 @@
 
 .vendor-more {
   position: fixed;
-  inset: 0;
-  z-index: 3000;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: calc(4.55rem + env(safe-area-inset-bottom, 0px));
+  z-index: 1900;
 }
 
 .vendor-more-backdrop {
@@ -477,10 +498,12 @@
   bottom: 0;
   background: #fff;
   border-radius: 18px 18px 0 0;
-  padding: 1rem 1rem calc(5.2rem + env(safe-area-inset-bottom, 0px));
+  padding: 1rem 1rem 1.1rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  max-height: min(72vh, 28rem);
+  overflow-y: auto;
 }
 
 .vendor-more-sheet h3 {

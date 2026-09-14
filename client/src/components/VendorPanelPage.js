@@ -157,6 +157,15 @@ const VendorPanelPage = () => {
         load();
     }, []);
 
+    useEffect(() => {
+        document.body.classList.add('vendor-world');
+        document.documentElement.classList.add('vendor-world');
+        return () => {
+            document.body.classList.remove('vendor-world');
+            document.documentElement.classList.remove('vendor-world');
+        };
+    }, []);
+
     const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
     const saveProfile = async (e, notifySupport = false) => {
@@ -358,7 +367,7 @@ const VendorPanelPage = () => {
 
     const openTab = (id) => {
         if (id === 'more') {
-            setMoreOpen(true);
+            setMoreOpen((open) => !open);
             return;
         }
         setMoreOpen(false);
