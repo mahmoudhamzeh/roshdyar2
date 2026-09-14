@@ -165,6 +165,25 @@ async function run() {
         assert.ok(analyzed.data.triage_status);
         assert.ok(analyzed.data.status_badge);
 
+        const foodAsk = await request('POST', `/api/children/${childId}/concerns/chat`, {
+            headers: auth,
+            body: { message: 'در این سن چه چیزی بخورد؟', history: [] }
+        });
+        assert.strictEqual(foodAsk.status, 201, JSON.stringify(foodAsk.data));
+        assert.ok(foodAsk.data.reply);
+        assert.ok(!foodAsk.data.reply.includes('مشاهده کوتاه'), foodAsk.data.reply);
+        assert.ok(!foodAsk.data.reply.includes('بازه طبیعی'), foodAsk.data.reply);
+        assert.strictEqual(foodAsk.data.intent, 'food');
+
+        const feverAsk = await request('POST', `/api/children/${childId}/concerns/chat`, {
+            headers: auth,
+            body: { message: 'تب دارد 39', history: foodAsk.data.messages }
+        });
+        assert.strictEqual(feverAsk.status, 201, JSON.stringify(feverAsk.data));
+        assert.ok(/پزشک|اورژانس/.test(feverAsk.data.reply), feverAsk.data.reply);
+        assert.ok(!feverAsk.data.reply.includes('بازه طبیعی'), feverAsk.data.reply);
+        assert.ok(feverAsk.data.intent === 'urgent' || feverAsk.data.intent === 'fever');
+
         const growth = await request('GET', `/api/growth/${childId}`, { headers: auth });
         assert.strictEqual(growth.status, 200);
         assert.ok(Array.isArray(growth.data));

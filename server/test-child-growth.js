@@ -7,7 +7,7 @@ const {
     calendarDayKey,
     isCompletedOnDay
 } = require('./child-growth-data');
-const { analyzeConcernLocal, chatGrowthAssistantLocal } = require('./child-growth-ai');
+const { analyzeConcernLocal, chatGrowthAssistantLocal, detectChatIntent, extractFeverC, buildAssistantContext } = require('./child-growth-ai');
 
 const band = getBandForAge(13);
 assert.ok(band && band.activities && band.activities.length >= 3, '12-15 band needs activities');
@@ -92,6 +92,69 @@ const walkChat = chatGrowthAssistantLocal(
     [{ role: 'user', content: 'هنوز تنهایی راه نمی‌رود' }]
 );
 assert.ok(walkChat.includes('۱۸ ماهگی') || walkChat.includes('طبیعی'));
+
+assert.strictEqual(extractFeverC('تب دارد 39'), 39);
+assert.strictEqual(extractFeverC('تب دارد ۳۹'), 39);
+assert.strictEqual(detectChatIntent('در این سن چه چیزی بخورد؟', { ageInMonths: 13 }), 'food');
+assert.strictEqual(detectChatIntent('قد و وزنش مناسب است؟', { ageInMonths: 13 }), 'growth');
+assert.strictEqual(detectChatIntent('شب‌ها بدخواب است', { ageInMonths: 13 }), 'sleep');
+assert.strictEqual(detectChatIntent('تب دارد 39', { ageInMonths: 13 }), 'urgent');
+
+const toddler = { name: 'محمد', gender: 'boy', ageInMonths: 13, ageLabel: '1 سال و 1 ماه' };
+const foodChip = chatGrowthAssistantLocal(
+    toddler,
+    [{ role: 'user', content: 'در این سن چه چیزی بخورد؟' }],
+    { bandTitle: '۱۲ تا ۱۵ ماهگی', nutrition: 'غذای خانواده با لقمه‌های نرم.', nutritionTips: ['هم‌غذایی خانواده: همان غذا با بافت نرم‌تر.'] }
+);
+assert.ok(foodChip.includes('لقمه‌های نرم') || foodChip.includes('غذا'));
+assert.ok(!foodChip.includes('مشاهده کوتاه'));
+assert.ok(!foodChip.includes('بازه طبیعی'));
+
+const feverChat = chatGrowthAssistantLocal(
+    toddler,
+    [{ role: 'user', content: 'تب دارد 39' }]
+);
+assert.ok(/پزشک|اورژانس/.test(feverChat), feverChat);
+assert.ok(!feverChat.includes('بازه طبیعی'), feverChat);
+assert.ok(!feverChat.includes('مشاهده کوتاه'), feverChat);
+
+const feverFa = chatGrowthAssistantLocal(
+    toddler,
+    [{ role: 'user', content: 'تب دارد ۳۹' }]
+);
+assert.ok(/۳۹|39/.test(feverFa) && /پزشک/.test(feverFa));
+
+const growthChat = chatGrowthAssistantLocal(
+    toddler,
+    [{ role: 'user', content: 'قد و وزنش مناسب است؟' }],
+    { heightLabel: 'قد ۸۰ سم', weightLabel: 'وزن ۱۰ کگ' }
+);
+assert.ok(growthChat.includes('۸۰') || growthChat.includes('قد'));
+assert.ok(!growthChat.includes('بازه طبیعی'));
+
+const sleepChat = chatGrowthAssistantLocal(
+    toddler,
+    [{ role: 'user', content: 'شب‌ها بدخواب است' }],
+    { sleep: 'روتین کوتاه شب در این سن مهم است.', sleepTips: ['ساعت خواب نسبتاً ثابت'] }
+);
+assert.ok(sleepChat.includes('خواب'));
+assert.ok(!sleepChat.includes('مشاهده کوتاه'));
+
+const guideCtx = buildAssistantContext(payload, {});
+assert.ok(guideCtx.nutrition);
+const fromGuide = chatGrowthAssistantLocal(
+    toddler,
+    [{ role: 'user', content: 'در این سن چه چیزی بخورد؟' }],
+    guideCtx
+);
+assert.ok(!fromGuide.includes('مشاهده کوتاه'));
+assert.ok(/غذا|شیر|لقمه|خانواده/.test(fromGuide), fromGuide);
+
+const teenWalk = chatGrowthAssistantLocal(
+    { name: 'آریا', gender: 'boy', ageInMonths: 156, ageLabel: '13 ساله' },
+    [{ role: 'user', content: 'هنوز تنهایی راه نمی‌رود' }]
+);
+assert.ok(!teenWalk.includes('۱۸ ماهگی'), teenWalk);
 
 console.log('child growth unit tests passed');
 console.log('day key sample', calendarDayKey(new Date('2026-09-02T08:00:00.000Z')));
