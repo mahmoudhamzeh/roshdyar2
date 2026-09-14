@@ -2700,19 +2700,25 @@ app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async
     res.status(201).json(await store.products.getById(created.id));
 });
 
+async function vendorOwnsCreatedProduct(store, vendor, product) {
+    const offers = await store.shop.listOffers(product.id);
+    const mine = (offers || []).filter((item) => Number(item.vendorId) === Number(vendor.id));
+    if (!mine.length) return Number(product.vendorId) === Number(vendor.id);
+    const firstId = Math.min(...(offers || []).map((item) => Number(item.id)).filter(Number.isFinite));
+    return mine.some((item) => Number(item.id) === firstId);
+}
+
 app.put('/api/vendor/products/:id', requireVendor, upload.array('images', 8), async (req, res) => {
     const current = await store.products.getById(req.params.id);
-    if (!current || Number(current.vendorId) !== Number(req.vendor.id)) {
+    if (!current || !(await vendorOwnsCreatedProduct(store, req.vendor, current))) {
         return res.status(404).json({ message: 'محصول یافت نشد' });
-    }
-    if (current.reviewStatus === 'approved') {
-        return res.status(400).json({ message: 'برای کالای تأییدشده فقط قیمت و موجودی از بخش آگهی قابل تغییر است' });
     }
     const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
     const parsedPrice = price != null && price !== '' ? parsePrice(price) : current.price;
     if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
     const parsedStock = stock === undefined || stock === '' ? current.stock : parseInt(stock, 10);
     const uploaded = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    const keepVisible = current.reviewStatus === 'approved' && current.active !== false;
     const updated = await store.products.update(req.params.id, {
         name: name != null ? String(name).trim() : current.name,
         description: description != null ? String(description).trim() : current.description,
@@ -2729,7 +2735,7 @@ app.put('/api/vendor/products/:id', requireVendor, upload.array('images', 8), as
         vendorId: req.vendor.id,
         reviewStatus: 'pending',
         reviewNote: '',
-        active: false
+        active: keepVisible
     });
     if (uploaded.length) await store.productImages.replace(updated.id, uploaded);
     res.json(await store.products.getById(updated.id));
