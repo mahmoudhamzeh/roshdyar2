@@ -500,6 +500,13 @@ async function run() {
         assert.ok(Array.isArray(pdp.data.similar));
         assert.ok(Array.isArray(pdp.data.recommended));
 
+        const vendorOffersAfter = await request('GET', '/api/vendor/offers', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(vendorOffersAfter.status, 200, JSON.stringify(vendorOffersAfter.data));
+        assert.ok(vendorOffersAfter.data.created.some((item) => Number(item.id) === Number(vendorProduct.data.id)));
+        assert.ok(vendorOffersAfter.data.listings.some((item) => Number(item.productId) === Number(existingSku.id)));
+
         const vendorTicket = await request('POST', '/api/tickets', {
             headers: { Authorization: `Bearer ${verify.data.token}` },
             body: {

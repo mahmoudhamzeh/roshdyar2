@@ -2606,8 +2606,17 @@ app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
 });
 
 app.get('/api/vendor/offers', requireVendor, async (req, res) => {
-    const created = (await store.products.listAll() || []).filter((p) => Number(p.vendorId) === Number(req.vendor.id));
-    const listings = await store.shop.listOffersByVendor(req.vendor.id);
+    const mine = await store.shop.listOffersByVendor(req.vendor.id);
+    const created = [];
+    const listings = [];
+    for (const offer of mine || []) {
+        const productOffers = await store.shop.listOffers(offer.productId);
+        const firstId = Math.min(...(productOffers || []).map((item) => Number(item.id)).filter(Number.isFinite));
+        const ownsSku = Number(offer.id) === firstId;
+        const product = await store.products.getById(offer.productId);
+        if (ownsSku && product) created.push(product);
+        else listings.push(offer);
+    }
     res.json({ created, listings });
 });
 

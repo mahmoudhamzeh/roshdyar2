@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faShoppingCart } from '@fortawesome/free-solid-svg-icons';
 import Reminders from './Reminders';
@@ -11,6 +11,7 @@ const MainNavbar = () => {
     const [isAdmin, setIsAdmin] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [cartCount, setCartCount] = useState(getCartCount());
+    const location = useLocation();
 
     useEffect(() => {
         const syncAuth = () => {
@@ -34,13 +35,16 @@ const MainNavbar = () => {
 
     useEffect(() => {
         const syncCart = () => setCartCount(getCartCount());
+        syncCart();
         window.addEventListener('cart-updated', syncCart);
         window.addEventListener('storage', syncCart);
+        window.addEventListener('focus', syncCart);
         return () => {
             window.removeEventListener('cart-updated', syncCart);
             window.removeEventListener('storage', syncCart);
+            window.removeEventListener('focus', syncCart);
         };
-    }, []);
+    }, [location.pathname]);
 
     useEffect(() => {
         document.body.classList.toggle('nav-drawer-open', isMenuOpen);
