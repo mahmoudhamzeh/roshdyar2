@@ -344,7 +344,9 @@ CREATE TABLE IF NOT EXISTS shop_product_meta (
     brand TEXT,
     safety_warning TEXT,
     video_url TEXT,
-    weight_g INTEGER
+    weight_g INTEGER,
+    gender TEXT,
+    attrs TEXT
 );
 
 CREATE TABLE IF NOT EXISTS shop_product_skills (

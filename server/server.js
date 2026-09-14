@@ -12,7 +12,7 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
-const { AGE_BANDS, flattenCategories, GENDER_OPTIONS } = require('./shop-model');
+const { AGE_BANDS, flattenCategories, GENDER_OPTIONS, parseProductAttrs } = require('./shop-model');
 const rateLimit = require('express-rate-limit');
 const {
     hashPassword,
@@ -1803,6 +1803,11 @@ const parseSkillIds = (body) => {
     return undefined;
 };
 
+const parseAttrsBody = (body) => {
+    if (!body || body.attrs === undefined) return undefined;
+    return parseProductAttrs(body.attrs) || {};
+};
+
 function pickRelatedProducts(product, catalog) {
     const others = (catalog || []).filter((item) => Number(item.id) !== Number(product.id));
     const similar = others
@@ -2037,7 +2042,8 @@ app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, 
         safetyWarning,
         compareAtPrice,
         gender,
-        skillIds: parseSkillIds(req.body)
+        skillIds: parseSkillIds(req.body),
+        attrs: parseAttrsBody(req.body)
     });
     if (uploaded.length) {
         await store.productImages.replace(newProduct.id, uploaded);
@@ -2059,6 +2065,8 @@ app.put('/api/admin/products/:id', isAdmin, upload.array('images', 8), async (re
     if (gender !== undefined) updated.gender = gender;
     const skillIds = parseSkillIds(req.body);
     if (skillIds) updated.skillIds = skillIds;
+    const attrs = parseAttrsBody(req.body);
+    if (attrs !== undefined) updated.attrs = attrs;
 
     if (name !== undefined) {
         if (!String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -2694,6 +2702,7 @@ app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async
         compareAtPrice,
         gender,
         skillIds: parseSkillIds(req.body),
+        attrs: parseAttrsBody(req.body),
         vendorId: req.vendor.id
     });
     if (uploaded.length) await store.productImages.replace(created.id, uploaded);
@@ -2732,6 +2741,7 @@ app.put('/api/vendor/products/:id', requireVendor, upload.array('images', 8), as
         compareAtPrice,
         gender,
         skillIds: parseSkillIds(req.body),
+        attrs: parseAttrsBody(req.body),
         vendorId: req.vendor.id,
         reviewStatus: 'pending',
         reviewNote: '',

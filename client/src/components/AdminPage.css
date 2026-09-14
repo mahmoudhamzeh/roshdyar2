@@ -15,6 +15,7 @@
   right: 0;
   top: 0;
   z-index: 20;
+  overflow-y: auto;
 }
 
 .admin-sidebar-header h3 {
@@ -62,15 +63,36 @@
 }
 
 .admin-nav-heading {
-  display: block;
-  padding: 0.55rem 0.75rem 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0.7rem 0.75rem;
+  font: inherit;
   font-weight: 800;
   color: #99f6e4;
   font-size: 0.92rem;
+  cursor: pointer;
+  text-align: right;
+}
+
+.admin-nav-heading em {
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.8;
+  color: #fff;
 }
 
 .admin-nav-heading.is-active {
   color: #fff;
+}
+
+.admin-nav-group:not(.is-open) .admin-nav-sub {
+  display: none;
 }
 
 .admin-nav-sub {
@@ -102,6 +124,7 @@
     position: sticky;
     width: 100%;
     height: auto;
+    z-index: 30;
   }
 
   .admin-sidebar-header {
@@ -110,31 +133,31 @@
 
   .admin-nav {
     flex-direction: row;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    overflow: visible;
     padding-bottom: 8px;
-    -webkit-overflow-scrolling: touch;
+    gap: 0.35rem;
   }
 
   .admin-nav a {
     white-space: nowrap;
     margin-bottom: 0;
-    margin-left: 8px;
   }
 
   .admin-nav-group {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     margin-bottom: 0;
-    margin-left: 8px;
+    min-width: 11rem;
+    flex: 1 1 11rem;
   }
 
   .admin-nav-heading {
     white-space: nowrap;
-    padding: 0.55rem 0.4rem;
   }
 
   .admin-nav-sub {
-    flex-direction: row;
+    flex-direction: column;
   }
 
   .admin-main-content {

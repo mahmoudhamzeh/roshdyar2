@@ -8,6 +8,7 @@ import ShopBreadcrumb from './ShopBreadcrumb';
 import ShopRating from './ShopRating';
 import { addToCart, formatPrice } from '../utils/cart';
 import { ageBandLabel, displayCommentAuthor, genderLabel } from '../utils/shop';
+import { attrEntries } from '../utils/productAttrs';
 import { formatToShamsi } from '../utils/dateConverter';
 import ProductImageGallery from './ProductImageGallery';
 import QuantityStepper from './QuantityStepper';
@@ -364,6 +365,12 @@ const ProductDetailPage = () => {
                                         <dt>برند</dt>
                                         <dd>{product.brand || '—'}</dd>
                                     </div>
+                                    {attrEntries(product.attrs).map((item) => (
+                                        <div key={item.key}>
+                                            <dt>{item.label}</dt>
+                                            <dd>{item.value}</dd>
+                                        </div>
+                                    ))}
                                     <div>
                                         <dt>مهارت‌ها</dt>
                                         <dd>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Switch, Route, useRouteMatch, Redirect, useLocation } from 'react-router-dom';
 import './AdminPage.css';
 import AdminDashboard from './admin/AdminDashboard';
@@ -32,11 +32,46 @@ const MAGAZINE_LINKS = [
     { to: 'magazine-banners', label: 'بنر مجله' }
 ];
 
+const NavGroup = ({ id, label, links, url, active, open, onToggle }) => (
+    <div className={`admin-nav-group ${open ? 'is-open' : ''}`}>
+        <button
+            type="button"
+            className={`admin-nav-heading ${active ? 'is-active' : ''}`}
+            aria-expanded={open}
+            onClick={() => onToggle(id)}
+        >
+            <span>{label}</span>
+            <em>{open ? 'بستن' : 'باز کردن'}</em>
+        </button>
+        {open && (
+            <div className="admin-nav-sub">
+                {links.map((item) => (
+                    <NavLink key={item.to} to={`${url}/${item.to}`} activeClassName="active">
+                        {item.label}
+                    </NavLink>
+                ))}
+            </div>
+        )}
+    </div>
+);
+
 const AdminPage = () => {
     const { path, url } = useRouteMatch();
     const location = useLocation();
     const shopActive = SHOP_LINKS.some((item) => location.pathname.includes(`/${item.to}`));
     const magazineActive = MAGAZINE_LINKS.some((item) => location.pathname.includes(`/${item.to}`));
+    const [openGroups, setOpenGroups] = useState({ shop: shopActive, magazine: magazineActive });
+
+    useEffect(() => {
+        setOpenGroups((prev) => ({
+            shop: shopActive || prev.shop,
+            magazine: magazineActive || prev.magazine
+        }));
+    }, [shopActive, magazineActive]);
+
+    const toggleGroup = (id) => {
+        setOpenGroups((prev) => ({ ...prev, [id]: !prev[id] }));
+    };
 
     return (
         <div className="admin-page-container">
@@ -48,26 +83,24 @@ const AdminPage = () => {
                     <NavLink to={`${url}/dashboard`} activeClassName="active">داشبورد</NavLink>
                     <NavLink to={`${url}/users`} activeClassName="active">مدیریت کاربران</NavLink>
                     <NavLink to={`${url}/messages`} activeClassName="active">پیام‌ها</NavLink>
-                    <div className={`admin-nav-group ${shopActive ? 'is-open' : ''}`}>
-                        <span className={`admin-nav-heading ${shopActive ? 'is-active' : ''}`}>فروشگاه</span>
-                        <div className="admin-nav-sub">
-                            {SHOP_LINKS.map((item) => (
-                                <NavLink key={item.to} to={`${url}/${item.to}`} activeClassName="active">
-                                    {item.label}
-                                </NavLink>
-                            ))}
-                        </div>
-                    </div>
-                    <div className={`admin-nav-group ${magazineActive ? 'is-open' : ''}`}>
-                        <span className={`admin-nav-heading ${magazineActive ? 'is-active' : ''}`}>مجله سلامت</span>
-                        <div className="admin-nav-sub">
-                            {MAGAZINE_LINKS.map((item) => (
-                                <NavLink key={item.to} to={`${url}/${item.to}`} activeClassName="active">
-                                    {item.label}
-                                </NavLink>
-                            ))}
-                        </div>
-                    </div>
+                    <NavGroup
+                        id="shop"
+                        label="فروشگاه"
+                        links={SHOP_LINKS}
+                        url={url}
+                        active={shopActive}
+                        open={openGroups.shop}
+                        onToggle={toggleGroup}
+                    />
+                    <NavGroup
+                        id="magazine"
+                        label="مجله"
+                        links={MAGAZINE_LINKS}
+                        url={url}
+                        active={magazineActive}
+                        open={openGroups.magazine}
+                        onToggle={toggleGroup}
+                    />
                     <NavLink to={`${url}/tickets`} activeClassName="active">تیکت‌ها</NavLink>
                 </nav>
             </aside>

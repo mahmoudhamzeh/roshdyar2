@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { findCategoryPath } from '../utils/shop';
 
-const LEVEL_LABELS = ['گروه محصول', 'زیرگروه', 'دسته جزئی', 'زیرشاخه'];
+const LEVEL_LABELS = ['گروه اصلی', 'زیرگروه', 'دسته جزئی', 'زیرشاخه'];
 
 const CategoryCascade = ({
     tree = [],
@@ -9,7 +9,8 @@ const CategoryCascade = ({
     onChange,
     emptyLabel = 'انتخاب کنید',
     required = false,
-    forceLeaf = false
+    forceLeaf = false,
+    stacked = false
 }) => {
     const path = useMemo(() => findCategoryPath(tree, value), [tree, value]);
     const levels = [];
@@ -28,14 +29,20 @@ const CategoryCascade = ({
             });
         }
     });
+    const needsLeaf = forceLeaf && path.length > 0 && (path[path.length - 1].children || []).length > 0;
 
     return (
-        <div className="category-cascade">
+        <div className={`category-cascade${stacked ? ' is-stacked' : ''}`}>
+            {path.length > 0 && (
+                <p className="category-cascade-path">
+                    مسیر انتخاب‌شده: {path.map((node) => node.name).join(' ‹ ')}
+                </p>
+            )}
             {levels.map((level, index) => (
                 <label key={`${level.label}-${index}`}>
-                    {level.label}
+                    <span>{index + 1}. {level.label}</span>
                     <select
-                        required={required && index === 0}
+                        required={required && (index === 0 || (forceLeaf && index === levels.length - 1 && needsLeaf))}
                         value={level.selected}
                         onChange={(e) => {
                             const next = e.target.value;
@@ -48,13 +55,16 @@ const CategoryCascade = ({
                     >
                         <option value="">{index === 0 ? emptyLabel : `انتخاب ${level.label}`}</option>
                         {level.options.map((opt) => (
-                            <option key={opt.id || opt.name} value={opt.name}>{opt.name}</option>
+                            <option key={opt.id || opt.name} value={opt.name}>
+                                {opt.name}
+                                {(opt.children || []).length ? ' (دارای زیرگروه)' : ''}
+                            </option>
                         ))}
                     </select>
                 </label>
             ))}
-            {forceLeaf && path.length > 0 && (path[path.length - 1].children || []).length > 0 && (
-                <p className="category-cascade-hint">لطفاً زیرگروه را هم انتخاب کنید.</p>
+            {needsLeaf && (
+                <p className="category-cascade-hint">این گروه زیرمجموعه دارد؛ لطفاً زیرگروه را هم انتخاب کنید.</p>
             )}
         </div>
     );
