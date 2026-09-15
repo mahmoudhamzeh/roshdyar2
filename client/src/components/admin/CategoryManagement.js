@@ -1,40 +1,50 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { findCategoryPathById, flattenCategories } from '../../utils/shop';
 import './ProductManagement.css';
+import './CategoryManagement.css';
 
 const DEPTH_LABELS = ['گروه اصلی', 'زیرگروه', 'دسته جزئی', 'زیرشاخه'];
 
 const pathLabel = (tree, node) =>
     findCategoryPathById(tree, node.id).map((item) => item.name).join(' ‹ ');
 
-const CategoryTree = ({ nodes, tree, depth, onAddChild, onRename, onDelete }) => (
-    <ul className={`category-tree-list depth-${depth}`}>
+const filterTree = (nodes, query) => {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return nodes || [];
+    const walk = (list) => {
+        const result = [];
+        (list || []).forEach((node) => {
+            const self = String(node.name || '').toLowerCase().includes(q);
+            const children = walk(node.children || []);
+            if (self) result.push({ ...node, children: node.children || [], forcedOpen: true });
+            else if (children.length) result.push({ ...node, children, forcedOpen: true });
+        });
+        return result;
+    };
+    return walk(nodes);
+};
+
+const ChildList = ({ nodes, depth, onAddChild, onRename, onDelete }) => (
+    <ul className={`cat-children depth-${depth}`}>
         {(nodes || []).map((node) => {
             const kids = node.children || [];
             return (
-                <li key={node.id} className="category-tree-item">
-                    <div className="category-tree-row">
-                        <div>
-                            <span className="category-depth-pill">{DEPTH_LABELS[Math.min(depth, DEPTH_LABELS.length - 1)]}</span>
+                <li key={node.id}>
+                    <div className="cat-child-row">
+                        <div className="cat-child-copy">
+                            <span>{DEPTH_LABELS[Math.min(depth, DEPTH_LABELS.length - 1)]}</span>
                             <strong>{node.name}</strong>
-                            {kids.length > 0 && <em>{kids.length} زیرگروه</em>}
+                            {kids.length > 0 && <em>{kids.length} مورد</em>}
                         </div>
-                        <div className="category-tree-actions">
-                            <button type="button" className="btn-edit" onClick={() => onAddChild(node)}>
-                                افزودن زیرگروه
-                            </button>
-                            <button type="button" className="btn-edit" onClick={() => onRename(node)}>
-                                تغییر نام
-                            </button>
-                            <button type="button" className="btn-delete" onClick={() => onDelete(node.id, node.name)}>
-                                حذف
-                            </button>
+                        <div className="cat-row-actions">
+                            <button type="button" onClick={() => onAddChild(node)}>زیرگروه</button>
+                            <button type="button" onClick={() => onRename(node)}>نام</button>
+                            <button type="button" className="is-danger" onClick={() => onDelete(node.id, node.name)}>حذف</button>
                         </div>
                     </div>
                     {kids.length > 0 && (
-                        <CategoryTree
+                        <ChildList
                             nodes={kids}
-                            tree={tree}
                             depth={depth + 1}
                             onAddChild={onAddChild}
                             onRename={onRename}
@@ -51,35 +61,60 @@ const CategoryManagement = () => {
     const [tree, setTree] = useState([]);
     const [name, setName] = useState('');
     const [parentId, setParentId] = useState('');
+    const [asChild, setAsChild] = useState(false);
+    const [parentQuery, setParentQuery] = useState('');
+    const [search, setSearch] = useState('');
     const [error, setError] = useState('');
     const [hint, setHint] = useState('');
+    const [openIds, setOpenIds] = useState(() => new Set());
 
     const load = async () => {
         const res = await fetch('/api/admin/product-categories');
         if (!res.ok) throw new Error('بارگذاری گروه‌ها ناموفق بود');
-        setTree(await res.json());
+        const data = await res.json();
+        setTree(Array.isArray(data) ? data : []);
     };
 
     useEffect(() => {
         load().catch((err) => setError(err.message));
     }, []);
 
+    const visibleTree = useMemo(() => filterTree(tree, search), [tree, search]);
+    const flat = useMemo(() => flattenCategories(tree), [tree]);
+    const parentOptions = useMemo(() => {
+        const q = parentQuery.trim().toLowerCase();
+        return flat.filter((node) => (
+            !q
+            || String(node.name || '').toLowerCase().includes(q)
+            || pathLabel(tree, node).toLowerCase().includes(q)
+        ));
+    }, [flat, parentQuery, tree]);
+    const selectedParent = flat.find((node) => String(node.id) === String(parentId));
+
     const handleCreate = async (e) => {
         e.preventDefault();
         setError('');
+        if (asChild && !parentId) {
+            setError('اول گروه والد را از فهرست انتخاب کنید.');
+            return;
+        }
         const res = await fetch('/api/admin/product-categories', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, parentId: parentId || null })
+            body: JSON.stringify({ name, parentId: asChild ? parentId : null })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
             setError(data.message || 'ثبت گروه ناموفق بود');
             return;
         }
+        if (asChild && parentId) setOpenIds((prev) => new Set([...prev, Number(parentId)]));
         setName('');
-        setParentId('');
-        setHint(parentId ? 'زیرگروه اضافه شد.' : 'گروه اصلی اضافه شد.');
+        setHint(asChild ? 'زیرگروه اضافه شد.' : 'گروه اصلی اضافه شد.');
+        if (!asChild) {
+            setParentId('');
+            setParentQuery('');
+        }
         load().catch((err) => setError(err.message));
     };
 
@@ -95,7 +130,11 @@ const CategoryManagement = () => {
         const res = await fetch(`/api/admin/product-categories/${node.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: next.trim(), parentId: node.parentId || null, sortOrder: node.sortOrder || 0 })
+            body: JSON.stringify({
+                name: next.trim(),
+                parentId: node.parentId || null,
+                sortOrder: node.sortOrder || 0
+            })
         });
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
@@ -106,72 +145,150 @@ const CategoryManagement = () => {
     };
 
     const startChild = (node) => {
+        setAsChild(true);
         setParentId(String(node.id));
+        setParentQuery('');
         setName('');
         setHint(`زیرگروه برای «${pathLabel(tree, node)}»`);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const flat = flattenCategories(tree);
+    const toggleOpen = (id) => {
+        setOpenIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const isOpen = (node) => Boolean(search) || node.forcedOpen || openIds.has(node.id);
 
     return (
-        <div className="product-management">
-            <h2>گروه و زیرگروه محصولات</h2>
-            <p className="category-lead">
-                اول <strong>گروه اصلی</strong> بسازید (مثل پوشاک یا تغذیه). بعد روی همان گروه «افزودن زیرگروه» بزنید.
-                کالاها باید روی آخرین سطح (مثلاً پوشاک ‹ کفش) ثبت شوند.
-            </p>
-            <form className="product-form category-create-form" onSubmit={handleCreate}>
-                <h3>{parentId ? 'افزودن زیرگروه' : 'افزودن گروه اصلی'}</h3>
-                {hint && <p className="category-hint">{hint}</p>}
-                <label>
-                    این مورد زیرمجموعه کدام گروه باشد؟
-                    <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-                        <option value="">گروه اصلی — در ریشه درخت</option>
-                        {flat.map((node) => (
-                            <option key={node.id} value={node.id}>
-                                {pathLabel(tree, node)}
-                            </option>
-                        ))}
-                    </select>
+        <div className="cat-admin">
+            <header className="cat-admin-head">
+                <div>
+                    <h2>گروه و زیرگروه محصولات</h2>
+                    <p>
+                        گروه‌های اصلی را اینجا می‌بینید. روی «دیدن زیرگروه» بزنید تا شاخه‌ها باز شود.
+                        {tree.length ? ` ${tree.length} گروه اصلی ثبت شده است.` : ''}
+                    </p>
+                </div>
+                <label className="cat-search">
+                    <span>جستجو در گروه‌ها</span>
+                    <input
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="مثلاً کفش، تغذیه، لگو"
+                    />
                 </label>
+            </header>
+
+            <form className="cat-create" onSubmit={handleCreate}>
+                <h3>{asChild ? 'افزودن زیرگروه' : 'افزودن گروه اصلی'}</h3>
+                {hint && <p className="cat-hint">{hint}</p>}
+                <div className="cat-mode">
+                    <button
+                        type="button"
+                        className={!asChild ? 'is-on' : ''}
+                        onClick={() => { setAsChild(false); setParentId(''); setHint(''); }}
+                    >
+                        گروه اصلی
+                    </button>
+                    <button
+                        type="button"
+                        className={asChild ? 'is-on' : ''}
+                        onClick={() => setAsChild(true)}
+                    >
+                        زیرگروه
+                    </button>
+                </div>
+                {asChild && (
+                    <div className="cat-parent-picker">
+                        <p>این زیرگروه مال کدام گروه باشد؟</p>
+                        {selectedParent && (
+                            <strong className="cat-parent-chosen">انتخاب‌شده: {pathLabel(tree, selectedParent)}</strong>
+                        )}
+                        <input
+                            value={parentQuery}
+                            onChange={(e) => setParentQuery(e.target.value)}
+                            placeholder="جستجوی گروه والد"
+                        />
+                        <ul>
+                            {parentOptions.length === 0 && <li className="cat-empty">گروهی پیدا نشد.</li>}
+                            {parentOptions.map((node) => (
+                                <li key={node.id}>
+                                    <button
+                                        type="button"
+                                        className={String(node.id) === String(parentId) ? 'is-on' : ''}
+                                        onClick={() => setParentId(String(node.id))}
+                                    >
+                                        <span>{pathLabel(tree, node)}</span>
+                                        <em>{DEPTH_LABELS[Math.min(node.depth || 0, DEPTH_LABELS.length - 1)]}</em>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
                 <label>
-                    نام {parentId ? 'زیرگروه' : 'گروه'}
+                    نام {asChild ? 'زیرگروه' : 'گروه اصلی'}
                     <input
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder={parentId ? 'مثلاً کفش، مکمل، لگو' : 'مثلاً پوشاک، تغذیه'}
+                        placeholder={asChild ? 'مثلاً کفش، مکمل، لگو' : 'مثلاً پوشاک، تغذیه'}
                         required
                     />
                 </label>
-                <div className="product-form-actions">
-                    <button type="submit">{parentId ? 'ثبت زیرگروه' : 'ثبت گروه اصلی'}</button>
-                    {parentId && (
-                        <button
-                            type="button"
-                            className="btn-cancel"
-                            onClick={() => { setParentId(''); setHint(''); }}
-                        >
-                            تبدیل به گروه اصلی
-                        </button>
-                    )}
+                <div className="cat-create-actions">
+                    <button type="submit">{asChild ? 'ثبت زیرگروه' : 'ثبت گروه اصلی'}</button>
                 </div>
             </form>
+
             {error && <p className="error-message">{error}</p>}
-            <div className="category-tree-wrap">
-                {tree.length === 0 ? (
-                    <p>هنوز گروهی ساخته نشده است.</p>
-                ) : (
-                    <CategoryTree
-                        nodes={tree}
-                        tree={tree}
-                        depth={0}
-                        onAddChild={startChild}
-                        onRename={handleRename}
-                        onDelete={handleDelete}
-                    />
-                )}
-            </div>
+
+            {visibleTree.length === 0 ? (
+                <p className="cat-empty-page">
+                    {search ? 'هیچ گروهی با این جستجو پیدا نشد.' : 'هنوز گروه اصلی ساخته نشده است.'}
+                </p>
+            ) : (
+                <div className="cat-root-list">
+                    {visibleTree.map((root) => {
+                        const kids = root.children || [];
+                        const open = isOpen(root);
+                        return (
+                            <article key={root.id} className={`cat-root-card ${open ? 'is-open' : ''}`}>
+                                <header>
+                                    <button type="button" className="cat-root-toggle" onClick={() => toggleOpen(root.id)}>
+                                        <span className="cat-root-badge">گروه اصلی</span>
+                                        <strong>{root.name}</strong>
+                                        <em>{kids.length ? `${kids.length} زیرگروه` : 'بدون زیرگروه'}</em>
+                                        <b>{open ? 'بستن' : 'دیدن زیرگروه'}</b>
+                                    </button>
+                                    <div className="cat-row-actions">
+                                        <button type="button" onClick={() => startChild(root)}>افزودن زیرگروه</button>
+                                        <button type="button" onClick={() => handleRename(root)}>تغییر نام</button>
+                                        <button type="button" className="is-danger" onClick={() => handleDelete(root.id, root.name)}>حذف</button>
+                                    </div>
+                                </header>
+                                {open && (
+                                    kids.length ? (
+                                        <ChildList
+                                            nodes={kids}
+                                            depth={1}
+                                            onAddChild={startChild}
+                                            onRename={handleRename}
+                                            onDelete={handleDelete}
+                                        />
+                                    ) : (
+                                        <p className="cat-empty">این گروه هنوز زیرگروه ندارد.</p>
+                                    )
+                                )}
+                            </article>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };
