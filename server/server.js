@@ -1835,9 +1835,19 @@ registerMagazineRoutes(app, { store, upload, isAdmin, resolveAuthUser });
 const SHOP_CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
 const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 
+const englishDigits = (value) =>
+    String(value == null ? '' : value)
+        .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+        .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+
 const parsePrice = (value) => {
-    const n = Number(value);
+    const n = Number(englishDigits(value).replace(/[,\s٬،]/g, ''));
     return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
+const parseStock = (value) => {
+    const n = parseInt(englishDigits(value).replace(/[,\s٬،]/g, ''), 10);
+    return Number.isFinite(n) ? n : NaN;
 };
 
 const parseSkillIds = (body) => {
@@ -2836,7 +2846,21 @@ app.get('/api/vendor/catalog', requireVendor, async (req, res) => {
     const all = await store.products.listActive({ q });
     const mine = await store.shop.listOffersByVendor(req.vendor.id);
     const mineIds = new Set((mine || []).map((item) => Number(item.productId)));
-    res.json((all || []).filter((item) => !mineIds.has(Number(item.id))).slice(0, 40));
+    const items = (all || []).filter((item) => !mineIds.has(Number(item.id))).slice(0, 40);
+    const ranges = store.shop.offerPriceRanges
+        ? await store.shop.offerPriceRanges(items.map((item) => item.id))
+        : {};
+    res.json(items.map((item) => {
+        const range = ranges[item.id] || {};
+        const minPrice = range.minPrice != null ? range.minPrice : item.price;
+        const maxPrice = range.maxPrice != null ? range.maxPrice : item.price;
+        return {
+            ...item,
+            minPrice,
+            maxPrice,
+            offerCount: range.offerCount || 0
+        };
+    }));
 });
 
 app.post('/api/vendor/offers', requireVendor, async (req, res) => {
@@ -2847,7 +2871,7 @@ app.post('/api/vendor/offers', requireVendor, async (req, res) => {
     }
     const parsedPrice = parsePrice(req.body.price);
     if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
-    const parsedStock = parseInt(req.body.stock, 10);
+    const parsedStock = parseStock(req.body.stock);
     if (!Number.isFinite(parsedStock) || parsedStock < 0) {
         return res.status(400).json({ message: 'موجودی معتبر نیست' });
     }
@@ -2868,7 +2892,7 @@ app.put('/api/vendor/offers/:id', requireVendor, async (req, res) => {
     }
     const parsedPrice = req.body.price != null ? parsePrice(req.body.price) : current.price;
     if (parsedPrice === null) return res.status(400).json({ message: 'قیمت معتبر نیست' });
-    const parsedStock = req.body.stock != null ? parseInt(req.body.stock, 10) : current.stock;
+    const parsedStock = req.body.stock != null ? parseStock(req.body.stock) : current.stock;
     if (!Number.isFinite(parsedStock) || parsedStock < 0) {
         return res.status(400).json({ message: 'موجودی معتبر نیست' });
     }

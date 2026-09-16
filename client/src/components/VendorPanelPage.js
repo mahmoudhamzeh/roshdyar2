@@ -4,6 +4,7 @@ import { FontAwesomeIcon as Icon } from '@fortawesome/react-fontawesome';
 import {
     faBoxOpen,
     faChartLine,
+    faChevronDown,
     faClipboardList,
     faEllipsis,
     faFileInvoice,
@@ -11,7 +12,9 @@ import {
     faHome,
     faPaperPlane,
     faRightFromBracket,
+    faSearch,
     faStore,
+    faTimes,
     faUser,
     faWallet
 } from '@fortawesome/free-solid-svg-icons';
@@ -78,6 +81,28 @@ const Field = ({ label, children, as = 'label' }) => {
     );
 };
 
+const catalogImage = (item) =>
+    (item && (item.imageUrl || (item.images && item.images[0] && item.images[0].imageUrl))) || '';
+
+const formatOfferPrices = (item) => {
+    if (!item) return '';
+    const min = Number(item.minPrice != null ? item.minPrice : item.price);
+    const max = Number(item.maxPrice != null ? item.maxPrice : min);
+    if (!Number.isFinite(min)) return 'قیمت ثبت نشده';
+    return `کمترین ${formatPrice(min)} · بیشترین ${formatPrice(max)}`;
+};
+
+const CatalogThumb = ({ item }) => {
+    const src = catalogImage(item);
+    const label = (item && (item.name || item.productName)) || '';
+    if (src) return <img className="vendor-pick-thumb" src={src} alt={label} />;
+    return (
+        <span className="vendor-pick-thumb vendor-pick-placeholder" aria-hidden="true">
+            <Icon icon={faStore} />
+        </span>
+    );
+};
+
 const VendorPanelPage = () => {
     const [me, setMe] = useState(null);
     const [form, setForm] = useState(emptyApply);
@@ -98,6 +123,8 @@ const VendorPanelPage = () => {
     const [productMode, setProductMode] = useState('existing');
     const [existingOffer, setExistingOffer] = useState({ productId: '', price: '', stock: '' });
     const [catalogQuery, setCatalogQuery] = useState('');
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [pickedProduct, setPickedProduct] = useState(null);
     const [ticketForm, setTicketForm] = useState({ subject: '', content: '', subgroup: 'محصول' });
     const [payoutAmount, setPayoutAmount] = useState('');
     const [editingProduct, setEditingProduct] = useState(null);
@@ -157,6 +184,31 @@ const VendorPanelPage = () => {
     useEffect(() => {
         load();
     }, []);
+
+    useEffect(() => {
+        if (!pickerOpen) return undefined;
+        const handle = window.setTimeout(async () => {
+            const res = await fetch(`/api/vendor/catalog?q=${encodeURIComponent(catalogQuery.trim())}`);
+            if (res.ok) setCatalog(await res.json());
+        }, 200);
+        return () => window.clearTimeout(handle);
+    }, [pickerOpen, catalogQuery]);
+
+    useEffect(() => {
+        if (!pickerOpen && !editingOffer) return undefined;
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        const onKey = (event) => {
+            if (event.key !== 'Escape') return;
+            setPickerOpen(false);
+            setEditingOffer(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => {
+            document.body.style.overflow = prev;
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [pickerOpen, editingOffer]);
 
     useEffect(() => {
         document.body.classList.add('vendor-world');
@@ -271,6 +323,7 @@ const VendorPanelPage = () => {
             return;
         }
         setExistingOffer({ productId: '', price: '', stock: '' });
+        setPickedProduct(null);
         load();
         setMessage('آگهی فروش روی کالای موجود ثبت شد.');
     };
@@ -490,6 +543,16 @@ const VendorPanelPage = () => {
         </form>
     );
 
+    const chooseCatalogProduct = (item) => {
+        setPickedProduct(item);
+        setExistingOffer((prev) => ({
+            ...prev,
+            productId: String(item.id),
+            price: prev.price || String(item.minPrice != null ? item.minPrice : item.price || '')
+        }));
+        setPickerOpen(false);
+    };
+
     return (
         <div className="vendor-app">
             <header className="vendor-topbar">
@@ -660,31 +723,47 @@ const VendorPanelPage = () => {
                                         </div>
                                         {productMode === 'existing' && (
                                             <form className="vendor-form" onSubmit={createExistingOffer}>
-                                                <Field label="جستجوی نام کالا">
-                                                    <input value={catalogQuery} onChange={(e) => setCatalogQuery(e.target.value)} />
-                                                </Field>
-                                                <Field label="کالا">
-                                                    <select
-                                                        value={existingOffer.productId}
-                                                        onChange={(e) => setExistingOffer((p) => ({ ...p, productId: e.target.value }))}
-                                                        required
+                                                <Field as="div" label="کالا">
+                                                    <button
+                                                        type="button"
+                                                        className={`vendor-pick-trigger${pickedProduct ? ' has-item' : ''}`}
+                                                        onClick={() => { setCatalogQuery(''); setPickerOpen(true); }}
                                                     >
-                                                        <option value="">انتخاب کالا</option>
-                                                        {catalog
-                                                            .filter((item) => !catalogQuery || item.name.includes(catalogQuery))
-                                                            .map((item) => (
-                                                                <option key={item.id} value={item.id}>
-                                                                    {item.name} · {formatPrice(item.price)}
-                                                                </option>
-                                                            ))}
-                                                    </select>
+                                                        {pickedProduct ? (
+                                                            <span className="vendor-pick-card">
+                                                                <CatalogThumb item={pickedProduct} />
+                                                                <span>
+                                                                    <strong>{pickedProduct.name}</strong>
+                                                                    {pickedProduct.category && <em>{pickedProduct.category}</em>}
+                                                                    <b>{formatOfferPrices(pickedProduct)}</b>
+                                                                </span>
+                                                                <Icon icon={faChevronDown} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="vendor-pick-empty">
+                                                                انتخاب کالا با عکس و قیمت
+                                                                <Icon icon={faChevronDown} />
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                    <input
+                                                        className="vendor-pick-required"
+                                                        tabIndex={-1}
+                                                        required
+                                                        value={existingOffer.productId}
+                                                        onChange={() => {}}
+                                                        aria-hidden="true"
+                                                    />
                                                 </Field>
+                                                {pickedProduct && (
+                                                    <p className="vendor-price-hint">{formatOfferPrices(pickedProduct)}</p>
+                                                )}
                                                 <div className="vendor-form-grid">
                                                     <Field label="قیمت فروش شما">
-                                                        <input value={existingOffer.price} onChange={(e) => setExistingOffer((p) => ({ ...p, price: e.target.value }))} required />
+                                                        <input value={existingOffer.price} onChange={(e) => setExistingOffer((p) => ({ ...p, price: e.target.value }))} required inputMode="numeric" />
                                                     </Field>
                                                     <Field label="موجودی شما">
-                                                        <input value={existingOffer.stock} onChange={(e) => setExistingOffer((p) => ({ ...p, stock: e.target.value }))} required />
+                                                        <input value={existingOffer.stock} onChange={(e) => setExistingOffer((p) => ({ ...p, stock: e.target.value }))} required inputMode="numeric" />
                                                     </Field>
                                                 </div>
                                                 <button type="submit" className="vendor-btn vendor-btn-primary">ثبت آگهی فروش</button>
@@ -767,12 +846,15 @@ const VendorPanelPage = () => {
                                         <ul className="vendor-list">
                                             {products.map((product) => (
                                                 <li key={`p-${product.id}`}>
-                                                    <div>
-                                                        <strong>{product.name}</strong>
-                                                        <p>{formatPrice(product.price)} · موجودی {product.stock}</p>
-                                                        {product.reviewStatus === 'rejected' && product.reviewNote && (
-                                                            <p className="vendor-warn">دلیل رد: {product.reviewNote}</p>
-                                                        )}
+                                                    <div className="vendor-list-main">
+                                                        <CatalogThumb item={product} />
+                                                        <div>
+                                                            <strong>{product.name}</strong>
+                                                            <p>{formatPrice(product.price)} · موجودی {product.stock}</p>
+                                                            {product.reviewStatus === 'rejected' && product.reviewNote && (
+                                                                <p className="vendor-warn">دلیل رد: {product.reviewNote}</p>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                     <div className="vendor-list-actions">
                                                         <span className={`vendor-pill vendor-pill-${product.reviewStatus}`}>{reviewLabel(product.reviewStatus)}</span>
@@ -794,9 +876,12 @@ const VendorPanelPage = () => {
                                         <ul className="vendor-list">
                                             {listings.map((offer) => (
                                                 <li key={`o-${offer.id}`}>
-                                                    <div>
-                                                        <strong>{offer.productName || `کالا #${offer.productId}`}</strong>
-                                                        <p>{formatPrice(offer.price)} · موجودی {offer.stock}</p>
+                                                    <div className="vendor-list-main">
+                                                        <CatalogThumb item={offer} />
+                                                        <div>
+                                                            <strong>{offer.productName || `کالا #${offer.productId}`}</strong>
+                                                            <p>{formatPrice(offer.price)} · موجودی {offer.stock}</p>
+                                                        </div>
                                                     </div>
                                                     <div className="vendor-list-actions">
                                                         <button
@@ -804,8 +889,11 @@ const VendorPanelPage = () => {
                                                             className="vendor-btn"
                                                             onClick={() => setEditingOffer({
                                                                 id: offer.id,
-                                                                price: offer.price,
-                                                                stock: offer.stock
+                                                                price: String(offer.price ?? ''),
+                                                                stock: String(offer.stock ?? ''),
+                                                                productName: offer.productName || `کالا #${offer.productId}`,
+                                                                imageUrl: offer.imageUrl || '',
+                                                                productId: offer.productId
                                                             })}
                                                         >
                                                             ویرایش قیمت و موجودی
@@ -815,22 +903,6 @@ const VendorPanelPage = () => {
                                                 </li>
                                             ))}
                                         </ul>
-                                        {editingOffer && (
-                                            <form className="vendor-form" onSubmit={saveListing}>
-                                                <div className="vendor-form-grid">
-                                                    <Field label="قیمت">
-                                                        <input value={editingOffer.price} onChange={(e) => setEditingOffer((p) => ({ ...p, price: e.target.value }))} required />
-                                                    </Field>
-                                                    <Field label="موجودی">
-                                                        <input value={editingOffer.stock} onChange={(e) => setEditingOffer((p) => ({ ...p, stock: e.target.value }))} required />
-                                                    </Field>
-                                                </div>
-                                                <div className="vendor-form-actions">
-                                                    <button type="button" className="vendor-btn" onClick={() => setEditingOffer(null)}>انصراف</button>
-                                                    <button type="submit" className="vendor-btn vendor-btn-primary">ذخیره آگهی</button>
-                                                </div>
-                                            </form>
-                                        )}
                                     </section>
                                 </>
                             )}
@@ -1049,6 +1121,99 @@ const VendorPanelPage = () => {
                     </button>
                 ))}
             </nav>
+            )}
+            {pickerOpen && (
+                <div className="vendor-pick-sheet" role="dialog" aria-modal="true" aria-labelledby="vendor-pick-title">
+                    <button type="button" className="vendor-pick-backdrop" aria-label="بستن" onClick={() => setPickerOpen(false)} />
+                    <div className="vendor-pick-panel">
+                        <header className="vendor-pick-head">
+                            <div>
+                                <p>ویترین فروشگاه</p>
+                                <h2 id="vendor-pick-title">انتخاب کالا</h2>
+                            </div>
+                            <button type="button" aria-label="بستن" onClick={() => setPickerOpen(false)}>
+                                <Icon icon={faTimes} />
+                            </button>
+                        </header>
+                        <label className="vendor-pick-search">
+                            <Icon icon={faSearch} />
+                            <input
+                                value={catalogQuery}
+                                onChange={(e) => setCatalogQuery(e.target.value)}
+                                placeholder="جستجوی نام کالا"
+                                autoFocus
+                            />
+                        </label>
+                        <ul className="vendor-pick-list">
+                            {catalog.length === 0 && (
+                                <li className="vendor-pick-empty-row">کالایی پیدا نشد.</li>
+                            )}
+                            {catalog.map((item) => (
+                                <li key={item.id}>
+                                    <button
+                                        type="button"
+                                        className={String(item.id) === String(existingOffer.productId) ? 'is-on' : ''}
+                                        onClick={() => chooseCatalogProduct(item)}
+                                    >
+                                        <CatalogThumb item={item} />
+                                        <span>
+                                            <strong>{item.name}</strong>
+                                            {item.category && <em>{item.category}</em>}
+                                            <b>{formatOfferPrices(item)}</b>
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
+            {editingOffer && (
+                <div className="vendor-pick-sheet" role="dialog" aria-modal="true" aria-labelledby="vendor-edit-title">
+                    <button type="button" className="vendor-pick-backdrop" aria-label="بستن" onClick={() => setEditingOffer(null)} />
+                    <div className="vendor-pick-panel">
+                        <header className="vendor-pick-head">
+                            <div>
+                                <p>آگهی فروش</p>
+                                <h2 id="vendor-edit-title">ویرایش قیمت و موجودی</h2>
+                            </div>
+                            <button type="button" aria-label="بستن" onClick={() => setEditingOffer(null)}>
+                                <Icon icon={faTimes} />
+                            </button>
+                        </header>
+                        <div className="vendor-pick-edit-card">
+                            <CatalogThumb item={editingOffer} />
+                            <span>
+                                <strong>{editingOffer.productName}</strong>
+                                {editingOffer.productId ? <em>کد {editingOffer.productId}</em> : null}
+                            </span>
+                        </div>
+                        <form className="vendor-form vendor-pick-edit-form" onSubmit={saveListing}>
+                            <div className="vendor-form-grid">
+                                <Field label="قیمت فروش شما">
+                                    <input
+                                        value={editingOffer.price}
+                                        onChange={(e) => setEditingOffer((p) => ({ ...p, price: e.target.value }))}
+                                        required
+                                        inputMode="numeric"
+                                    />
+                                </Field>
+                                <Field label="موجودی شما">
+                                    <input
+                                        value={editingOffer.stock}
+                                        onChange={(e) => setEditingOffer((p) => ({ ...p, stock: e.target.value }))}
+                                        required
+                                        inputMode="numeric"
+                                    />
+                                </Field>
+                            </div>
+                            <div className="vendor-form-actions">
+                                <button type="button" className="vendor-btn" onClick={() => setEditingOffer(null)}>انصراف</button>
+                                <button type="submit" className="vendor-btn vendor-btn-primary">ذخیره آگهی</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -1065,6 +1065,26 @@ function requestPayoutSqlite(db, vendorId, amount, note) {
     return { ok: true, finance: vendorFinanceSqlite(db, vendorId) };
 }
 
+function offerPriceRangesSqlite(db, productIds) {
+    const ids = [...new Set((productIds || []).map(Number).filter(Number.isFinite))];
+    if (!ids.length) return {};
+    const rows = db.prepare(`
+        SELECT product_id, MIN(price) AS min_price, MAX(price) AS max_price, COUNT(*) AS offer_count
+        FROM shop_offers
+        WHERE status = 'active' AND product_id IN (${ids.map(() => '?').join(',')})
+        GROUP BY product_id
+    `).all(...ids);
+    const map = {};
+    rows.forEach((row) => {
+        map[Number(row.product_id)] = {
+            minPrice: Number(row.min_price),
+            maxPrice: Number(row.max_price),
+            offerCount: Number(row.offer_count || 0)
+        };
+    });
+    return map;
+}
+
 async function ensureShopSchemaPg(q, one, many) {
     await q(SHOP_TABLES_PG);
     await q('ALTER TABLE product_comments ADD COLUMN IF NOT EXISTS rating INTEGER');
@@ -1577,6 +1597,27 @@ async function requestPayoutPg(q, many, vendorId, amount, note) {
     return { ok: true, finance: await vendorFinancePg(many, vendorId) };
 }
 
+async function offerPriceRangesPg(many, productIds) {
+    const ids = [...new Set((productIds || []).map(Number).filter(Number.isFinite))];
+    if (!ids.length) return {};
+    const rows = await many(
+        `SELECT product_id, MIN(price) AS min_price, MAX(price) AS max_price, COUNT(*)::int AS offer_count
+         FROM shop_offers
+         WHERE status = 'active' AND product_id IN (${ids.map((_, i) => `$${i + 1}`).join(',')})
+         GROUP BY product_id`,
+        ids
+    );
+    const map = {};
+    (rows || []).forEach((row) => {
+        map[Number(row.product_id)] = {
+            minPrice: Number(row.min_price),
+            maxPrice: Number(row.max_price),
+            offerCount: Number(row.offer_count || 0)
+        };
+    });
+    return map;
+}
+
 module.exports = {
     AGE_BANDS,
     SKILLS,
@@ -1608,6 +1649,7 @@ module.exports = {
     upsertOfferSqlite,
     listOffersByVendorSqlite,
     requestPayoutSqlite,
+    offerPriceRangesSqlite,
     isVendorProfileComplete,
     ensureShopSchemaPg,
     listSkillsPg,
@@ -1630,5 +1672,6 @@ module.exports = {
     vendorFinancePg,
     upsertOfferPg,
     listOffersByVendorPg,
-    requestPayoutPg
+    requestPayoutPg,
+    offerPriceRangesPg
 };
