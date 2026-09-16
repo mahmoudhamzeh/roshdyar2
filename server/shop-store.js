@@ -658,6 +658,7 @@ function ensureShopSchemaSqlite(db) {
             db.exec(`ALTER TABLE orders ADD COLUMN ${col} ${type}`);
         }
     });
+    db.exec('CREATE INDEX IF NOT EXISTS idx_orders_payment_authority ON orders(payment_authority)');
     seedDefaultsSqlite(db);
     backfillSqlite(db);
     seedShopExtrasSqlite(db);
@@ -1103,6 +1104,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_ref_id TEXT');
     await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_card_pan TEXT');
     await q('ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TEXT');
+    await q('CREATE INDEX IF NOT EXISTS idx_orders_payment_authority ON orders (payment_authority)');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS user_id BIGINT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS phone TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS docs_note TEXT');
