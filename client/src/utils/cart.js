@@ -35,6 +35,9 @@ export const addToCart = (product, quantity = 1) => {
         existing.quantity = Math.min(nextQty, maxStock);
         existing.name = product.name;
         existing.price = product.price;
+        existing.compareAtPrice = product.compareAtPrice != null
+            ? product.compareAtPrice
+            : existing.compareAtPrice;
         existing.imageUrl = product.imageUrl || null;
         existing.stock = product.stock;
         existing.offerId = product.offerId || existing.offerId || null;
@@ -50,6 +53,7 @@ export const addToCart = (product, quantity = 1) => {
             vendorName: product.vendorName || null,
             name: product.name,
             price: product.price,
+            compareAtPrice: product.compareAtPrice || null,
             imageUrl: product.imageUrl || null,
             stock: product.stock,
             quantity: Math.min(quantity, maxStock),
@@ -86,6 +90,21 @@ export const clearCart = () => {
 
 export const getCartTotal = (cart = getCart()) =>
     cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+export const getCartItemCount = (cart = getCart()) =>
+    cart.reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+export const lineOriginalUnit = (item) => {
+    const price = Number(item && item.price) || 0;
+    const compare = Number(item && item.compareAtPrice) || 0;
+    return compare > price ? compare : price;
+};
+
+export const getCartOriginalTotal = (cart = getCart()) =>
+    cart.reduce((sum, item) => sum + lineOriginalUnit(item) * (item.quantity || 0), 0);
+
+export const getCartDiscount = (cart = getCart()) =>
+    Math.max(0, getCartOriginalTotal(cart) - getCartTotal(cart));
 
 export const groupCartByVendor = (cart = getCart()) => {
     const groups = [];

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useHistory } from 'react-router-dom';
+import { Link, useHistory, useLocation } from 'react-router-dom';
 import Modal from 'react-modal';
 import BrandLogo from './BrandLogo';
 import { setAuthSession, parseApiJson, apiConnectionMessage } from '../api';
@@ -35,8 +35,15 @@ if (typeof document !== 'undefined') {
     Modal.setAppElement('#root');
 }
 
+const safeNextPath = (value) => {
+    const next = String(value || '').trim();
+    return next.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
+};
+
 const RegisterPage = () => {
     const history = useHistory();
+    const location = useLocation();
+    const nextPath = safeNextPath(new URLSearchParams(location.search).get('next'));
     const [step, setStep] = useState('phone'); // phone | otp
     const [phoneInput, setPhoneInput] = useState('');
     const [otpInput, setOtpInput] = useState('');
@@ -177,7 +184,7 @@ const RegisterPage = () => {
                 setIsNewUser(true);
                 setShowWelcome(true);
             } else {
-                history.push('/dashboard');
+                history.push(nextPath);
             }
         } catch (error) {
             showError(apiConnectionMessage(error));
@@ -188,7 +195,7 @@ const RegisterPage = () => {
 
     const goToCompleteProfile = () => {
         setShowWelcome(false);
-        history.push('/profile?complete=1');
+        history.push(nextPath && nextPath !== '/dashboard' ? nextPath : '/profile?complete=1');
     };
 
     const handleKeyDown = (e, action) => {

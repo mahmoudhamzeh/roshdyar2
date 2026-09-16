@@ -25,6 +25,9 @@ import ShopSkillsPage from './components/ShopSkillsPage';
 import VendorPanelPage from './components/VendorPanelPage';
 import ProductDetailPage from './components/ProductDetailPage';
 import CartPage from './components/CartPage';
+import CheckoutShippingPage from './components/CheckoutShippingPage';
+import CheckoutReviewPage from './components/CheckoutReviewPage';
+import CheckoutCallbackPage from './components/CheckoutCallbackPage';
 import OrdersPage from './components/OrdersPage';
 import ChildGrowthPage from './components/ChildGrowthPage';
 import MobileBottomNav from './components/MobileBottomNav';
@@ -57,7 +60,10 @@ const App = () => {
                 <PrivateRoute exact path="/shop/skills" component={ShopSkillsPage} />
                 <PrivateRoute exact path="/vendor" component={VendorPanelPage} />
                 <PrivateRoute path="/shop/:id" component={ProductDetailPage} />
-                <PrivateRoute path="/cart" component={CartPage} />
+                <Route path="/cart" component={CartPage} />
+                <PrivateRoute path="/checkout/shipping" component={CheckoutShippingPage} />
+                <PrivateRoute path="/checkout/review" component={CheckoutReviewPage} />
+                <Route path="/checkout/callback" component={CheckoutCallbackPage} />
                 <PrivateRoute path="/orders" component={OrdersPage} />
                 <Route exact path="/news" component={NewsPage} />
                 <Route exact path="/news/" render={() => <Redirect to="/news" />} />

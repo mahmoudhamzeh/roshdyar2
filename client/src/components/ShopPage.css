@@ -136,12 +136,6 @@
   margin-top: 0.5rem;
 }
 
-@media (min-width: 992px) {
-  .shop-catalog {
-    grid-template-columns: 250px minmax(0, 1fr) 260px;
-  }
-}
-
 .shop-filters {
   position: sticky;
   top: 5.25rem;

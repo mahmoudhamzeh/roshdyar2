@@ -20,7 +20,9 @@ const PrivateRoute = ({ component: Component, ...rest }) => {
                 isLoggedIn() ? (
                     <Component {...props} />
                 ) : (
-                    <Redirect to="/register" />
+                    <Redirect
+                        to={`/login?next=${encodeURIComponent(props.location.pathname + props.location.search)}`}
+                    />
                 )
             }
         />

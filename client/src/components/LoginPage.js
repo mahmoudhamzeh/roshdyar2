@@ -374,7 +374,9 @@ const LoginPage = () => {
                                 <button
                                     type="button"
                                     className="login-btn login-btn-secondary"
-                                    onClick={() => history.push('/register')}
+                                    onClick={() => history.push(nextPath && nextPath !== '/dashboard'
+                                        ? `/register?next=${encodeURIComponent(nextPath)}`
+                                        : '/register')}
                                     disabled={loading}
                                 >
                                     ورود / ثبت‌نام با پیامک

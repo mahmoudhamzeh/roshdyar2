@@ -266,7 +266,8 @@
 }
 
 .shop-filter-selects label,
-.category-cascade label {
+.category-cascade label,
+.category-cascade-level {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -297,6 +298,40 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 0.65rem;
+  position: relative;
+}
+
+.category-cascade-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.category-cascade-options button {
+  border: 1px solid #d7e5e2;
+  background: #fff;
+  color: #134e4a;
+  border-radius: 10px;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 42px;
+  line-height: 1.3;
+}
+
+.category-cascade-options button.is-on {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+.category-cascade-required {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  height: 0;
+  width: 0;
 }
 
 .category-cascade.is-stacked {

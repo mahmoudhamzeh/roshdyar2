@@ -266,6 +266,87 @@ async function run() {
         const productAfter = await request('GET', `/api/shop/products/${product.id}`);
         assert.strictEqual(productAfter.data.stock, stockBefore - 1);
 
+        const cascadeSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/CategoryCascade.js'), 'utf8');
+        assert.ok(!/<select[\s>]/.test(cascadeSrc), 'product category picker must not use native select');
+        const shopPageSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/ShopPage.js'), 'utf8');
+        assert.ok(!/PageAdRail/.test(shopPageSrc), 'shop page must not show left ad rail');
+        const cartPageSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/CartPage.js'), 'utf8');
+        assert.ok(!/WithLeftAds/.test(cartPageSrc), 'cart must not wrap with left ads');
+        assert.ok(/صورتحساب/.test(cartPageSrc));
+
+        const savedAddress = await request('POST', '/api/shop/addresses', {
+            headers: auth,
+            body: {
+                title: 'خانه',
+                recipient: 'امین',
+                phone: '09120000000',
+                province: 'تهران',
+                city: 'تهران',
+                address: 'خیابان تست پلاک ۱',
+                lat: 35.7,
+                lng: 51.4,
+                isDefault: true
+            }
+        });
+        assert.strictEqual(savedAddress.status, 201, JSON.stringify(savedAddress.data));
+        assert.strictEqual(savedAddress.data.city, 'تهران');
+        const addressList = await request('GET', '/api/shop/addresses', { headers: auth });
+        assert.strictEqual(addressList.status, 200);
+        assert.ok((addressList.data || []).some((item) => item.id === savedAddress.data.id));
+
+        const tehranToday = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tehran',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date());
+        const [yy, mm, dd] = tehranToday.split('-').map(Number);
+        const deliveryDate = new Date(Date.UTC(yy, mm - 1, dd + 1)).toISOString().slice(0, 10);
+        const checkoutProduct = (products.data || []).find((item) => item.id !== product.id && Number(item.stock) > 0);
+        assert.ok(checkoutProduct, 'need another in-stock product for checkout payment');
+        const paidOrder = await request('POST', '/api/shop/orders', {
+            headers: auth,
+            body: {
+                items: [{ productId: checkoutProduct.id, quantity: 1 }],
+                shippingAddress: savedAddress.data.address,
+                phone: savedAddress.data.phone,
+                addressId: savedAddress.data.id,
+                deliveryDate,
+                deliverySlot: '13-17',
+                lat: 35.7,
+                lng: 51.4,
+                startPayment: true
+            }
+        });
+        assert.strictEqual(paidOrder.status, 201, JSON.stringify(paidOrder.data));
+        assert.ok(paidOrder.data.paymentUrl, 'checkout must return a payment URL');
+        assert.ok(String(paidOrder.data.authority || '').startsWith('MOCK'));
+        assert.strictEqual(paidOrder.data.paymentStatus, 'pending');
+        assert.strictEqual(paidOrder.data.deliverySlot, '13-17');
+
+        const verifiedPay = await request('POST', '/api/shop/payments/verify', {
+            headers: auth,
+            body: { authority: paidOrder.data.authority, status: 'OK' }
+        });
+        assert.strictEqual(verifiedPay.status, 200, JSON.stringify(verifiedPay.data));
+        assert.strictEqual(verifiedPay.data.ok, true);
+        assert.strictEqual(verifiedPay.data.order.paymentStatus, 'paid');
+        assert.strictEqual(verifiedPay.data.order.status, 'confirmed');
+        assert.ok(verifiedPay.data.refId);
+
+        const badDay = await request('POST', '/api/shop/orders', {
+            headers: auth,
+            body: {
+                items: [{ productId: checkoutProduct.id, quantity: 1 }],
+                shippingAddress: 'تهران',
+                phone: '09120000000',
+                deliveryDate: tehranToday,
+                deliverySlot: '09-13',
+                startPayment: true
+            }
+        });
+        assert.strictEqual(badDay.status, 400, JSON.stringify(badDay.data));
+
         const adminComment = await request('POST', `/api/shop/products/${product.id}/comments`, {
             headers: auth,
             body: { body: 'نظر تست ادمین برای امتیاز محصول', rating: 4 }

@@ -7,7 +7,6 @@ import Footer from './Footer';
 import { formatPrice } from '../utils/cart';
 import { formatToShamsi } from '../utils/dateConverter';
 import './OrdersPage.css';
-import { WithLeftAds } from './PageAdRail';
 
 const API = '';
 
@@ -17,6 +16,19 @@ const STATUS_LABELS = {
     shipped: 'ارسال شده',
     delivered: 'تحویل شده',
     cancelled: 'لغو شده',
+};
+
+const PAYMENT_LABELS = {
+    unpaid: 'پرداخت در محل',
+    pending: 'در انتظار پرداخت',
+    paid: 'پرداخت شده',
+    failed: 'پرداخت ناموفق'
+};
+
+const SLOT_LABELS = {
+    '09-13': '۹ تا ۱۳',
+    '13-17': '۱۳ تا ۱۷',
+    '17-21': '۱۷ تا ۲۱'
 };
 
 const OrdersPage = () => {
@@ -63,8 +75,6 @@ const OrdersPage = () => {
         <div className="orders-page shop-world">
             <MainNavbar />
             <main className="orders-main">
-                <WithLeftAds>
-                <div>
                 <div className="orders-header animate-fade-up">
                     <Link to="/shop" className="product-back">
                         <FontAwesomeIcon icon={faArrowRight} />
@@ -102,7 +112,9 @@ const OrdersPage = () => {
                                         </time>
                                     </div>
                                     <span className={`order-status status-${order.status}`}>
-                                        {STATUS_LABELS[order.status] || order.status}
+                                        {order.paymentStatus === 'pending'
+                                            ? PAYMENT_LABELS.pending
+                                            : (STATUS_LABELS[order.status] || order.status)}
                                     </span>
                                 </header>
                                 <ul className="order-items">
@@ -118,14 +130,18 @@ const OrdersPage = () => {
                                 </ul>
                                 <footer className="order-card-foot">
                                     <span>آدرس: {order.shippingAddress}</span>
+                                    {order.deliveryDate && (
+                                        <span>
+                                            تحویل: {formatToShamsi(order.deliveryDate)}
+                                            {order.deliverySlot ? ` — ${SLOT_LABELS[order.deliverySlot] || order.deliverySlot}` : ''}
+                                        </span>
+                                    )}
                                     <strong>جمع: {formatPrice(order.total)}</strong>
                                 </footer>
                             </article>
                         ))}
                     </div>
                 )}
-                </div>
-                </WithLeftAds>
             </main>
             <Footer />
         </div>
