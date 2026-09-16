@@ -30,6 +30,15 @@ const CategoryCascade = ({
         }
     });
     const needsLeaf = forceLeaf && path.length > 0 && (path[path.length - 1].children || []).length > 0;
+    const validValue = required && (!value || (forceLeaf && needsLeaf)) ? '' : (value || '');
+
+    const pick = (index, next) => {
+        if (!next) {
+            onChange(index === 0 ? '' : path[index - 1].name);
+            return;
+        }
+        onChange(next);
+    };
 
     return (
         <div className={`category-cascade${stacked ? ' is-stacked' : ''}`}>
@@ -39,30 +48,51 @@ const CategoryCascade = ({
                 </p>
             )}
             {levels.map((level, index) => (
-                <label key={`${level.label}-${index}`}>
+                <div key={`${level.label}-${index}`} className="category-cascade-level">
                     <span>{index + 1}. {level.label}</span>
-                    <select
-                        required={required && (index === 0 || (forceLeaf && index === levels.length - 1 && needsLeaf))}
-                        value={level.selected}
-                        onChange={(e) => {
-                            const next = e.target.value;
-                            if (!next) {
-                                onChange(index === 0 ? '' : path[index - 1].name);
-                                return;
-                            }
-                            onChange(next);
-                        }}
-                    >
-                        <option value="">{index === 0 ? emptyLabel : `انتخاب ${level.label}`}</option>
+                    <div className="category-cascade-options" role="listbox" aria-label={level.label}>
+                        {index > 0 && (
+                            <button
+                                type="button"
+                                className={!level.selected ? 'is-on' : ''}
+                                onClick={() => pick(index, '')}
+                            >
+                                پاک کردن
+                            </button>
+                        )}
+                        {index === 0 && (
+                            <button
+                                type="button"
+                                className={!level.selected ? 'is-on' : ''}
+                                onClick={() => pick(0, '')}
+                            >
+                                {emptyLabel}
+                            </button>
+                        )}
                         {level.options.map((opt) => (
-                            <option key={opt.id || opt.name} value={opt.name}>
+                            <button
+                                type="button"
+                                key={opt.id || opt.name}
+                                className={opt.name === level.selected ? 'is-on' : ''}
+                                onClick={() => pick(index, opt.name)}
+                            >
                                 {opt.name}
                                 {(opt.children || []).length ? ' (دارای زیرگروه)' : ''}
-                            </option>
+                            </button>
                         ))}
-                    </select>
-                </label>
+                    </div>
+                </div>
             ))}
+            {required && (
+                <input
+                    className="category-cascade-required"
+                    tabIndex={-1}
+                    required
+                    value={validValue}
+                    onChange={() => {}}
+                    aria-hidden="true"
+                />
+            )}
             {needsLeaf && (
                 <p className="category-cascade-hint">این گروه زیرمجموعه دارد؛ لطفاً زیرگروه را هم انتخاب کنید.</p>
             )}

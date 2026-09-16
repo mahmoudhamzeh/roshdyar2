@@ -51,13 +51,26 @@
   font-size: 0.86rem;
 }
 
-.product-form .category-cascade label {
+.product-form .category-cascade label,
+.product-form .category-cascade-level {
   font-size: 0.85rem;
   font-weight: 700;
   color: #3f3a2f;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.product-form .category-cascade-options button {
+  border: 1px solid #d7e5e2;
+  background: #f7fbfa;
+  color: #134e4a;
+}
+
+.product-form .category-cascade-options button.is-on {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
 }
 
 .category-lead {

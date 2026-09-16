@@ -1,0 +1,254 @@
+.checkout-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.checkout-main {
+  flex: 1;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 1.5rem clamp(1rem, 3vw, 1.75rem) 3rem;
+}
+
+.checkout-main h1 {
+  margin: 0.6rem 0 1.1rem;
+  font-size: clamp(1.3rem, 2.4vw, 1.7rem);
+}
+
+.checkout-card {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #d7e5e2);
+  border-radius: 16px;
+  padding: 1.1rem 1.15rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 61, 58, 0.08));
+}
+
+.checkout-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.checkout-card h2 {
+  margin: 0 0 0.7rem;
+  font-size: 1.05rem;
+}
+
+.checkout-card header h2 {
+  margin: 0;
+}
+
+.checkout-muted {
+  color: var(--ink-muted, #5b716e);
+  margin: 0 0 0.75rem;
+}
+
+.checkout-error {
+  color: var(--danger, #b91c1c);
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.checkout-address-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.checkout-address,
+.checkout-chips button,
+.checkout-ghost,
+.checkout-form button,
+.checkout-submit {
+  font: inherit;
+  cursor: pointer;
+}
+
+.checkout-address {
+  text-align: right;
+  border: 1px solid #d7e5e2;
+  background: #f7fbfa;
+  border-radius: 12px;
+  padding: 0.8rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.checkout-address.is-on {
+  border-color: #0f766e;
+  background: #ecfdf5;
+}
+
+.checkout-address em {
+  font-style: normal;
+  color: #5b716e;
+  font-size: 0.85rem;
+}
+
+.checkout-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.checkout-form label,
+.checkout-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-weight: 700;
+  color: #3f4f4c;
+  font-size: 0.88rem;
+}
+
+.checkout-form .is-full,
+.checkout-notes {
+  grid-column: 1 / -1;
+}
+
+.checkout-form input,
+.checkout-form textarea,
+.checkout-notes textarea {
+  border: 1px solid #d7e5e2;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  background: #fff;
+}
+
+.checkout-form-actions {
+  grid-column: 1 / -1;
+}
+
+.checkout-form button,
+.checkout-ghost {
+  border: 1px solid #0f766e;
+  background: #0f766e;
+  color: #fff;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-decoration: none;
+}
+
+.checkout-ghost {
+  background: #fff;
+  color: #0f766e;
+}
+
+.checkout-map-wrap p {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 800;
+  color: #134e4a;
+  margin: 0 0 0.55rem;
+}
+
+.checkout-map {
+  height: 280px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #d7e5e2;
+  z-index: 1;
+}
+
+.checkout-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.85rem;
+}
+
+.checkout-chips button {
+  border: 1px solid #d7e5e2;
+  background: #fff;
+  color: #134e4a;
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  min-height: 42px;
+  font-weight: 700;
+}
+
+.checkout-chips button.is-on {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #fff;
+}
+
+.checkout-submit {
+  width: 100%;
+  border: 0;
+  background: #0f766e;
+  color: #fff;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.checkout-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.checkout-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.checkout-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #eef4f2;
+}
+
+.checkout-summary .cart-invoice-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.55rem;
+}
+
+.checkout-summary .cart-invoice-row.is-profit {
+  color: #047857;
+}
+
+.checkout-summary .cart-invoice-row.is-total {
+  padding-top: 0.65rem;
+  border-top: 1px dashed #d7e5e2;
+  font-weight: 800;
+}
+
+.checkout-callback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.checkout-callback-actions .checkout-submit,
+.checkout-callback-actions .checkout-ghost {
+  width: auto;
+  min-width: 8.5rem;
+}
+
+@media (max-width: 720px) {
+  .checkout-form {
+    grid-template-columns: 1fr;
+  }
+}

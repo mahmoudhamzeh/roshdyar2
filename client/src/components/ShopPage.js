@@ -11,7 +11,6 @@ import ShopCategoryTiles from './ShopCategoryTiles';
 import ShopBreadcrumb from './ShopBreadcrumb';
 import ShopCategorySheet from './ShopCategorySheet';
 import { AGE_BANDS, GENDER_OPTIONS, SORT_OPTIONS, ageBandFromBirthDate, ageBandLabel, genderLabel } from '../utils/shop';
-import PageAdRail from './PageAdRail';
 import './ShopPage.css';
 import './ShopWorld.css';
 
@@ -330,7 +329,6 @@ const ShopPage = () => {
                             )}
                         </section>
                     </div>
-                    <PageAdRail />
                 </div>
             </main>
             <ShopCategorySheet

@@ -259,6 +259,18 @@ CREATE TABLE IF NOT EXISTS orders (
     phone TEXT,
     notes TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
+    delivery_date TEXT,
+    delivery_slot TEXT,
+    lat REAL,
+    lng REAL,
+    address_id INTEGER,
+    items_subtotal REAL,
+    discount_total REAL NOT NULL DEFAULT 0,
+    payment_status TEXT NOT NULL DEFAULT 'unpaid',
+    payment_authority TEXT,
+    payment_ref_id TEXT,
+    payment_card_pan TEXT,
+    paid_at TEXT,
     created_at TEXT,
     updated_at TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -266,6 +278,25 @@ CREATE TABLE IF NOT EXISTS orders (
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+
+CREATE TABLE IF NOT EXISTS user_addresses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    title TEXT,
+    recipient TEXT,
+    phone TEXT,
+    province TEXT,
+    city TEXT,
+    address TEXT NOT NULL,
+    postal_code TEXT,
+    lat REAL,
+    lng REAL,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_addresses_user ON user_addresses(user_id);
 
 CREATE TABLE IF NOT EXISTS order_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

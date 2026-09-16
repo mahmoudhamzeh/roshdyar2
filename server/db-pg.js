@@ -255,7 +255,19 @@ function rowToOrder(row, items) {
         notes: row.notes || '',
         status: row.status,
         createdAt: row.created_at,
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
+        deliveryDate: row.delivery_date || null,
+        deliverySlot: row.delivery_slot || null,
+        lat: row.lat != null ? Number(row.lat) : null,
+        lng: row.lng != null ? Number(row.lng) : null,
+        addressId: row.address_id != null ? Number(row.address_id) : null,
+        itemsSubtotal: row.items_subtotal != null ? Number(row.items_subtotal) : Number(row.total || 0),
+        discountTotal: Number(row.discount_total || 0),
+        paymentStatus: row.payment_status || 'unpaid',
+        paymentAuthority: row.payment_authority || null,
+        paymentRefId: row.payment_ref_id || null,
+        paymentCardPan: row.payment_card_pan || null,
+        paidAt: row.paid_at || null
     };
 }
 
@@ -826,13 +838,15 @@ const SQLITE_COPY_TABLES = [
     'users', 'children', 'vaccination_records', 'growth_records',
     'medical_visits', 'medical_documents', 'checkups', 'reminders',
     'user_reminders', 'messages', 'message_recipients', 'banners', 'news',
-    'videos', 'podcasts', 'tickets', 'products', 'orders', 'order_items', 'otp_codes'
+    'videos', 'podcasts', 'tickets', 'products', 'orders', 'order_items', 'otp_codes',
+    'user_addresses'
 ];
 
 const SQLITE_IDENTITY_TABLES = [
     'users', 'children', 'vaccination_records', 'growth_records',
     'medical_visits', 'medical_documents', 'checkups', 'messages',
-    'banners', 'news', 'videos', 'podcasts', 'tickets', 'products', 'orders', 'order_items'
+    'banners', 'news', 'videos', 'podcasts', 'tickets', 'products', 'orders', 'order_items',
+    'user_addresses'
 ];
 
 async function copySqliteDatabase(sqlitePath, { force = false } = {}) {
@@ -1960,7 +1974,22 @@ const orders = {
     async countPending() {
         return (await one("SELECT COUNT(*)::int AS n FROM orders WHERE status = 'pending'")).n;
     },
-    async create({ userId, items, total, shippingAddress, phone, notes }) {
+    async create({
+        userId,
+        items,
+        total,
+        shippingAddress,
+        phone,
+        notes,
+        deliveryDate,
+        deliverySlot,
+        lat,
+        lng,
+        addressId,
+        itemsSubtotal,
+        discountTotal,
+        paymentStatus
+    }) {
         return withTx(async (client) => {
             const resolved = [];
             for (const item of items) {
@@ -2004,9 +2033,28 @@ const orders = {
             }
             const createdAt = new Date().toISOString();
             const orderRow = await one(
-                `INSERT INTO orders (user_id, total, shipping_address, phone, notes, status, created_at)
-                 VALUES ($1,$2,$3,$4,$5,'pending',$6) RETURNING *`,
-                [Number(userId), total, shippingAddress, phone, notes || '', createdAt],
+                `INSERT INTO orders (
+                    user_id, total, shipping_address, phone, notes, status,
+                    delivery_date, delivery_slot, lat, lng, address_id,
+                    items_subtotal, discount_total, payment_status, created_at
+                 )
+                 VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+                [
+                    Number(userId),
+                    total,
+                    shippingAddress,
+                    phone,
+                    notes || '',
+                    deliveryDate || null,
+                    deliverySlot || null,
+                    lat != null && lat !== '' ? Number(lat) : null,
+                    lng != null && lng !== '' ? Number(lng) : null,
+                    addressId != null && addressId !== '' ? Number(addressId) : null,
+                    itemsSubtotal != null ? Number(itemsSubtotal) : total,
+                    discountTotal != null ? Number(discountTotal) : 0,
+                    paymentStatus || 'unpaid',
+                    createdAt
+                ],
                 client
             );
             for (const item of resolved) {
@@ -2057,6 +2105,38 @@ const orders = {
             }
             return (await hydrateOrders([orderRow], client))[0];
         });
+    },
+    async getByAuthority(authority) {
+        if (!authority) return null;
+        const row = await one('SELECT * FROM orders WHERE payment_authority = $1', [String(authority)]);
+        if (!row) return null;
+        return (await hydrateOrders([row]))[0];
+    },
+    async updatePayment(id, patch = {}) {
+        const current = await one('SELECT * FROM orders WHERE id = $1', [Number(id)]);
+        if (!current) return null;
+        await q(
+            `UPDATE orders SET
+                payment_status = $1,
+                payment_authority = $2,
+                payment_ref_id = $3,
+                payment_card_pan = $4,
+                paid_at = $5,
+                status = $6,
+                updated_at = $7
+             WHERE id = $8`,
+            [
+                patch.paymentStatus != null ? patch.paymentStatus : current.payment_status,
+                patch.paymentAuthority !== undefined ? patch.paymentAuthority : current.payment_authority,
+                patch.paymentRefId !== undefined ? patch.paymentRefId : current.payment_ref_id,
+                patch.paymentCardPan !== undefined ? patch.paymentCardPan : current.payment_card_pan,
+                patch.paidAt !== undefined ? patch.paidAt : current.paid_at,
+                patch.status != null ? patch.status : current.status,
+                new Date().toISOString(),
+                Number(id)
+            ]
+        );
+        return orders.getById(id);
     },
     async updateStatus(id, status) {
         return withTx(async (client) => {
@@ -2122,6 +2202,98 @@ const orders = {
         if (vendorId && Number(item.vendor_id) !== Number(vendorId)) return null;
         await q('UPDATE order_items SET line_status = $1 WHERE id = $2', [status, Number(itemId)]);
         return shopStore.mapOrderItemRow(await one('SELECT * FROM order_items WHERE id = $1', [Number(itemId)]));
+    }
+};
+
+function rowToAddress(row) {
+    if (!row) return null;
+    return {
+        id: Number(row.id),
+        userId: Number(row.user_id),
+        title: row.title || '',
+        recipient: row.recipient || '',
+        phone: row.phone || '',
+        province: row.province || '',
+        city: row.city || '',
+        address: row.address || '',
+        postalCode: row.postal_code || '',
+        lat: row.lat != null ? Number(row.lat) : null,
+        lng: row.lng != null ? Number(row.lng) : null,
+        isDefault: Boolean(row.is_default),
+        createdAt: row.created_at
+    };
+}
+
+const addresses = {
+    async listByUser(userId) {
+        return (await many(
+            'SELECT * FROM user_addresses WHERE user_id = $1 ORDER BY is_default DESC, id DESC',
+            [Number(userId)]
+        )).map(rowToAddress);
+    },
+    async getById(id) {
+        return rowToAddress(await one('SELECT * FROM user_addresses WHERE id = $1', [Number(id)]));
+    },
+    async create(userId, payload) {
+        const createdAt = new Date().toISOString();
+        const isDefault = payload.isDefault ? 1 : 0;
+        if (isDefault) {
+            await q('UPDATE user_addresses SET is_default = 0 WHERE user_id = $1', [Number(userId)]);
+        }
+        const row = await one(
+            `INSERT INTO user_addresses (
+                user_id, title, recipient, phone, province, city, address, postal_code, lat, lng, is_default, created_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+            [
+                Number(userId),
+                payload.title || '',
+                payload.recipient || '',
+                payload.phone || '',
+                payload.province || '',
+                payload.city || '',
+                String(payload.address || '').trim(),
+                payload.postalCode || '',
+                payload.lat != null && payload.lat !== '' ? Number(payload.lat) : null,
+                payload.lng != null && payload.lng !== '' ? Number(payload.lng) : null,
+                isDefault,
+                createdAt
+            ]
+        );
+        return rowToAddress(row);
+    },
+    async update(id, userId, payload) {
+        const current = await addresses.getById(id);
+        if (!current || Number(current.userId) !== Number(userId)) return null;
+        if (payload.isDefault) {
+            await q('UPDATE user_addresses SET is_default = 0 WHERE user_id = $1', [Number(userId)]);
+        }
+        const row = await one(
+            `UPDATE user_addresses SET
+                title = $1, recipient = $2, phone = $3, province = $4, city = $5,
+                address = $6, postal_code = $7, lat = $8, lng = $9, is_default = $10
+             WHERE id = $11 RETURNING *`,
+            [
+                payload.title != null ? payload.title : current.title,
+                payload.recipient != null ? payload.recipient : current.recipient,
+                payload.phone != null ? payload.phone : current.phone,
+                payload.province != null ? payload.province : current.province,
+                payload.city != null ? payload.city : current.city,
+                payload.address != null ? String(payload.address).trim() : current.address,
+                payload.postalCode != null ? payload.postalCode : current.postalCode,
+                payload.lat !== undefined ? (payload.lat != null && payload.lat !== '' ? Number(payload.lat) : null) : current.lat,
+                payload.lng !== undefined ? (payload.lng != null && payload.lng !== '' ? Number(payload.lng) : null) : current.lng,
+                payload.isDefault ? 1 : (payload.isDefault === false ? 0 : (current.isDefault ? 1 : 0)),
+                Number(id)
+            ]
+        );
+        return rowToAddress(row);
+    },
+    async remove(id, userId) {
+        const result = await q(
+            'DELETE FROM user_addresses WHERE id = $1 AND user_id = $2',
+            [Number(id), Number(userId)]
+        );
+        return result && result.rowCount > 0;
     }
 };
 
@@ -2490,6 +2662,7 @@ module.exports = {
         }
     }),
     orders,
+    addresses,
     otp,
     normalizePhone
 };

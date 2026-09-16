@@ -136,6 +136,19 @@ function run() {
     assert.strictEqual(cancelled.status, 'cancelled');
     assert.strictEqual(store.products.getById(product.id).stock, stockBefore);
 
+    const address = store.addresses.create(createdUser.id, {
+        title: 'خانه',
+        recipient: 'تست',
+        phone: '09120000000',
+        city: 'تهران',
+        address: 'خیابان تست',
+        lat: 35.7,
+        lng: 51.4,
+        isDefault: true
+    });
+    assert.ok(address.id);
+    assert.strictEqual(store.addresses.listByUser(createdUser.id).length, 1);
+
     store.otp.set('09123334444', {
         code: '12345',
         purpose: 'auth',

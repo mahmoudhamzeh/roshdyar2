@@ -14,7 +14,6 @@ import ProductImageGallery from './ProductImageGallery';
 import QuantityStepper from './QuantityStepper';
 import CartAddedModal from './CartAddedModal';
 import ProductRail from './ProductRail';
-import { WithLeftAds } from './PageAdRail';
 import { getAuthToken, getLoggedInUser } from '../api';
 import './ProductDetailPage.css';
 import './ShopWorld.css';
@@ -202,8 +201,6 @@ const ProductDetailPage = () => {
         <div className="product-detail-page shop-world">
             <MainNavbar />
             <main className="product-detail-main">
-                <WithLeftAds>
-                <div>
                 <ShopBreadcrumb items={crumbs} />
 
                 {loading && <p className="shop-status">در حال بارگذاری...</p>}
@@ -522,8 +519,6 @@ const ProductDetailPage = () => {
                         <ProductRail title="پیشنهاد برای شما" products={product.recommended || []} />
                     </>
                 )}
-                </div>
-                </WithLeftAds>
             </main>
             <CartAddedModal
                 open={addedOpen}

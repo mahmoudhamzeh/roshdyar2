@@ -27,7 +27,6 @@ import {
 } from '../utils/child-growth';
 import { buildOverallStatus, collectHealthTags, metricCaption, statusPhrase } from '../utils/child-snapshot';
 import ChildAvatar from './ChildAvatar';
-import { WithLeftAds } from './PageAdRail';
 import './ChildGrowthPage.css';
 
 const DOMAIN_TILES = [
@@ -202,8 +201,6 @@ const ChildGrowthPage = () => {
     return (
         <div className="child-growth-page">
             {pageNav}
-            <WithLeftAds>
-            <div>
 
             <header className={`cg-hero is-${overall.tone}`}>
                 <ChildAvatar child={childRaw} size="sm" className="cg-hero-avatar" />
@@ -418,8 +415,6 @@ const ChildGrowthPage = () => {
                     </div>
                 </div>
             )}
-            </div>
-            </WithLeftAds>
         </div>
     );
 };

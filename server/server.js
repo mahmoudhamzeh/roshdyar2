@@ -13,6 +13,7 @@ const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
 const { AGE_BANDS, flattenCategories, GENDER_OPTIONS, parseProductAttrs } = require('./shop-model');
+const zarinpal = require('./zarinpal');
 const rateLimit = require('express-rate-limit');
 const {
     hashPassword,
@@ -175,6 +176,11 @@ const API_CATALOG = {
             'GET /api/shop/orders',
             'GET /api/shop/orders/:id',
             'POST /api/shop/orders',
+            'GET /api/shop/addresses',
+            'POST /api/shop/addresses',
+            'PUT /api/shop/addresses/:id',
+            'DELETE /api/shop/addresses/:id',
+            'POST /api/shop/payments/verify',
             'GET /api/shop/vendors/me',
             'POST /api/shop/vendors/apply',
             'POST /api/shop/vendors/me/docs',
@@ -297,6 +303,50 @@ async function requireOwnedChild(req, res) {
         return null;
     }
     return { user, child };
+}
+
+const DELIVERY_SLOT_IDS = ['09-13', '13-17', '17-21'];
+
+function tehranYmd() {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Tehran',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).format(new Date());
+}
+
+function addDaysYmd(ymd, days) {
+    const [year, month, day] = String(ymd).split('-').map(Number);
+    const utc = Date.UTC(year, month - 1, day) + days * 86400000;
+    return new Date(utc).toISOString().slice(0, 10);
+}
+
+function isValidDeliveryDate(value) {
+    const ymd = String(value || '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+    const min = addDaysYmd(tehranYmd(), 1);
+    const max = addDaysYmd(min, 6);
+    return ymd >= min && ymd <= max;
+}
+
+function publicSiteUrl(req) {
+    const env = String(process.env.PUBLIC_SITE_URL || process.env.APP_URL || '').trim().replace(/\/$/, '');
+    if (env) return env;
+    const origin = String(req.headers.origin || '').trim().replace(/\/$/, '');
+    if (origin) return origin;
+    const referer = String(req.get('referer') || '').trim();
+    if (referer) {
+        try {
+            const parsed = new URL(referer);
+            return `${parsed.protocol}//${parsed.host}`;
+        } catch (_) {
+            // ignore invalid referer
+        }
+    }
+    const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
+    const host = req.get('x-forwarded-host') || req.get('host');
+    return `${proto}://${host}`;
 }
 
 function paginateList(list, req) {
@@ -2128,12 +2178,114 @@ app.get('/api/shop/orders/:id', async (req, res) => {
     res.json(order);
 });
 
+app.get('/api/shop/addresses', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    res.json(await store.addresses.listByUser(user.id));
+});
+
+app.post('/api/shop/addresses', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const address = String((req.body && req.body.address) || '').trim();
+    const phone = String((req.body && req.body.phone) || '').trim();
+    if (!address) return res.status(400).json({ message: 'نشانی الزامی است' });
+    if (!phone) return res.status(400).json({ message: 'شماره تماس الزامی است' });
+    const created = await store.addresses.create(user.id, req.body || {});
+    res.status(201).json(created);
+});
+
+app.put('/api/shop/addresses/:id', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const updated = await store.addresses.update(req.params.id, user.id, req.body || {});
+    if (!updated) return res.status(404).json({ message: 'آدرس یافت نشد' });
+    res.json(updated);
+});
+
+app.delete('/api/shop/addresses/:id', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const ok = await store.addresses.remove(req.params.id, user.id);
+    if (!ok) return res.status(404).json({ message: 'آدرس یافت نشد' });
+    res.json({ ok: true });
+});
+
+app.post('/api/shop/payments/verify', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const authority = String((req.body && (req.body.authority || req.body.Authority)) || '').trim();
+    const status = String((req.body && (req.body.status || req.body.Status)) || '').trim().toUpperCase();
+    if (!authority) return res.status(400).json({ message: 'شناسه پرداخت نامعتبر است' });
+    const order = await store.orders.getByAuthority(authority);
+    if (!order) return res.status(404).json({ message: 'سفارش یافت نشد' });
+    if (Number(order.userId) !== Number(user.id) && !user.isAdmin) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
+    if (status !== 'OK') {
+        if (order.paymentStatus !== 'paid') {
+            await store.orders.updatePayment(order.id, { paymentStatus: 'failed' });
+        }
+        return res.status(400).json({ ok: false, message: 'پرداخت انجام نشد یا توسط شما لغو شد' });
+    }
+    if (order.paymentStatus === 'paid') {
+        return res.json({
+            ok: true,
+            message: 'این پرداخت قبلاً تایید شده است',
+            order,
+            refId: order.paymentRefId
+        });
+    }
+    try {
+        const result = await zarinpal.verifyPayment({ amount: order.total, authority });
+        if (result.code !== 100 && result.code !== 101) {
+            await store.orders.updatePayment(order.id, { paymentStatus: 'failed' });
+            return res.status(400).json({
+                ok: false,
+                message: result.message || 'پرداخت تایید نشد',
+                code: result.code
+            });
+        }
+        const updated = await store.orders.updatePayment(order.id, {
+            paymentStatus: 'paid',
+            paymentRefId: result.ref_id != null ? String(result.ref_id) : order.paymentRefId,
+            paymentCardPan: result.card_pan || null,
+            paidAt: new Date().toISOString(),
+            status: 'confirmed'
+        });
+        res.json({
+            ok: true,
+            message: result.code === 101 ? 'این پرداخت قبلاً تایید شده است' : 'پرداخت با موفقیت انجام شد',
+            order: updated,
+            refId: updated.paymentRefId
+        });
+    } catch (err) {
+        res.status(502).json({ message: err.message || 'خطا در ارتباط با درگاه پرداخت' });
+    }
+});
+
+app.get('/api/shop/payments/callback', (req, res) => {
+    const query = new URLSearchParams(req.query).toString();
+    res.redirect(`${publicSiteUrl(req)}/checkout/callback${query ? `?${query}` : ''}`);
+});
+
 app.post('/api/shop/orders', async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
     const userId = Number(user.id);
 
-    const { items, shippingAddress, phone, notes } = req.body;
+    const {
+        items,
+        shippingAddress,
+        phone,
+        notes,
+        deliveryDate,
+        deliverySlot,
+        lat,
+        lng,
+        addressId,
+        startPayment
+    } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: 'سبد خرید خالی است' });
     }
@@ -2143,9 +2295,20 @@ app.post('/api/shop/orders', async (req, res) => {
     if (!phone || !String(phone).trim()) {
         return res.status(400).json({ message: 'شماره تماس الزامی است' });
     }
+    const wantsCheckout = Boolean(startPayment || deliveryDate || deliverySlot);
+    if (wantsCheckout) {
+        if (!isValidDeliveryDate(deliveryDate)) {
+            return res.status(400).json({ message: 'تاریخ ارسال باید از فردا تا یک هفته بعد باشد' });
+        }
+        if (!DELIVERY_SLOT_IDS.includes(String(deliverySlot || ''))) {
+            return res.status(400).json({ message: 'بازه زمانی ارسال نامعتبر است' });
+        }
+    }
 
     const orderItems = [];
     let total = 0;
+    let itemsSubtotal = 0;
+    let discountTotal = 0;
 
     for (const item of items) {
         const productId = parseInt(item.productId, 10);
@@ -2173,8 +2336,13 @@ app.post('/api/shop/orders', async (req, res) => {
         if (available < quantity) {
             return res.status(400).json({ message: `موجودی «${product.name}» کافی نیست` });
         }
+        const compareAt = offer && Number(offer.compareAtPrice) > Number(unitPrice)
+            ? Number(offer.compareAtPrice)
+            : unitPrice;
         const lineTotal = unitPrice * quantity;
         total += lineTotal;
+        itemsSubtotal += compareAt * quantity;
+        discountTotal += (compareAt - unitPrice) * quantity;
         orderItems.push({
             productId: product.id,
             offerId: offer ? offer.id : null,
@@ -2193,8 +2361,41 @@ app.post('/api/shop/orders', async (req, res) => {
             total,
             shippingAddress: String(shippingAddress).trim(),
             phone: String(phone).trim(),
-            notes: notes ? String(notes).trim() : ''
+            notes: notes ? String(notes).trim() : '',
+            deliveryDate: wantsCheckout ? deliveryDate : null,
+            deliverySlot: wantsCheckout ? deliverySlot : null,
+            lat,
+            lng,
+            addressId,
+            itemsSubtotal,
+            discountTotal,
+            paymentStatus: wantsCheckout ? 'pending' : 'unpaid'
         });
+        if (startPayment) {
+            try {
+                const pay = await zarinpal.requestPayment({
+                    amount: newOrder.total,
+                    description: `سفارش ${newOrder.id} تات کیدز`,
+                    callbackUrl: `${publicSiteUrl(req)}/checkout/callback`,
+                    mobile: newOrder.phone,
+                    orderId: newOrder.id
+                });
+                const updated = await store.orders.updatePayment(newOrder.id, {
+                    paymentStatus: 'pending',
+                    paymentAuthority: pay.authority
+                });
+                return res.status(201).json({
+                    ...(updated || newOrder),
+                    paymentUrl: pay.paymentUrl,
+                    authority: pay.authority
+                });
+            } catch (payErr) {
+                return res.status(502).json({
+                    message: payErr.message || 'خطا در اتصال به درگاه پرداخت',
+                    order: newOrder
+                });
+            }
+        }
         res.status(201).json(newOrder);
     } catch (err) {
         if (err.code === 'OUT_OF_STOCK') {
