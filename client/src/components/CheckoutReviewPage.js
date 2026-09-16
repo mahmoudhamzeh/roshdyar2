@@ -65,7 +65,18 @@ const CheckoutReviewPage = () => {
             if (!data.paymentUrl) throw new Error('آدرس درگاه پرداخت دریافت نشد');
             clearCart();
             clearCheckoutDraft();
-            window.location.assign(data.paymentUrl);
+            let payUrl = data.paymentUrl;
+            try {
+                const parsed = new URL(payUrl, window.location.origin);
+                if (parsed.pathname.startsWith('/checkout/callback')) {
+                    parsed.protocol = window.location.protocol;
+                    parsed.host = window.location.host;
+                    payUrl = parsed.toString();
+                }
+            } catch (_) {
+                // keep server URL
+            }
+            window.location.assign(payUrl);
         } catch (err) {
             setError(err.message || 'ثبت سفارش ناموفق بود');
             setSubmitting(false);

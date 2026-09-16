@@ -333,7 +333,17 @@ function isValidDeliveryDate(value) {
 function publicSiteUrl(req) {
     const env = String(process.env.PUBLIC_SITE_URL || process.env.APP_URL || '').trim().replace(/\/$/, '');
     if (env) return env;
-    if (req.headers.origin) return String(req.headers.origin).replace(/\/$/, '');
+    const origin = String(req.headers.origin || '').trim().replace(/\/$/, '');
+    if (origin) return origin;
+    const referer = String(req.get('referer') || '').trim();
+    if (referer) {
+        try {
+            const parsed = new URL(referer);
+            return `${parsed.protocol}//${parsed.host}`;
+        } catch (_) {
+            // ignore invalid referer
+        }
+    }
     const proto = req.get('x-forwarded-proto') || req.protocol || 'http';
     const host = req.get('x-forwarded-host') || req.get('host');
     return `${proto}://${host}`;
