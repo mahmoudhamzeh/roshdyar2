@@ -312,6 +312,11 @@ const VendorPanelPage = () => {
 
     const createExistingOffer = async (e) => {
         e.preventDefault();
+        if (!existingOffer.productId) {
+            setMessage('ابتدا کالا را از فهرست انتخاب کنید');
+            setPickerOpen(true);
+            return;
+        }
         const res = await fetch('/api/vendor/offers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -546,9 +551,9 @@ const VendorPanelPage = () => {
     const chooseCatalogProduct = (item) => {
         setPickedProduct(item);
         setExistingOffer((prev) => ({
-            ...prev,
             productId: String(item.id),
-            price: prev.price || String(item.minPrice != null ? item.minPrice : item.price || '')
+            price: String(item.minPrice != null ? item.minPrice : item.price || ''),
+            stock: prev.stock
         }));
         setPickerOpen(false);
     };
@@ -726,6 +731,7 @@ const VendorPanelPage = () => {
                                                 <Field as="div" label="کالا">
                                                     <button
                                                         type="button"
+                                                        id="vendor-pick-open"
                                                         className={`vendor-pick-trigger${pickedProduct ? ' has-item' : ''}`}
                                                         onClick={() => { setCatalogQuery(''); setPickerOpen(true); }}
                                                     >
@@ -746,14 +752,6 @@ const VendorPanelPage = () => {
                                                             </span>
                                                         )}
                                                     </button>
-                                                    <input
-                                                        className="vendor-pick-required"
-                                                        tabIndex={-1}
-                                                        required
-                                                        value={existingOffer.productId}
-                                                        onChange={() => {}}
-                                                        aria-hidden="true"
-                                                    />
                                                 </Field>
                                                 {pickedProduct && (
                                                     <p className="vendor-price-hint">{formatOfferPrices(pickedProduct)}</p>

@@ -574,6 +574,8 @@ body.vendor-world .magazine-mini-player {
   color: #134e4a;
   text-align: right;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
 }
 
 .vendor-pick-trigger.has-item {
@@ -660,19 +662,6 @@ body.vendor-world .magazine-mini-player {
   align-items: center;
   justify-content: center;
   color: #0f766e;
-}
-
-.vendor-pick-required {
-  position: absolute !important;
-  width: 1px !important;
-  height: 1px !important;
-  padding: 0 !important;
-  margin: -1px !important;
-  overflow: hidden !important;
-  clip: rect(0, 0, 0, 0) !important;
-  border: 0 !important;
-  opacity: 0;
-  pointer-events: none;
 }
 
 .vendor-price-hint {
