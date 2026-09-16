@@ -431,16 +431,28 @@
   gap: 0.35rem;
 }
 
-.magazine-editor-toolbar button {
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+.magazine-editor-toolbar button,
+.article-form .magazine-editor-toolbar button {
+  border: 1px solid var(--border-strong, #b7cdc8);
+  background: #eef6f4;
+  color: #134e4a;
   border-radius: 6px;
-  padding: 0.25rem 0.5rem;
+  padding: 0.35rem 0.65rem;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.magazine-editor-toolbar button:hover {
+  background: #d7eee9;
+  color: #0f766e;
 }
 
 .magazine-editor-surface {
   min-height: 220px;
   background: #fff;
+  color: #134e4a;
 }
 
 .magazine-transcript {

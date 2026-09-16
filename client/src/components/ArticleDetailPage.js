@@ -33,7 +33,8 @@ const ArticleDetailPage = () => {
             setPost(await postRes.json());
             if (bannerRes.ok) {
                 const all = await bannerRes.json();
-                setBanners(all.filter((item) => String(item.placement).startsWith('sidebar')));
+                const sidebar = all.filter((item) => String(item.placement).startsWith('sidebar'));
+                setBanners(sidebar.length ? sidebar : all.filter((item) => item.placement === 'hero'));
             }
         } catch (err) {
             setError(err.message);

@@ -99,6 +99,7 @@ const BannerManagement = () => {
                 >
                     <option value="shop">اسلایدر فروشگاه</option>
                     <option value="home">صفحه اصلی</option>
+                    <option value="sidebar">سایدبار صفحات داخلی (سمت چپ)</option>
                 </select>
                 <label>لینک به محصول</label>
                 <select
@@ -127,7 +128,7 @@ const BannerManagement = () => {
                         <img src={banner.imageUrl} alt={banner.title} />
                         <div className="banner-info">
                             <h4>{banner.title || 'بدون عنوان'}</h4>
-                            <p>{banner.placement === 'shop' ? 'فروشگاه' : 'صفحه اصلی'}</p>
+                            <p>{banner.placement === 'shop' ? 'فروشگاه' : banner.placement === 'sidebar' ? 'سایدبار صفحات داخلی' : 'صفحه اصلی'}</p>
                             <small>{banner.link}</small>
                         </div>
                         <button type="button" onClick={() => handleDelete(banner.id)} className="btn-delete">حذف</button>

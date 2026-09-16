@@ -1628,7 +1628,7 @@ app.post('/api/admin/banners', isAdmin, upload.single('image'), async (req, res)
         title,
         link: link || (parsedProduct ? `/shop/${parsedProduct}` : ''),
         imageUrl: `/uploads/${req.file.filename}`,
-        placement: placement === 'shop' ? 'shop' : 'home',
+        placement: placement === 'shop' || placement === 'sidebar' ? placement : 'home',
         productId: parsedProduct,
         subtitle,
         sortOrder
@@ -1645,7 +1645,9 @@ app.put('/api/admin/banners/:id', isAdmin, upload.single('image'), async (req, r
         title: req.body.title !== undefined ? req.body.title : current.title,
         link: req.body.link !== undefined ? req.body.link : (parsedProduct ? `/shop/${parsedProduct}` : current.link),
         imageUrl: req.file ? `/uploads/${req.file.filename}` : current.imageUrl,
-        placement: req.body.placement || current.placement,
+        placement: req.body.placement
+            ? (req.body.placement === 'shop' || req.body.placement === 'sidebar' ? req.body.placement : 'home')
+            : current.placement,
         productId: parsedProduct,
         subtitle: req.body.subtitle !== undefined ? req.body.subtitle : current.subtitle,
         sortOrder: req.body.sortOrder !== undefined ? req.body.sortOrder : current.sortOrder

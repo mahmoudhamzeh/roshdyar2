@@ -46,9 +46,19 @@ export function postHref(post) {
 }
 
 export function typeLabel(type) {
+    if (type === 'news') return 'خبر';
     if (type === 'video') return 'ویدیو';
     if (type === 'podcast') return 'پادکست';
     return 'مقاله';
+}
+
+export function sidebarAdsFromHome(home, { allowHeroFallback = false } = {}) {
+    const sidebar = [...(home && home.sidebarBanners ? home.sidebarBanners : [])];
+    if (sidebar.length || !allowHeroFallback) return sidebar;
+    return (home && home.hero ? home.hero : []).map((item) => ({
+        ...item,
+        placement: item.placement || 'sidebar-300x250'
+    }));
 }
 
 export function flattenCategories(tree, acc = []) {

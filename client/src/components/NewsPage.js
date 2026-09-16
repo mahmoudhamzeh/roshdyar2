@@ -1,20 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import { Link, useHistory, useLocation, useParams } from 'react-router-dom';
 import NewsHeader from './NewsHeader';
 import Footer from './Footer';
 import { HeroSlider, AdBanner } from './magazine/HeroSlider';
-import { postHref, typeLabel, flattenCategories } from '../utils/magazine';
+import { postHref, typeLabel, flattenCategories, sidebarAdsFromHome } from '../utils/magazine';
 import './NewsPage.css';
 import './magazine/Magazine.css';
 
 const NewsPage = () => {
     const { slug } = useParams();
     const location = useLocation();
+    const history = useHistory();
     const [home, setHome] = useState(null);
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [type, setType] = useState('all');
+    const typeFromUrl = new URLSearchParams(location.search).get('type') || 'all';
+    const [type, setType] = useState(typeFromUrl);
 
     const mode = location.pathname.includes('/category/')
         ? 'category'
@@ -31,7 +33,8 @@ const NewsPage = () => {
                 const homeData = await homeRes.json();
                 setHome(homeData);
                 if (mode === 'home' && !slug) {
-                    setPosts(homeData.latestArticles || []);
+                    const listRes = await fetch('/api/magazine/posts');
+                    setPosts(listRes.ok ? await listRes.json() : (homeData.latestArticles || []));
                 } else {
                     const query = mode === 'tag' ? `tag=${slug}` : `category=${slug}`;
                     const listRes = await fetch(`/api/magazine/posts?${query}`);
@@ -45,6 +48,12 @@ const NewsPage = () => {
         };
         load();
     }, [mode, slug]);
+
+    useEffect(() => {
+        setType(typeFromUrl === 'news' || typeFromUrl === 'article' || typeFromUrl === 'video' || typeFromUrl === 'podcast'
+            ? typeFromUrl
+            : 'all');
+    }, [typeFromUrl]);
 
     const categories = home ? flattenCategories(home.categories) : [];
     const visiblePosts = useMemo(() => {
@@ -64,7 +73,7 @@ const NewsPage = () => {
             <main className="news-page-container">
                 <header className="news-page-header">
                     <h1>{title}</h1>
-                    <p>مقاله‌های متنی، ویدیویی و پادکست‌های تخصصی برای والدین</p>
+                    <p>مقاله‌ها، اخبار، ویدیوها و پادکست‌های تخصصی برای والدین</p>
                 </header>
                 {loading && <p>در حال بارگذاری...</p>}
                 {error && <p className="error-message">{error}</p>}
@@ -75,6 +84,7 @@ const NewsPage = () => {
                             {[
                                 { id: 'all', label: 'همه' },
                                 { id: 'article', label: 'مقاله‌ها' },
+                                { id: 'news', label: 'اخبار' },
                                 { id: 'video', label: 'ویدیوها' },
                                 { id: 'podcast', label: 'پادکست‌ها' }
                             ].map((item) => (
@@ -82,7 +92,12 @@ const NewsPage = () => {
                                     key={item.id}
                                     type="button"
                                     className={type === item.id ? 'is-active' : ''}
-                                    onClick={() => setType(item.id)}
+                                    onClick={() => {
+                                        setType(item.id);
+                                        if (mode === 'home') {
+                                            history.replace(item.id === 'all' ? '/news' : `/news?type=${item.id}`);
+                                        }
+                                    }}
                                 >
                                     {item.label}
                                 </button>
@@ -132,6 +147,29 @@ const NewsPage = () => {
                                         </div>
                                     </section>
                                 )}
+                                {mode === 'home' && type === 'all' && (home.latestNews || []).length > 0 && (
+                                    <section id="news-section" className="news-section">
+                                        <h2>اخبار</h2>
+                                        <div className="articles-list">
+                                            {home.latestNews.map((post) => (
+                                                <Link to={postHref(post)} key={post.id} className="article-list-item">
+                                                    <img
+                                                        src={post.featuredImageUrl || 'https://placehold.co/300x200/0f766e/FFFFFF?text=اخبار'}
+                                                        alt=""
+                                                        loading="lazy"
+                                                        decoding="async"
+                                                    />
+                                                    <div className="article-list-item-content">
+                                                        <span className="article-type-badge">{typeLabel(post.type)}</span>
+                                                        <h3>{post.title}</h3>
+                                                        <p className="article-summary">{post.summary}</p>
+                                                        <span className="read-more">{post.readingTimeMinutes || 1} دقیقه مطالعه</span>
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
                                 {mode === 'home' && (home.podcasts || []).length > 0 && (
                                     <section className="podcast-section">
                                         <h2>پادکست‌های تات کیدز</h2>
@@ -150,8 +188,8 @@ const NewsPage = () => {
                                     </section>
                                 )}
                             </div>
-                            <aside className="sidebar-column">
-                                {(home.sidebarBanners || []).map((banner) => (
+                            <aside className="sidebar-column magazine-desktop-ad">
+                                {sidebarAdsFromHome(home, { allowHeroFallback: mode !== 'home' }).map((banner) => (
                                     <AdBanner
                                         key={banner.id}
                                         banner={banner}

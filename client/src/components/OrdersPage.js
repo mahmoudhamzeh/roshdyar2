@@ -7,6 +7,7 @@ import Footer from './Footer';
 import { formatPrice } from '../utils/cart';
 import { formatToShamsi } from '../utils/dateConverter';
 import './OrdersPage.css';
+import { WithLeftAds } from './PageAdRail';
 
 const API = '';
 
@@ -62,6 +63,8 @@ const OrdersPage = () => {
         <div className="orders-page shop-world">
             <MainNavbar />
             <main className="orders-main">
+                <WithLeftAds>
+                <div>
                 <div className="orders-header animate-fade-up">
                     <Link to="/shop" className="product-back">
                         <FontAwesomeIcon icon={faArrowRight} />
@@ -121,6 +124,8 @@ const OrdersPage = () => {
                         ))}
                     </div>
                 )}
+                </div>
+                </WithLeftAds>
             </main>
             <Footer />
         </div>
