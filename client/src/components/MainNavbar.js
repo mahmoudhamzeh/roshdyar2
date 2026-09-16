@@ -82,6 +82,7 @@ const MainNavbar = () => {
                     <div className="navbar-links">
                         <Link to="/dashboard">داشبورد</Link>
                         <Link to="/news">مجله سلامت</Link>
+                        <Link to="/news?type=news">اخبار</Link>
                         <Link to="/shop">فروشگاه</Link>
                         {isAdmin && (
                             <Link to="/admin" className="admin-link">
@@ -139,6 +140,7 @@ const MainNavbar = () => {
                     <p className="navbar-drawer-label">صفحات</p>
                     <Link to="/dashboard" onClick={closeMenu}>داشبورد</Link>
                     <Link to="/news" onClick={closeMenu}>مجله سلامت</Link>
+                    <Link to="/news?type=news" onClick={closeMenu}>اخبار</Link>
                     <Link to="/shop" onClick={closeMenu}>فروشگاه</Link>
                     <Link to="/cart" onClick={closeMenu}>سبد خرید {cartCount > 0 ? `(${cartCount})` : ''}</Link>
                     <p className="navbar-drawer-label">حساب</p>

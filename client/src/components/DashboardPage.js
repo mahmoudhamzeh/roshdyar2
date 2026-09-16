@@ -25,6 +25,7 @@ const youtubeThumb = (url) => {
 const DashboardPage = () => {
     const [banners, setBanners] = useState([]);
     const [articles, setArticles] = useState([]);
+    const [newsItems, setNewsItems] = useState([]);
     const [videos, setVideos] = useState(fallbackVideos);
     const [sale, setSale] = useState({ products: [], campaign: null });
 
@@ -63,6 +64,22 @@ const DashboardPage = () => {
                 }
             } catch (error) {
                 console.error("Failed to fetch articles:", error);
+            }
+
+            try {
+                const newsResponse = await fetch('/api/magazine/posts?type=news');
+                if (newsResponse.ok) {
+                    const data = await newsResponse.json();
+                    setNewsItems((Array.isArray(data) ? data : []).slice(0, 8).map((item) => ({
+                        id: item.id,
+                        title: item.title,
+                        summary: item.summary,
+                        image: item.featuredImageUrl || item.imageUrl || null,
+                        link: `/news/${item.id}`
+                    })));
+                }
+            } catch (error) {
+                console.error("Failed to fetch news:", error);
             }
 
             try {
@@ -112,6 +129,16 @@ const DashboardPage = () => {
                     mobileVisibleCount={2}
                     viewAllLink="/news#educational-videos"
                 />
+                {newsItems.length > 0 && (
+                    <ContentRow
+                        title="اخبار"
+                        items={newsItems}
+                        scrollable={true}
+                        visibleCount={4}
+                        mobileVisibleCount={2}
+                        viewAllLink="/news?type=news"
+                    />
+                )}
                 <ContentRow
                     title="جدیدترین مقالات"
                     items={articles}

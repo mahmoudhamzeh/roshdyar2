@@ -22,6 +22,7 @@ const Footer = () => {
                         <li><a href="/dashboard">صفحه اصلی</a></li>
                         <li><a href="/register">ورود / ثبت‌نام</a></li>
                         <li><a href="/news">مجله سلامت</a></li>
+                        <li><a href="/news?type=news">اخبار</a></li>
                         <li><a href="/shop">فروشگاه</a></li>
                         <li><a href="/vendor">ورود به پنل فروشندگان</a></li>
                     </ul>

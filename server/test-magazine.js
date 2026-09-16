@@ -189,6 +189,24 @@ async function run() {
         assert.ok(created.data.slug);
         assert.ok(created.data.readingTimeMinutes >= 1);
 
+        const newsPost = await request('POST', '/api/admin/magazine/posts', {
+            headers: auth,
+            body: {
+                type: 'news',
+                title: 'خبر تست مجله',
+                summary: 'خلاصه خبر تست',
+                content: '<p>متن خبر برای بخش اخبار</p>'
+            }
+        });
+        assert.strictEqual(newsPost.status, 201, JSON.stringify(newsPost.data));
+        assert.strictEqual(newsPost.data.type, 'news');
+        const newsList = await request('GET', '/api/magazine/posts?type=news');
+        assert.strictEqual(newsList.status, 200);
+        assert.ok(newsList.data.some((item) => item.id === newsPost.data.id));
+        const homeAfterNews = await request('GET', '/api/magazine/home');
+        assert.ok(Array.isArray(homeAfterNews.data.latestNews));
+        assert.ok(homeAfterNews.data.latestNews.some((item) => item.id === newsPost.data.id));
+
         const banner = home.data.sidebarBanners[0];
         const click = await request('POST', `/api/magazine/banners/${banner.id}/click`);
         assert.strictEqual(click.status, 200);

@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolderOpen, faPen, faPlus, faTrash, faChevronLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 import { getChildDisplayName } from '../utils/childName';
 import ChildAvatar from './ChildAvatar';
+import { WithLeftAds } from './PageAdRail';
 import './MyChildrenPage.css';
 
 const MyChildrenPage = () => {
@@ -77,6 +78,7 @@ const MyChildrenPage = () => {
                 <h1>کودکان من</h1>
                 <span className="page-nav-final-spacer" aria-hidden="true" />
             </nav>
+            <WithLeftAds>
             <div className="children-content-final">
                 <button type="button" onClick={() => history.push('/add-child')} className="add-child-btn-final">
                     <FontAwesomeIcon icon={faPlus} />
@@ -145,6 +147,7 @@ const MyChildrenPage = () => {
                     )}
                 </div>
             </div>
+            </WithLeftAds>
         </div>
     );
 };

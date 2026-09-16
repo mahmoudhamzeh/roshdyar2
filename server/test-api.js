@@ -105,6 +105,11 @@ async function run() {
         const news = await request('GET', '/api/news');
         assert.strictEqual(news.status, 200);
         assert.ok(Array.isArray(news.data) && news.data.length >= 1);
+        const sidebarBanners = await request('GET', '/api/banners?placement=sidebar');
+        assert.strictEqual(sidebarBanners.status, 200);
+        assert.ok(Array.isArray(sidebarBanners.data));
+        const serverSrc = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+        assert.ok(/placement === 'sidebar'/.test(serverSrc), 'banner API must accept sidebar placement');
 
         const products = await request('GET', '/api/shop/products');
         assert.strictEqual(products.status, 200);

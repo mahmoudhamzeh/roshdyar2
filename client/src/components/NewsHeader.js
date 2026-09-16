@@ -51,6 +51,7 @@ const NewsHeader = ({ categories }) => {
 
     const categoryLinks = [
         <Link key="all" to="/news" onClick={closeMenu}>همه</Link>,
+        <Link key="news" to="/news?type=news" onClick={closeMenu}>اخبار</Link>,
         ...tree.map((category) => (
             <Link
                 key={category.id}

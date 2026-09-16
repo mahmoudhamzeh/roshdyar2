@@ -6,6 +6,7 @@ import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
 import TicketsPage from './TicketsPage';
 import MainNavbar from './MainNavbar';
+import { WithLeftAds } from './PageAdRail';
 import { clearAuthSession, getLoggedInUser } from '../api';
 import { getChildDisplayName } from '../utils/childName';
 import './ProfilePage.css';
@@ -137,9 +138,11 @@ const ProfilePage = () => {
                 </button>
             </nav>
 
+            <WithLeftAds>
             <main className="profile-content">
                 {renderContent()}
             </main>
+            </WithLeftAds>
 
             <Modal
                 isOpen={childrenOpen}

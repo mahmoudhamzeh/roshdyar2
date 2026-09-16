@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import RichTextEditor from '../magazine/RichTextEditor';
+import { typeLabel } from '../../utils/magazine';
 import './ArticleManagement.css';
 import '../magazine/Magazine.css';
+
+const TYPE_FILTERS = [
+    { id: 'all', label: 'همه' },
+    { id: 'article', label: 'مقاله' },
+    { id: 'news', label: 'خبر' },
+    { id: 'video', label: 'ویدیو' },
+    { id: 'podcast', label: 'پادکست' }
+];
 
 const emptyForm = {
     type: 'article',
@@ -139,9 +148,9 @@ const MagazinePostManagement = ({ defaultType }) => {
         <div className="article-management">
             <h2>مدیریت محتوای مجله سلامت</h2>
             <div className="magazine-filters">
-                {['all', 'article', 'video', 'podcast'].map((item) => (
-                    <button key={item} type="button" className={typeFilter === item ? 'is-active' : ''} onClick={() => setTypeFilter(item)}>
-                        {item === 'all' ? 'همه' : item === 'article' ? 'مقاله' : item === 'video' ? 'ویدیو' : 'پادکست'}
+                {TYPE_FILTERS.map((item) => (
+                    <button key={item.id} type="button" className={typeFilter === item.id ? 'is-active' : ''} onClick={() => setTypeFilter(item.id)}>
+                        {item.label}
                     </button>
                 ))}
             </div>
@@ -153,6 +162,7 @@ const MagazinePostManagement = ({ defaultType }) => {
                     <label>نوع محتوا</label>
                     <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
                         <option value="article">مقاله متنی</option>
+                        <option value="news">خبر</option>
                         <option value="video">مقاله ویدیویی</option>
                         <option value="podcast">پادکست / صوتی</option>
                     </select>
@@ -228,7 +238,7 @@ const MagazinePostManagement = ({ defaultType }) => {
                     <div key={post.id} className="article-item">
                         <div className="article-item-info">
                             <h3>{post.title}</h3>
-                            <p>{post.type} · {post.categoryName} · {post.readingTimeMinutes} دقیقه</p>
+                            <p>{typeLabel(post.type)} · {post.categoryName} · {post.readingTimeMinutes} دقیقه</p>
                         </div>
                         <div className="article-item-actions">
                             <button type="button" className="btn-edit" onClick={() => edit(post)}>ویرایش</button>

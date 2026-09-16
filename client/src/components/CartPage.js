@@ -16,6 +16,7 @@ import {
     formatPrice,
 } from '../utils/cart';
 import './CartPage.css';
+import { WithLeftAds } from './PageAdRail';
 
 const API = '';
 
@@ -109,6 +110,7 @@ const CartPage = () => {
         <div className="cart-page shop-world">
             <MainNavbar />
             <main className="cart-main">
+                <WithLeftAds>
                 <div className="cart-header animate-fade-up">
                     <Link to="/shop" className="product-back">
                         <FontAwesomeIcon icon={faArrowRight} />
@@ -214,6 +216,7 @@ const CartPage = () => {
                         </aside>
                     </div>
                 )}
+                </WithLeftAds>
             </main>
             <Footer />
         </div>
