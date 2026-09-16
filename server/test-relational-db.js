@@ -108,6 +108,15 @@ function run() {
     assert.ok(vendor && vendor.slug === 'tatkids');
     assert.ok(store.shop.listSkills().length >= 5);
     assert.ok(product.offerId || product.vendorName);
+    const productOffers = store.shop.listOffers(product.id) || [];
+    const ranges = store.shop.offerPriceRanges([product.id]);
+    if (productOffers.length) {
+        const range = ranges[product.id];
+        assert.ok(range, 'offerPriceRanges should include catalog products with offers');
+        const prices = productOffers.map((offer) => Number(offer.price));
+        assert.strictEqual(range.minPrice, Math.min(...prices));
+        assert.strictEqual(range.maxPrice, Math.max(...prices));
+    }
     const pgSrc = fs.readFileSync(path.join(__dirname, 'db-pg.js'), 'utf8');
     assert.ok(
         /ALTER TABLE otp_codes ALTER COLUMN expires_at TYPE BIGINT/.test(pgSrc),

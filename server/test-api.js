@@ -633,13 +633,37 @@ async function run() {
         assert.ok(Array.isArray(vendorCatalog.data) && vendorCatalog.data.length >= 1);
         const existingSku = vendorCatalog.data.find((item) => Number(item.id) !== Number(vendorProduct.data.id));
         assert.ok(existingSku, 'catalog must contain another product');
+        assert.ok(existingSku.minPrice != null && existingSku.maxPrice != null, JSON.stringify(existingSku));
+        assert.ok(Number(existingSku.minPrice) <= Number(existingSku.maxPrice));
+
+        const catalogSearch = await request('GET', `/api/vendor/catalog?q=${encodeURIComponent(String(existingSku.name).slice(0, 4))}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(catalogSearch.status, 200, JSON.stringify(catalogSearch.data));
+        assert.ok(catalogSearch.data.some((item) => Number(item.id) === Number(existingSku.id)));
+
+        const badPrice = await request('POST', '/api/vendor/offers', {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { productId: existingSku.id, price: 'abc', stock: 1 }
+        });
+        assert.strictEqual(badPrice.status, 400);
 
         const sellExisting = await request('POST', '/api/vendor/offers', {
             headers: { Authorization: `Bearer ${verify.data.token}` },
-            body: { productId: existingSku.id, price: 210000, stock: 3 }
+            body: { productId: existingSku.id, price: '۲۱۰۰۰۰', stock: '۳' }
         });
         assert.strictEqual(sellExisting.status, 201, JSON.stringify(sellExisting.data));
         assert.strictEqual(Number(sellExisting.data.productId), Number(existingSku.id));
+        assert.strictEqual(Number(sellExisting.data.price), 210000);
+        assert.strictEqual(Number(sellExisting.data.stock), 3);
+
+        const editPersian = await request('PUT', `/api/vendor/offers/${sellExisting.data.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { price: '۲۲۰۰۰۰', stock: '۴' }
+        });
+        assert.strictEqual(editPersian.status, 200, JSON.stringify(editPersian.data));
+        assert.strictEqual(Number(editPersian.data.price), 220000);
+        assert.strictEqual(Number(editPersian.data.stock), 4);
 
         const pdp = await request('GET', `/api/shop/products/${existingSku.id}`);
         assert.strictEqual(pdp.status, 200, JSON.stringify(pdp.data));

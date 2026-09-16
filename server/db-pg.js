@@ -2648,6 +2648,9 @@ module.exports = {
         listOffersByVendor(vendorId) {
             return shopStore.listOffersByVendorPg(many, vendorId);
         },
+        offerPriceRanges(productIds) {
+            return shopStore.offerPriceRangesPg(many, productIds);
+        },
         requestPayout(vendorId, amount, note) {
             return shopStore.requestPayoutPg(q, many, vendorId, amount, note);
         },

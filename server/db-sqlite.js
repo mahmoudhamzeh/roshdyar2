@@ -2766,6 +2766,10 @@ module.exports = {
             connect();
             return shopStore.listOffersByVendorSqlite(db, vendorId);
         },
+        offerPriceRanges(productIds) {
+            connect();
+            return shopStore.offerPriceRangesSqlite(db, productIds);
+        },
         requestPayout(vendorId, amount, note) {
             connect();
             return shopStore.requestPayoutSqlite(db, vendorId, amount, note);
