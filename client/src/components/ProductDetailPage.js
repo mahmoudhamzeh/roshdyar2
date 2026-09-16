@@ -203,6 +203,7 @@ const ProductDetailPage = () => {
             <MainNavbar />
             <main className="product-detail-main">
                 <WithLeftAds>
+                <div>
                 <ShopBreadcrumb items={crumbs} />
 
                 {loading && <p className="shop-status">در حال بارگذاری...</p>}
@@ -521,6 +522,7 @@ const ProductDetailPage = () => {
                         <ProductRail title="پیشنهاد برای شما" products={product.recommended || []} />
                     </>
                 )}
+                </div>
                 </WithLeftAds>
             </main>
             <CartAddedModal

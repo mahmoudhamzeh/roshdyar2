@@ -64,6 +64,7 @@ const OrdersPage = () => {
             <MainNavbar />
             <main className="orders-main">
                 <WithLeftAds>
+                <div>
                 <div className="orders-header animate-fade-up">
                     <Link to="/shop" className="product-back">
                         <FontAwesomeIcon icon={faArrowRight} />
@@ -123,6 +124,7 @@ const OrdersPage = () => {
                         ))}
                     </div>
                 )}
+                </div>
                 </WithLeftAds>
             </main>
             <Footer />
