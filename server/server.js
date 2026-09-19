@@ -91,7 +91,7 @@ const uploadProductImages = (req, res, next) => {
         if (!err) return next();
         if (err && err.name === 'MulterError') {
             if (err.code === 'LIMIT_UNEXPECTED_FILE' || err.code === 'LIMIT_FILE_COUNT') {
-                return res.status(400).json({ message: `حداکثر ${PRODUCT_IMAGE_MAX} تصویر برای هر محصول مجاز است` });
+                return res.status(400).json({ message: `حداکثر ۲۰ تصویر برای هر محصول مجاز است` });
             }
             if (err.code === 'LIMIT_FILE_SIZE') {
                 return res.status(400).json({ message: 'حجم هر تصویر باید کمتر از ۸ مگابایت باشد' });

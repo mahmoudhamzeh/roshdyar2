@@ -320,7 +320,7 @@ const ProductManagement = () => {
                         onChange={(e) => {
                             const files = Array.from(e.target.files || []);
                             if (files.length > MAX_PRODUCT_IMAGES) {
-                                alert(`حداکثر ${MAX_PRODUCT_IMAGES} تصویر می‌توانید انتخاب کنید.`);
+                                alert(`حداکثر ۲۰ تصویر می‌توانید انتخاب کنید.`);
                             }
                             setForm((p) => ({ ...p, images: files.slice(0, MAX_PRODUCT_IMAGES) }));
                         }}
