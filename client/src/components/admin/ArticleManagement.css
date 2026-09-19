@@ -23,7 +23,7 @@
     flex-direction: column;
 }
 
-.article-form input,
+.article-form input:not(.magazine-editor-file),
 .article-form textarea {
     width: 100%;
     padding: 0.75rem;

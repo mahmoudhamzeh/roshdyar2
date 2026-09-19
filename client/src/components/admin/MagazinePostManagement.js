@@ -169,7 +169,11 @@ const MagazinePostManagement = ({ defaultType }) => {
                     <input required placeholder="عنوان" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
                     <textarea placeholder="خلاصه" rows="3" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} />
                     <label>متن کامل (ویرایشگر غنی)</label>
-                    <RichTextEditor value={form.content} onChange={(content) => setForm({ ...form, content })} onUpload={uploadInline} />
+                    <RichTextEditor
+                        value={form.content}
+                        onChange={(content) => setForm((prev) => ({ ...prev, content }))}
+                        onUpload={uploadInline}
+                    />
                     <label>دسته‌بندی</label>
                     <select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
                         <option value="">بدون دسته</option>
