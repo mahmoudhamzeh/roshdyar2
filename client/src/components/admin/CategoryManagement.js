@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { findCategoryPathById, flattenCategories } from '../../utils/shop';
+import { categoryMatchesQuery, findCategoryPathById, flattenCategories } from '../../utils/shop';
 import './ProductManagement.css';
 import './CategoryManagement.css';
 
@@ -9,12 +9,11 @@ const pathLabel = (tree, node) =>
     findCategoryPathById(tree, node.id).map((item) => item.name).join(' ‹ ');
 
 const filterTree = (nodes, query) => {
-    const q = String(query || '').trim().toLowerCase();
-    if (!q) return nodes || [];
+    if (!String(query || '').trim()) return nodes || [];
     const walk = (list) => {
         const result = [];
         (list || []).forEach((node) => {
-            const self = String(node.name || '').toLowerCase().includes(q);
+            const self = categoryMatchesQuery(node, query);
             const children = walk(node.children || []);
             if (self) result.push({ ...node, children: node.children || [], forcedOpen: true });
             else if (children.length) result.push({ ...node, children, forcedOpen: true });
@@ -82,12 +81,7 @@ const CategoryManagement = () => {
     const visibleTree = useMemo(() => filterTree(tree, search), [tree, search]);
     const flat = useMemo(() => flattenCategories(tree), [tree]);
     const parentOptions = useMemo(() => {
-        const q = parentQuery.trim().toLowerCase();
-        return flat.filter((node) => (
-            !q
-            || String(node.name || '').toLowerCase().includes(q)
-            || pathLabel(tree, node).toLowerCase().includes(q)
-        ));
+        return flat.filter((node) => categoryMatchesQuery(node, parentQuery, pathLabel(tree, node)));
     }, [flat, parentQuery, tree]);
     const selectedParent = flat.find((node) => String(node.id) === String(parentId));
 
@@ -149,7 +143,7 @@ const CategoryManagement = () => {
         setParentId(String(node.id));
         setParentQuery('');
         setName('');
-        setHint(`زیرگروه برای «${pathLabel(tree, node)}»`);
+        setHint(`زیرگروه برای «${pathLabel(tree, node) || node.name}»`);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -207,27 +201,35 @@ const CategoryManagement = () => {
                     <div className="cat-parent-picker">
                         <p>این زیرگروه مال کدام گروه باشد؟</p>
                         {selectedParent && (
-                            <strong className="cat-parent-chosen">انتخاب‌شده: {pathLabel(tree, selectedParent)}</strong>
+                            <strong className="cat-parent-chosen">
+                                انتخاب‌شده: {pathLabel(tree, selectedParent) || selectedParent.name}
+                            </strong>
                         )}
                         <input
                             value={parentQuery}
                             onChange={(e) => setParentQuery(e.target.value)}
-                            placeholder="جستجوی گروه والد"
+                            placeholder="جستجوی نام گروه، مثلاً اسباب‌بازی یا موسیقی"
                         />
                         <ul>
                             {parentOptions.length === 0 && <li className="cat-empty">گروهی پیدا نشد.</li>}
-                            {parentOptions.map((node) => (
-                                <li key={node.id}>
-                                    <button
-                                        type="button"
-                                        className={String(node.id) === String(parentId) ? 'is-on' : ''}
-                                        onClick={() => setParentId(String(node.id))}
-                                    >
-                                        <span>{pathLabel(tree, node)}</span>
-                                        <em>{DEPTH_LABELS[Math.min(node.depth || 0, DEPTH_LABELS.length - 1)]}</em>
-                                    </button>
-                                </li>
-                            ))}
+                            {parentOptions.map((node) => {
+                                const path = pathLabel(tree, node);
+                                return (
+                                    <li key={node.id}>
+                                        <button
+                                            type="button"
+                                            className={String(node.id) === String(parentId) ? 'is-on' : ''}
+                                            onClick={() => setParentId(String(node.id))}
+                                        >
+                                            <span className="cat-parent-copy">
+                                                <strong>{node.name}</strong>
+                                                {path && path !== node.name && <small>{path}</small>}
+                                            </span>
+                                            <em>{DEPTH_LABELS[Math.min(node.depth || 0, DEPTH_LABELS.length - 1)]}</em>
+                                        </button>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
                 )}
