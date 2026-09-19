@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
 import { AGE_BANDS, GENDER_OPTIONS, findCategoryPath } from '../../utils/shop';
+import { MAX_PRODUCT_IMAGES } from '../../utils/productAttrs';
 import CategoryCascade from '../CategoryCascade';
 import ProductAttrFields from '../ProductAttrFields';
 import './ProductManagement.css';
@@ -117,7 +118,7 @@ const ProductManagement = () => {
         formData.append('gender', form.gender || 'unisex');
         formData.append('skillIds', JSON.stringify(form.skillIds || []));
         formData.append('attrs', JSON.stringify(form.attrs || {}));
-        Array.from(form.images || []).forEach((file) => formData.append('images', file));
+        Array.from(form.images || []).slice(0, MAX_PRODUCT_IMAGES).forEach((file) => formData.append('images', file));
 
         try {
             const url = editingId
@@ -215,6 +216,8 @@ const ProductManagement = () => {
                     <ProductAttrFields
                         tree={categories}
                         category={form.category}
+                        productName={form.name}
+                        resetKey={editingId || 'new'}
                         attrs={form.attrs}
                         onChange={(attrs) => setForm((p) => ({ ...p, attrs }))}
                     />
@@ -309,13 +312,22 @@ const ProductManagement = () => {
                         />
                         فعال در فروشگاه
                     </label>
-                    <label>تصاویر محصول (چند فایل)</label>
+                    <label>تصاویر محصول (حداکثر {MAX_PRODUCT_IMAGES} فایل)</label>
                     <input
                         type="file"
                         accept="image/*"
                         multiple
-                        onChange={(e) => setForm((p) => ({ ...p, images: e.target.files }))}
+                        onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            if (files.length > MAX_PRODUCT_IMAGES) {
+                                alert(`حداکثر ۲۰ تصویر می‌توانید انتخاب کنید.`);
+                            }
+                            setForm((p) => ({ ...p, images: files.slice(0, MAX_PRODUCT_IMAGES) }));
+                        }}
                     />
+                    {form.images && form.images.length > 0 && (
+                        <p className="category-hint">{form.images.length} تصویر انتخاب شد</p>
+                    )}
                     <div className="product-form-actions">
                         <button type="submit">{editingId ? 'ذخیره تغییرات' : 'ایجاد محصول'}</button>
                         {editingId && (

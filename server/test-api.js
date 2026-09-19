@@ -42,6 +42,57 @@ function request(method, urlPath, { body, headers } = {}) {
     });
 }
 
+const TINY_PNG = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64'
+);
+
+function requestMultipart(method, urlPath, { fields = {}, files = [], headers = {} } = {}) {
+    const boundary = '----TatKidsFormBoundary7MA4YWxkTrZu0gW';
+    const chunks = [];
+    Object.entries(fields).forEach(([name, value]) => {
+        chunks.push(Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+        ));
+    });
+    files.forEach((file) => {
+        chunks.push(Buffer.from(
+            `--${boundary}\r\nContent-Disposition: form-data; name="${file.field || 'images'}"; filename="${file.filename}"\r\nContent-Type: ${file.contentType || 'image/png'}\r\n\r\n`
+        ));
+        chunks.push(file.body);
+        chunks.push(Buffer.from('\r\n'));
+    });
+    chunks.push(Buffer.from(`--${boundary}--\r\n`));
+    const body = Buffer.concat(chunks);
+    return new Promise((resolve, reject) => {
+        const req = http.request(
+            {
+                hostname: '127.0.0.1',
+                port,
+                path: urlPath,
+                method,
+                headers: {
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                    'Content-Length': body.length,
+                    ...headers
+                }
+            },
+            (res) => {
+                let raw = '';
+                res.on('data', (chunk) => { raw += chunk; });
+                res.on('end', () => {
+                    let data = raw;
+                    try { data = raw ? JSON.parse(raw) : null; } catch (_) { /* keep */ }
+                    resolve({ status: res.statusCode, data });
+                });
+            }
+        );
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
 function waitForHealth(child, timeoutMs = 15000) {
     const started = Date.now();
     return new Promise((resolve, reject) => {
@@ -184,6 +235,60 @@ async function run() {
         });
         assert.strictEqual(supplement.status, 201, JSON.stringify(supplement.data));
         assert.strictEqual(supplement.data.attrs.expiryDate, '2027-03-01');
+
+        const helicopter = await request('POST', '/api/admin/products', {
+            headers: auth,
+            body: {
+                name: 'هلیکوپتر کنترلی',
+                category: 'حرکتی',
+                price: 450000,
+                stock: 4,
+                brand: 'تات کیدز',
+                attrs: {
+                    hasRemote: 'بله',
+                    batteryLife: '۲۰ دقیقه پرواز',
+                    'برد کنترل': '۳۰ متر'
+                }
+            }
+        });
+        assert.strictEqual(helicopter.status, 201, JSON.stringify(helicopter.data));
+        assert.strictEqual(helicopter.data.attrs.hasRemote, 'بله');
+        assert.strictEqual(helicopter.data.attrs.batteryLife, '۲۰ دقیقه پرواز');
+        assert.strictEqual(helicopter.data.attrs['برد کنترل'], '۳۰ متر');
+
+        const nineFiles = Array.from({ length: 9 }, (_, index) => ({
+            filename: `heli-${index + 1}.png`,
+            body: TINY_PNG
+        }));
+        const heliUpload = await requestMultipart('POST', '/api/admin/products', {
+            headers: auth,
+            fields: {
+                name: 'هلیکوپتر با ۹ عکس',
+                category: 'ماشین',
+                price: '380000',
+                stock: '2',
+                attrs: JSON.stringify({ hasRemote: 'بله', batteryLife: '۱۵ دقیقه' })
+            },
+            files: nineFiles
+        });
+        assert.strictEqual(heliUpload.status, 201, JSON.stringify(heliUpload.data));
+        assert.ok((heliUpload.data.images || []).length >= 1 || heliUpload.data.imageUrl);
+
+        const tooMany = await requestMultipart('POST', '/api/admin/products', {
+            headers: auth,
+            fields: {
+                name: 'محصول با عکس زیاد',
+                category: 'ماشین',
+                price: '10000',
+                stock: '1'
+            },
+            files: Array.from({ length: 21 }, (_, index) => ({
+                filename: `extra-${index + 1}.png`,
+                body: TINY_PNG
+            }))
+        });
+        assert.strictEqual(tooMany.status, 400, JSON.stringify(tooMany.data));
+        assert.ok(String(tooMany.data && tooMany.data.message).includes('۲۰'));
 
         const children = await request('GET', '/api/children', {
             headers: auth
