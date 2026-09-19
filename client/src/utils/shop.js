@@ -56,6 +56,24 @@ export const flattenCategories = (tree, depth = 0) => {
     return out;
 };
 
+export const normalizeCategoryQuery = (value) =>
+    String(value || '')
+        .replace(/[\u200c\u200d\u00ad]/g, ' ')
+        .replace(/[يى]/g, 'ی')
+        .replace(/ك/g, 'ک')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
+export const categoryMatchesQuery = (node, query, extra = '') => {
+    const q = normalizeCategoryQuery(query);
+    if (!q) return true;
+    const haystack = normalizeCategoryQuery(`${node && node.name ? node.name : ''} ${extra || ''}`);
+    const compactQ = q.replace(/ /g, '');
+    const compactHay = haystack.replace(/ /g, '');
+    return haystack.includes(q) || (compactQ.length >= 2 && compactHay.includes(compactQ));
+};
+
 export const findCategoryPath = (tree, name) => {
     if (!name || name === 'همه') return [];
     const walk = (nodes, acc) => {
@@ -81,11 +99,12 @@ export const findCategoryById = (tree, id) => {
 };
 
 export const findCategoryPathById = (tree, id, acc = []) => {
+    if (id == null || id === '') return [];
     for (const node of tree || []) {
         const next = [...acc, node];
         if (String(node.id) === String(id)) return next;
         const found = findCategoryPathById(node.children || [], id, next);
-        if (found) return found;
+        if (found.length) return found;
     }
     return [];
 };

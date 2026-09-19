@@ -156,6 +156,31 @@
   flex-shrink: 0;
 }
 
+.cat-parent-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  min-width: 0;
+  text-align: right;
+}
+
+.cat-parent-copy strong {
+  font-size: 0.95rem;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.cat-parent-copy small {
+  color: #6b7c78;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cat-parent-picker li button.is-on .cat-parent-copy small {
+  color: #ccfbf1;
+}
+
 .cat-parent-picker li button.is-on em {
   color: #ccfbf1;
 }
