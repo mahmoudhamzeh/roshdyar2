@@ -149,9 +149,9 @@ function parseProductAttrs(raw) {
     Object.keys(value).slice(0, 40).forEach((key) => {
         const item = value[key];
         if (item == null) return;
-        const text = String(item).trim().slice(0, 200);
+        const text = String(item).trim().slice(0, 300);
         if (!text) return;
-        out[String(key).slice(0, 40)] = text;
+        out[String(key).slice(0, 80)] = text;
     });
     return out;
 }

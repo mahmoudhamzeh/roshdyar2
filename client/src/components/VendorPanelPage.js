@@ -21,6 +21,7 @@ import {
 import { clearAuthSession } from '../api';
 import { formatPrice } from '../utils/cart';
 import { findCategoryPath } from '../utils/shop';
+import { MAX_PRODUCT_IMAGES } from '../utils/productAttrs';
 import CategoryCascade from './CategoryCascade';
 import ProductAttrFields from './ProductAttrFields';
 import './VendorPanelPage.css';
@@ -290,7 +291,7 @@ const VendorPanelPage = () => {
             body.append(key, value);
         });
         if (productForm.images) {
-            Array.from(productForm.images).forEach((file) => body.append('images', file));
+            Array.from(productForm.images).slice(0, MAX_PRODUCT_IMAGES).forEach((file) => body.append('images', file));
         }
         const res = await fetch(url, { method, body });
         const data = await res.json().catch(() => ({}));
@@ -800,6 +801,8 @@ const VendorPanelPage = () => {
                                                 <ProductAttrFields
                                                     tree={categories}
                                                     category={productForm.category}
+                                                    productName={productForm.name}
+                                                    resetKey={(editingProduct && editingProduct.id) || 'new'}
                                                     attrs={productForm.attrs || {}}
                                                     onChange={(attrs) => setProductForm((p) => ({ ...p, attrs }))}
                                                 />
@@ -814,8 +817,19 @@ const VendorPanelPage = () => {
                                                         <input value={productForm.stock} onChange={(e) => setProductForm((p) => ({ ...p, stock: e.target.value }))} />
                                                     </Field>
                                                 </div>
-                                                <Field label="عکس محصول">
-                                                    <input type="file" accept="image/*" multiple onChange={(e) => setProductForm((p) => ({ ...p, images: e.target.files }))} />
+                                                <Field label={`عکس محصول (حداکثر ${MAX_PRODUCT_IMAGES} فایل)`}>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        multiple
+                                                        onChange={(e) => {
+                                                            const files = Array.from(e.target.files || []);
+                                                            if (files.length > MAX_PRODUCT_IMAGES) {
+                                                                setMessage(`حداکثر ${MAX_PRODUCT_IMAGES} تصویر می‌توانید انتخاب کنید.`);
+                                                            }
+                                                            setProductForm((p) => ({ ...p, images: files.slice(0, MAX_PRODUCT_IMAGES) }));
+                                                        }}
+                                                    />
                                                 </Field>
                                                 <div className="vendor-form-actions">
                                                     {editingProduct && (
