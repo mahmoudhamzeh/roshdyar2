@@ -228,6 +228,45 @@ async function run() {
         assert.strictEqual(videoDetail.data.type, 'video');
         assert.ok(videoDetail.data.videoUrl || videoDetail.data.videoEmbedUrl);
 
+        const editorSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/magazine/RichTextEditor.js'), 'utf8');
+        assert.ok(editorSrc.includes('lastHtml'), 'editor must keep caret while typing');
+        assert.ok(editorSrc.includes('type="file"'), 'image button must open a file picker');
+        assert.ok(!/نشانی تصویر را وارد کنید/.test(editorSrc), 'image insert must not start with a URL prompt');
+
+        const boundary = `----mag${Date.now()}`;
+        const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+        const fileBody = Buffer.concat([
+            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="inline.png"\r\nContent-Type: image/png\r\n\r\n`),
+            png,
+            Buffer.from(`\r\n--${boundary}--\r\n`)
+        ]);
+        const uploaded = await new Promise((resolve, reject) => {
+            const req = http.request({
+                hostname: '127.0.0.1',
+                port,
+                path: '/api/admin/magazine/upload',
+                method: 'POST',
+                headers: {
+                    Authorization: auth.Authorization,
+                    'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                    'Content-Length': fileBody.length
+                }
+            }, (res) => {
+                let raw = '';
+                res.on('data', (chunk) => { raw += chunk; });
+                res.on('end', () => {
+                    let data = raw;
+                    try { data = raw ? JSON.parse(raw) : null; } catch (_) {}
+                    resolve({ status: res.statusCode, data });
+                });
+            });
+            req.on('error', reject);
+            req.write(fileBody);
+            req.end();
+        });
+        assert.strictEqual(uploaded.status, 201, JSON.stringify(uploaded.data));
+        assert.ok(uploaded.data.url && uploaded.data.url.startsWith('/uploads/'));
+
         const legacyNews = await request('GET', '/api/news');
         assert.strictEqual(legacyNews.status, 200);
         assert.ok(Array.isArray(legacyNews.data) && legacyNews.data.length >= 1);
