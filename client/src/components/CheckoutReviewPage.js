@@ -57,6 +57,9 @@ const CheckoutReviewPage = () => {
                     lat: draft.lat,
                     lng: draft.lng,
                     addressId: draft.addressId,
+                    recipient: draft.recipient,
+                    recipientType: draft.recipientType,
+                    recipientPhone: draft.recipientPhone,
                     startPayment: true
                 })
             });
@@ -106,9 +109,20 @@ const CheckoutReviewPage = () => {
                 </section>
 
                 <section className="checkout-card">
+                    <h2>تحویل گیرنده</h2>
+                    <p>
+                        {draft.recipientType === 'other' ? 'شخص دیگری' : 'خودم'}
+                        {draft.recipient ? ` — ${draft.recipient}` : ''}
+                    </p>
+                    {draft.recipientPhone && <p className="checkout-muted">{draft.recipientPhone}</p>}
+                </section>
+
+                <section className="checkout-card">
                     <h2>آدرس ارسال</h2>
-                    <p>{draft.recipient ? `${draft.recipient} — ` : ''}{formatAddressLine(draft.shippingAddress)}</p>
-                    {draft.phone && <p className="checkout-muted">{draft.phone}</p>}
+                    <p>{formatAddressLine(draft.shippingAddress)}</p>
+                    {draft.phone && draft.phone !== draft.recipientPhone && (
+                        <p className="checkout-muted">{draft.phone}</p>
+                    )}
                 </section>
 
                 <section className="checkout-card">

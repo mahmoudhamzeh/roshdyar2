@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useHistory } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrash, faStore, faArrowRight } from '@fortawesome/free-solid-svg-icons';
@@ -17,7 +17,8 @@ import {
     cartLineKey,
     formatPrice,
 } from '../utils/cart';
-import { getLoggedInUser } from '../api';
+import { getAuthToken, getLoggedInUser, setAuthSession } from '../api';
+import { isUserProfileComplete, profileCompletePath, userFullName } from '../utils/profile';
 import './CartPage.css';
 
 const API = '';
@@ -25,14 +26,41 @@ const API = '';
 const CartPage = () => {
     const history = useHistory();
     const [cart, setCart] = useState(getCart());
+    const [buyer, setBuyer] = useState(getLoggedInUser());
+    const [profileError, setProfileError] = useState('');
 
     const refresh = (next) => setCart(next || getCart());
 
+    useEffect(() => {
+        const logged = getLoggedInUser();
+        if (!logged || !logged.id) {
+            setBuyer(null);
+            return;
+        }
+        let cancelled = false;
+        fetch(`/api/users/${logged.id}`)
+            .then((res) => (res.ok ? res.json() : logged))
+            .then((data) => {
+                if (cancelled) return;
+                setBuyer(data);
+                if (data && data.id) setAuthSession(data, getAuthToken());
+            })
+            .catch(() => {
+                if (!cancelled) setBuyer(logged);
+            });
+        return () => { cancelled = true; };
+    }, []);
+
     const handleCheckout = () => {
         if (cart.length === 0) return;
-        const user = getLoggedInUser();
+        const user = buyer || getLoggedInUser();
         if (!user || !user.id) {
             history.push('/login?next=/checkout/shipping');
+            return;
+        }
+        if (!isUserProfileComplete(user)) {
+            setProfileError('برای ثبت سفارش ابتدا نام و نام خانوادگی را در پروفایل تکمیل کنید.');
+            history.push(profileCompletePath('/cart'));
             return;
         }
         history.push('/checkout/shipping');
@@ -43,6 +71,8 @@ const CartPage = () => {
     const discount = getCartDiscount(cart);
     const total = getCartTotal(cart);
     const vendorGroups = groupCartByVendor(cart);
+    const profileReady = isUserProfileComplete(buyer);
+    const buyerName = userFullName(buyer);
 
     return (
         <div className="cart-page shop-world">
@@ -111,6 +141,21 @@ const CartPage = () => {
 
                         <aside className="cart-checkout animate-fade-up" aria-label="صورتحساب">
                             <h2>صورتحساب</h2>
+                            <div className="cart-buyer">
+                                <span>خریدار</span>
+                                {buyer && buyer.id ? (
+                                    profileReady ? (
+                                        <strong>{buyerName}</strong>
+                                    ) : (
+                                        <div className="cart-buyer-missing">
+                                            <p>نام و نام خانوادگی در پروفایل ثبت نشده است.</p>
+                                            <Link to={profileCompletePath('/cart')}>تکمیل پروفایل</Link>
+                                        </div>
+                                    )
+                                ) : (
+                                    <p className="cart-buyer-missing">برای ثبت سفارش ابتدا وارد شوید.</p>
+                                )}
+                            </div>
                             <div className="cart-invoice">
                                 <div className="cart-invoice-row">
                                     <span>مجموع قیمت کالاها ({itemCount.toLocaleString('fa-IR')} کالا)</span>
@@ -126,8 +171,14 @@ const CartPage = () => {
                                 </div>
                             </div>
                             <p className="cart-shipping-note">هزینه ارسال این مرحله ۰ تومان است و هر فروشنده جداگانه آماده‌سازی می‌کند.</p>
-                            <button type="button" className="cart-submit" onClick={handleCheckout}>
-                                ثبت سفارش
+                            {profileError && <p className="cart-error">{profileError}</p>}
+                            <button
+                                type="button"
+                                className="cart-submit"
+                                onClick={handleCheckout}
+                                disabled={Boolean(buyer && buyer.id) && !profileReady}
+                            >
+                                {buyer && buyer.id && !profileReady ? 'ابتدا پروفایل را تکمیل کنید' : 'ثبت سفارش'}
                             </button>
                         </aside>
                     </div>

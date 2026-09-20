@@ -300,6 +300,18 @@
   cursor: not-allowed;
 }
 
+.user-info-datepicker {
+  width: 100%;
+  z-index: 20;
+}
+
+.user-info-datepicker .rmdp-container,
+.user-info-datepicker .rmdp-wrapper,
+.user-info-datepicker .rmdp-input,
+.user-info-datepicker input {
+  width: 100%;
+}
+
 .user-info-actions {
   display: flex;
   justify-content: flex-start;
@@ -559,8 +571,7 @@
   }
 
   .profile-messages-wrap .messages-page .card,
-  .profile-content .card,
-  .user-info-card {
+  .profile-content .card {
     overflow: hidden;
   }
 }

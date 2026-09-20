@@ -220,12 +220,12 @@ const ChildGrowthPage = () => {
                 <div className="cg-stat-grid">
                     <article className={`cg-stat is-${statusPhrase(heightAnalysis?.status).tone}`}>
                         <span>قد</span>
-                        <strong>{heightAnalysis?.value != null ? `${heightAnalysis.value} سم` : '—'}</strong>
+                        <strong>{heightAnalysis?.value != null ? `${heightAnalysis.value} سانتی‌متر` : '—'}</strong>
                         <small>{metricCaption(heightAnalysis)}</small>
                     </article>
                     <article className={`cg-stat is-${statusPhrase(weightAnalysis?.status).tone}`}>
                         <span>وزن</span>
-                        <strong>{weightAnalysis?.value != null ? `${weightAnalysis.value} کگ` : '—'}</strong>
+                        <strong>{weightAnalysis?.value != null ? `${weightAnalysis.value} کیلوگرم` : '—'}</strong>
                         <small>{metricCaption(weightAnalysis)}</small>
                     </article>
                     <article className={`cg-stat is-${illnesses.length || allergies.length ? 'watch' : 'ok'}`}>

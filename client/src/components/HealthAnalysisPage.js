@@ -118,9 +118,9 @@ const HealthAnalysisPage = () => {
     const displayName = getChildDisplayName(child);
 
     const growthMetrics = [
-        { key: 'height', label: 'قد', unit: 'cm', data: growthTrend.height },
-        { key: 'weight', label: 'وزن', unit: 'kg', data: growthTrend.weight },
-        { key: 'headCircumference', label: 'دور سر', unit: 'cm', data: growthTrend.headCircumference }
+        { key: 'height', label: 'قد', unit: 'سانتی‌متر', data: growthTrend.height },
+        { key: 'weight', label: 'وزن', unit: 'کیلوگرم', data: growthTrend.weight },
+        { key: 'headCircumference', label: 'دور سر', unit: 'سانتی‌متر', data: growthTrend.headCircumference }
     ];
 
     const trendMeta = {

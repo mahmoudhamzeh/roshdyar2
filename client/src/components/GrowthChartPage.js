@@ -14,7 +14,7 @@ import { whoStats } from '../who-stats';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
 import {
     ageInMonths, formatLocalDate, normalizeDateString,
-    parseLocalDate, roundAgeMonths, formatAgeLabel
+    parseLocalDate, roundAgeMonths, formatAgeLabel, isFutureLocalDate
 } from '../utils/growth-dates';
 import { toShamsi } from '../utils/dateConverter';
 import { getChildDisplayName } from '../utils/childName';
@@ -294,6 +294,10 @@ const GrowthChartPage = () => {
             setFormError('تاریخ ثبت نمی‌تواند قبل از تاریخ تولد باشد.');
             return;
         }
+        if (isFutureLocalDate(formattedDate) || isFutureLocalDate(recordDate)) {
+            setFormError('نمی‌توان برای تاریخ آینده قد، وزن یا دور سر ثبت کرد.');
+            return;
+        }
 
         const payload = {
             date: formattedDate,
@@ -437,19 +441,19 @@ const GrowthChartPage = () => {
                 <MetricInfoCard
                     title="آخرین قد ثبت‌شده"
                     analysis={heightAnalysis}
-                    unit="cm"
+                    unit="سانتی‌متر"
                     statusClassName={getStatusClassName(heightAnalysis.status)}
                 />
                 <MetricInfoCard
                     title="آخرین وزن ثبت‌شده"
                     analysis={weightAnalysis}
-                    unit="kg"
+                    unit="کیلوگرم"
                     statusClassName={getStatusClassName(weightAnalysis.status)}
                 />
                 <MetricInfoCard
                     title="آخرین دور سر ثبت‌شده"
                     analysis={headAnalysis}
-                    unit="cm"
+                    unit="سانتی‌متر"
                     statusClassName={getStatusClassName(headAnalysis.status)}
                 />
             </div>
@@ -464,7 +468,7 @@ const GrowthChartPage = () => {
                         hint: 'این نمودار قد کودک را با صدک‌های سازمان بهداشت جهانی مقایسه می‌کند. اگر نقطه نزدیک خط میانه (صدک ۵۰) باشد رشد قد طبیعی است.',
                         data: formatMetricData('height'),
                         standardData: isBoy ? whoStats.heightForAgeBoys : whoStats.heightForAgeGirls,
-                        yAxisLabel: 'قد (cm)'
+                        yAxisLabel: 'قد (سانتی‌متر)'
                     },
                     {
                         id: 'weight',
@@ -474,7 +478,7 @@ const GrowthChartPage = () => {
                         hint: 'وزن نسبت به سن را نشان می‌دهد. نوسان کم طبیعی است؛ جهش یا افت ناگهانی را با پزشک مطرح کنید.',
                         data: formatMetricData('weight'),
                         standardData: isBoy ? whoStats.weightForAgeBoys : whoStats.weightForAgeGirls,
-                        yAxisLabel: 'وزن (kg)'
+                        yAxisLabel: 'وزن (کیلوگرم)'
                     },
                     {
                         id: 'head',
@@ -484,7 +488,7 @@ const GrowthChartPage = () => {
                         hint: 'دور سر شاخص رشد مغز در سال‌های نخست است. مسیر موازی با صدک‌ها معمولاً مطلوب است.',
                         data: formatMetricData('headCircumference'),
                         standardData: isBoy ? whoStats.headCircumferenceForAgeBoys : whoStats.headCircumferenceForAgeGirls,
-                        yAxisLabel: 'دور سر (cm)'
+                        yAxisLabel: 'دور سر (سانتی‌متر)'
                     }
                 ];
                 const activeChart = chartTabs.find((tab) => tab.id === chartTab) || chartTabs[0];
@@ -568,9 +572,9 @@ const GrowthChartPage = () => {
                                                         <span>{formatAgeLabel(age)}</span>
                                                     </div>
                                                     <div className="history-item-summary">
-                                                        <span>قد: {record.height != null ? `${record.height} cm` : '—'}</span>
-                                                        <span>وزن: {record.weight != null ? `${record.weight} kg` : '—'}</span>
-                                                        <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} cm` : '—'}</span>
+                                                        <span>قد: {record.height != null ? `${record.height} سانتی‌متر` : '—'}</span>
+                                                        <span>وزن: {record.weight != null ? `${record.weight} کیلوگرم` : '—'}</span>
+                                                        <span>دور سر: {record.headCircumference != null ? `${record.headCircumference} سانتی‌متر` : '—'}</span>
                                                     </div>
                                                 </button>
                                                 {open && (
@@ -611,12 +615,14 @@ const GrowthChartPage = () => {
                         calendar={persian}
                         locale={persian_fa}
                         format="YYYY/MM/DD"
+                        minDate={birthDate || undefined}
+                        maxDate={new Date()}
                         placeholder="تاریخ را انتخاب کنید"
                         inputClass="form-control"
                         containerClassName="growth-datepicker"
                         calendarPosition="bottom-center"
                     />
-                    <label className="field-label">قد (cm)</label>
+                    <label className="field-label">قد (سانتی‌متر)</label>
                     <input
                         type="number"
                         step="0.1"
@@ -624,7 +630,7 @@ const GrowthChartPage = () => {
                         onChange={(e) => setForm((prev) => ({ ...prev, height: e.target.value }))}
                         placeholder="مثلاً 72.5"
                     />
-                    <label className="field-label">وزن (kg)</label>
+                    <label className="field-label">وزن (کیلوگرم)</label>
                     <input
                         type="number"
                         step="0.1"
@@ -632,7 +638,7 @@ const GrowthChartPage = () => {
                         onChange={(e) => setForm((prev) => ({ ...prev, weight: e.target.value }))}
                         placeholder="مثلاً 9.2"
                     />
-                    <label className="field-label">دور سر (cm)</label>
+                    <label className="field-label">دور سر (سانتی‌متر)</label>
                     <input
                         type="number"
                         step="0.1"

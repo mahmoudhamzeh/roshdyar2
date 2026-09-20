@@ -127,7 +127,7 @@ assert.ok(/۳۹|39/.test(feverFa) && /پزشک/.test(feverFa));
 const growthChat = chatGrowthAssistantLocal(
     toddler,
     [{ role: 'user', content: 'قد و وزنش مناسب است؟' }],
-    { heightLabel: 'قد ۸۰ سم', weightLabel: 'وزن ۱۰ کگ' }
+    { heightLabel: 'قد ۸۰ سانتی‌متر', weightLabel: 'وزن ۱۰ کیلوگرم' }
 );
 assert.ok(growthChat.includes('۸۰') || growthChat.includes('قد'));
 assert.ok(!growthChat.includes('بازه طبیعی'));
