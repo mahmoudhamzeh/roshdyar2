@@ -146,8 +146,15 @@
 }
 
 .ticket-user {
-    margin: 0 0 0.25rem;
+    margin: 0 0 0.15rem;
     color: #134e4a;
+}
+
+.ticket-user-meta {
+    margin: 0 0 0.25rem;
+    color: #5b716e;
+    font-size: 0.85rem;
+    unicode-bidi: isolate;
 }
 
 .ticket-summary p {

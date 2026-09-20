@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { toShamsi } from '../../utils/dateConverter';
+import React, { useEffect, useState } from 'react';
+import { formatToShamsi } from '../../utils/dateConverter';
 import './TicketManagement.css';
 
 const STATUS_LABELS = {
@@ -29,10 +29,21 @@ const userLabel = (ticket) => (
     || (ticket.userId != null ? `کاربر #${ticket.userId}` : 'کاربر نامشخص')
 );
 
+const userContact = (ticket) => (
+    [
+        ticket.user && ticket.user.username,
+        ticket.user && ticket.user.mobile,
+        ticket.user && ticket.user.email
+    ].filter(Boolean).join(' · ')
+);
+
 const formatWhen = (value) => {
     if (!value) return '';
-    const shamsi = toShamsi(value);
-    return shamsi || String(value).slice(0, 16).replace('T', ' ');
+    try {
+        return formatToShamsi(value) || String(value).slice(0, 16).replace('T', ' ');
+    } catch (_) {
+        return String(value).slice(0, 16).replace('T', ' ');
+    }
 };
 
 const TicketManagement = () => {
@@ -81,7 +92,7 @@ const TicketManagement = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const visibleTickets = useMemo(() => tickets, [tickets]);
+    const visibleTickets = tickets;
 
     const openTicket = async (ticket) => {
         setNotice('');
@@ -190,9 +201,10 @@ const TicketManagement = () => {
                             <h4>{ticket.subject}</h4>
                             <p className="ticket-user">
                                 <strong>{userLabel(ticket)}</strong>
-                                {ticket.user && ticket.user.username ? ` · @${ticket.user.username}` : ''}
-                                {ticket.user && ticket.user.mobile ? ` · ${ticket.user.mobile}` : ''}
                             </p>
+                            {userContact(ticket) && (
+                                <p className="ticket-user-meta" dir="ltr">{userContact(ticket)}</p>
+                            )}
                             <p>{ticket.groupName} / {ticket.subgroup}</p>
                             <span className={`ticket-status status-${ticket.status}`}>
                                 {STATUS_LABELS[ticket.status] || ticket.status}
@@ -218,12 +230,8 @@ const TicketManagement = () => {
                         </header>
                         <div className="ticket-user-card">
                             <strong>{userLabel(selected)}</strong>
-                            <span>
-                                {[
-                                    selected.user && selected.user.username ? `@${selected.user.username}` : null,
-                                    selected.user && selected.user.mobile,
-                                    selected.user && selected.user.email
-                                ].filter(Boolean).join(' · ') || `شناسه کاربر: ${selected.userId}`}
+                            <span dir="ltr">
+                                {userContact(selected) || `شناسه کاربر: ${selected.userId}`}
                             </span>
                         </div>
                         <p className="ticket-meta">{selected.groupName} / {selected.subgroup}</p>

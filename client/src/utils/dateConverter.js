@@ -7,13 +7,19 @@ import moment from 'jalali-moment';
  */
 export const toShamsi = (gregorianDate) => {
   if (!gregorianDate) return '';
-  const normalized = String(gregorianDate).trim().replace(/\//g, '-');
-  const parsed = moment(normalized, ['YYYY-MM-DD', 'YYYY/MM/DD'], true);
-  if (!parsed.isValid()) {
+  try {
+    const raw = String(gregorianDate).trim();
+    const day = raw.replace(/\//g, '-').slice(0, 10);
+    const parsed = moment(day, 'YYYY-MM-DD', true);
+    if (parsed && typeof parsed.isValid === 'function' && parsed.isValid()) {
+      return parsed.locale('fa').format('YYYY/MM/DD');
+    }
     const fallback = moment(gregorianDate);
-    return fallback.isValid() ? fallback.locale('fa').format('YYYY/MM/DD') : '';
-  }
-  return parsed.locale('fa').format('YYYY/MM/DD');
+    if (fallback && typeof fallback.isValid === 'function' && fallback.isValid()) {
+      return fallback.locale('fa').format('YYYY/MM/DD');
+    }
+  } catch (_) { /* ignore invalid dates */ }
+  return '';
 };
 
 /**
