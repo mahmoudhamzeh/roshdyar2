@@ -4,6 +4,7 @@ const Database = require('better-sqlite3');
 const shopStore = require('./shop-store');
 const magazineStore = require('./magazine-store');
 const { buildCategoryTree } = require('./shop-model');
+const { normalizeTicketStatus, ticketPayload, foldStatusCounts } = require('./ticket-utils');
 
 const SCHEMA_VERSION = 3;
 const DB_FILE = process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
@@ -484,7 +485,7 @@ function prepareStatements() {
             VALUES (@user_id, @status, @created_at, @updated_at, @payload)
         `),
         countTickets: db.prepare('SELECT COUNT(*) AS n FROM tickets'),
-        countOpenTickets: db.prepare("SELECT COUNT(*) AS n FROM tickets WHERE status = 'open'"),
+        countOpenTickets: db.prepare("SELECT COUNT(*) AS n FROM tickets WHERE status IN ('open', 'in_review')"),
         deleteVisit: db.prepare('DELETE FROM medical_visits WHERE child_id = ? AND id = ?'),
         deleteDocument: db.prepare('DELETE FROM medical_documents WHERE child_id = ? AND id = ?'),
         deleteCheckup: db.prepare('DELETE FROM checkups WHERE child_id = ? AND id = ?'),
@@ -1892,7 +1893,7 @@ function rowToTicket(row) {
         ...payload,
         id: row.id,
         userId: row.user_id,
-        status: row.status,
+        status: normalizeTicketStatus(row.status),
         subject: payload.subject || row.subject || '',
         content: payload.content || payload.message || '',
         replies: payload.replies || [],
@@ -1946,16 +1947,28 @@ const tickets = {
         connect();
         return stmts.countOpenTickets.get().n;
     },
+    countByStatus() {
+        connect();
+        const rows = db.prepare('SELECT status, COUNT(*) AS n FROM tickets GROUP BY status').all();
+        return foldStatusCounts(rows);
+    },
     update(id, ticket) {
         connect();
+        const next = {
+            ...ticket,
+            id: Number(id),
+            status: normalizeTicketStatus(ticket.status),
+            updatedAt: ticket.updatedAt || new Date().toISOString()
+        };
+        if (!next.ticketNumber) next.ticketNumber = `TK-${String(id).padStart(5, '0')}`;
         const info = db.prepare(`
             UPDATE tickets SET status = @status, updated_at = @updated_at, payload = @payload
             WHERE id = @id
         `).run({
             id: Number(id),
-            status: ticket.status || 'open',
-            updated_at: ticket.updatedAt || new Date().toISOString(),
-            payload: JSON.stringify(ticket)
+            status: next.status,
+            updated_at: next.updatedAt,
+            payload: JSON.stringify(ticketPayload(next))
         });
         return info.changes > 0 ? tickets.getById(id) : null;
     }
@@ -2677,6 +2690,7 @@ function stats() {
         totalArticles: news.count(),
         totalTickets: tickets.count(),
         openTickets: tickets.countOpen(),
+        ticketCounts: tickets.countByStatus(),
         totalProducts: products.count(),
         totalOrders: orders.count(),
         pendingOrders: orders.countPending()

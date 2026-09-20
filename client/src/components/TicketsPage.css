@@ -80,14 +80,37 @@
   color: var(--brand-deep);
 }
 
-.ticket-pill.status-answered {
+.ticket-pill.status-answered,
+.ticket-pill.status-waiting_user {
   background: var(--success-soft);
   color: var(--success);
+}
+
+.ticket-pill.status-in_review {
+  background: #fef3c7;
+  color: #b45309;
 }
 
 .ticket-pill.status-closed {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.tickets-thread {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.tickets-reply-form {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.tickets-closed {
+  margin-top: 1rem;
+  color: var(--ink-muted);
 }
 
 .tickets-detail {
@@ -107,6 +130,14 @@
   padding: 0.75rem;
   border-radius: var(--radius-sm);
   background: var(--brand-wash);
+}
+
+.tickets-reply.is-user {
+  background: #f8fafc;
+}
+
+.tickets-thread .tickets-reply {
+  margin-top: 0;
 }
 
 @media (max-width: 768px) {

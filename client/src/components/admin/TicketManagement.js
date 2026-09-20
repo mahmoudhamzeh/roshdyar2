@@ -1,115 +1,264 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { toShamsi } from '../../utils/dateConverter';
 import './TicketManagement.css';
+
+const STATUS_LABELS = {
+    open: 'باز',
+    in_review: 'در حال بررسی',
+    waiting_user: 'در انتظار پاسخ کاربر',
+    answered: 'در انتظار پاسخ کاربر',
+    closed: 'بسته'
+};
+
+const FILTERS = [
+    { id: 'all', label: 'همه', countKey: 'total' },
+    { id: 'open', label: 'باز', countKey: 'open' },
+    { id: 'in_review', label: 'در حال بررسی', countKey: 'in_review' },
+    { id: 'waiting_user', label: 'در انتظار پاسخ کاربر', countKey: 'waiting_user' },
+    { id: 'closed', label: 'بسته', countKey: 'closed' }
+];
+
+const emptyCounts = { open: 0, in_review: 0, waiting_user: 0, closed: 0, total: 0 };
+
+const ticketNumberOf = (ticket) => ticket.ticketNumber || (ticket.id != null ? `TK-${String(ticket.id).padStart(5, '0')}` : '');
+
+const userLabel = (ticket) => (
+    (ticket.user && ticket.user.displayName)
+    || ticket.userName
+    || (ticket.user && ticket.user.username)
+    || (ticket.userId != null ? `کاربر #${ticket.userId}` : 'کاربر نامشخص')
+);
+
+const formatWhen = (value) => {
+    if (!value) return '';
+    const shamsi = toShamsi(value);
+    return shamsi || String(value).slice(0, 16).replace('T', ' ');
+};
 
 const TicketManagement = () => {
     const [tickets, setTickets] = useState([]);
+    const [counts, setCounts] = useState(emptyCounts);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [selectedTicket, setSelectedTicket] = useState(null);
+    const [notice, setNotice] = useState('');
+    const [filter, setFilter] = useState('all');
+    const [query, setQuery] = useState('');
+    const [selected, setSelected] = useState(null);
     const [reply, setReply] = useState('');
+    const [saving, setSaving] = useState(false);
 
-    const fetchTickets = async () => {
+    const fetchTickets = async (nextFilter = filter, nextQuery = query) => {
         setLoading(true);
+        setError('');
         try {
-            const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch('/api/admin/tickets', {
-                headers: { 'x-user-id': adminUser.id }
-            });
-            if (!response.ok) throw new Error('Failed to fetch tickets');
+            const params = new URLSearchParams();
+            if (nextFilter && nextFilter !== 'all') params.set('status', nextFilter);
+            if (nextQuery.trim()) params.set('q', nextQuery.trim());
+            const qs = params.toString();
+            const response = await fetch(`/api/admin/tickets${qs ? `?${qs}` : ''}`);
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.message || 'بارگذاری تیکت‌ها ناموفق بود');
+            }
             const data = await response.json();
-            setTickets(data);
+            const list = Array.isArray(data) ? data : (data.tickets || []);
+            setTickets(list);
+            setCounts((data && data.counts) || emptyCounts);
+            setSelected((current) => {
+                if (!current) return current;
+                return list.find((item) => Number(item.id) === Number(current.id)) || current;
+            });
         } catch (err) {
             setError(err.message);
+            setTickets([]);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchTickets();
+        fetchTickets('all', '');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const handleViewTicket = (ticket) => {
-        setSelectedTicket(ticket);
+    const visibleTickets = useMemo(() => tickets, [tickets]);
+
+    const openTicket = async (ticket) => {
+        setNotice('');
+        setReply('');
+        setSelected(ticket);
+        try {
+            const response = await fetch(`/api/admin/tickets/${ticket.id}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            setSelected(data);
+        } catch (_) {
+            /* list payload is enough to show the thread */
+        }
     };
 
-    const handleCloseModal = () => {
-        setSelectedTicket(null);
+    const closeModal = () => {
+        setSelected(null);
         setReply('');
+    };
+
+    const updateTicket = async ({ status, replyText } = {}) => {
+        if (!selected) return;
+        const payload = {};
+        if (status) payload.status = status;
+        if (replyText != null) payload.reply = replyText;
+        setSaving(true);
+        setNotice('');
+        setError('');
+        try {
+            const response = await fetch(`/api/admin/tickets/${selected.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.message || 'ثبت تغییرات ناموفق بود');
+            setSelected(data);
+            setReply('');
+            setNotice(replyText ? 'پاسخ ثبت شد و تیکت در انتظار پاسخ کاربر است.' : `وضعیت به «${STATUS_LABELS[data.status] || data.status}» تغییر کرد.`);
+            await fetchTickets(filter, query);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleReplySubmit = async (e) => {
         e.preventDefault();
         if (!reply.trim()) return;
-
-        try {
-            const adminUser = JSON.parse(localStorage.getItem('loggedInUser'));
-            const response = await fetch(`/api/admin/tickets/${selectedTicket.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-user-id': adminUser.id
-                },
-                body: JSON.stringify({ reply: reply })
-            });
-
-            if (!response.ok) throw new Error('Failed to submit reply');
-
-            fetchTickets(); // Refresh the list
-            handleCloseModal();
-            alert('پاسخ با موفقیت ثبت شد');
-        } catch (err) {
-            alert(`خطا: ${err.message}`);
-        }
+        await updateTicket({ replyText: reply.trim() });
     };
 
     return (
         <div className="ticket-management">
-            <h2>مدیریت تیکت‌ها</h2>
-            {loading && <p>در حال بارگذاری تیکت‌ها...</p>}
-            {error && <p className="error-message">{error}</p>}
-            <div className="tickets-list">
-                {tickets.map(ticket => (
-                    <div key={ticket.id} className={`ticket-item status-${ticket.status}`}>
-                        <div className="ticket-summary">
-                            <span>شماره: {ticket.ticketNumber || `TK-${String(ticket.id).padStart(5, '0')}`}</span>
-                            <span>کاربر: {ticket.userId}</span>
-                            <h4>{ticket.subject}</h4>
-                            <p>{ticket.groupName} / {ticket.subgroup}</p>
-                            <span className="ticket-status">{ticket.status}</span>
-                        </div>
-                        <button onClick={() => handleViewTicket(ticket)} className="btn-view">مشاهده</button>
-                    </div>
+            <header className="ticket-mgmt-head">
+                <h2>مدیریت تیکت‌ها</h2>
+                <p>تیکت هر کاربر را با نام او ببینید، پاسخ بدهید، ببندید یا در انتظار پاسخ کاربر بگذارید.</p>
+            </header>
+
+            <div className="ticket-report-grid">
+                {FILTERS.map((item) => (
+                    <button
+                        key={item.id}
+                        type="button"
+                        className={`ticket-report-card status-${item.id} ${filter === item.id ? 'is-on' : ''}`}
+                        onClick={() => {
+                            setFilter(item.id);
+                            fetchTickets(item.id, query);
+                        }}
+                    >
+                        <span>{item.label}</span>
+                        <strong>{counts[item.countKey] || 0}</strong>
+                    </button>
                 ))}
             </div>
 
-            {selectedTicket && (
-                <div className="modal-overlay">
-                    <div className="modal-content">
-                        <h2>تیکت {selectedTicket.ticketNumber || selectedTicket.id}</h2>
-                        <p><strong>موضوع:</strong> {selectedTicket.subject}</p>
-                        <p><strong>کاربر:</strong> {selectedTicket.userId}</p>
-                        <p><strong>گروه:</strong> {selectedTicket.groupName} / {selectedTicket.subgroup}</p>
-                        <p><strong>وضعیت:</strong> {selectedTicket.status}</p>
+            <form
+                className="ticket-mgmt-toolbar"
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    fetchTickets(filter, query);
+                }}
+            >
+                <input
+                    className="ui-input"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="جستجو با نام کاربر، موبایل، موضوع یا شماره تیکت"
+                />
+                <button type="submit" className="ui-btn">جستجو</button>
+            </form>
+
+            {loading && <p>در حال بارگذاری تیکت‌ها...</p>}
+            {error && <p className="ticket-mgmt-error">{error}</p>}
+            {notice && !selected && <p className="ticket-mgmt-notice">{notice}</p>}
+            {!loading && !error && visibleTickets.length === 0 && (
+                <p className="ticket-mgmt-empty">تیکتی در این وضعیت ثبت نشده است.</p>
+            )}
+
+            <div className="tickets-list">
+                {visibleTickets.map((ticket) => (
+                    <article key={ticket.id} className={`ticket-item status-${ticket.status}`}>
+                        <div className="ticket-summary">
+                            <span className="ticket-kicker">{ticketNumberOf(ticket)}</span>
+                            <h4>{ticket.subject}</h4>
+                            <p className="ticket-user">
+                                <strong>{userLabel(ticket)}</strong>
+                                {ticket.user && ticket.user.username ? ` · @${ticket.user.username}` : ''}
+                                {ticket.user && ticket.user.mobile ? ` · ${ticket.user.mobile}` : ''}
+                            </p>
+                            <p>{ticket.groupName} / {ticket.subgroup}</p>
+                            <span className={`ticket-status status-${ticket.status}`}>
+                                {STATUS_LABELS[ticket.status] || ticket.status}
+                            </span>
+                            {ticket.createdAt && <small>{formatWhen(ticket.createdAt)}</small>}
+                        </div>
+                        <button type="button" onClick={() => openTicket(ticket)} className="btn-view">مشاهده و پاسخ</button>
+                    </article>
+                ))}
+            </div>
+
+            {selected && (
+                <div className="modal-overlay" onClick={closeModal}>
+                    <div className="modal-content ticket-modal" onClick={(e) => e.stopPropagation()}>
+                        <header className="ticket-modal-head">
+                            <div>
+                                <p className="ticket-kicker">{ticketNumberOf(selected)}</p>
+                                <h2>{selected.subject}</h2>
+                            </div>
+                            <span className={`ticket-status status-${selected.status}`}>
+                                {STATUS_LABELS[selected.status] || selected.status}
+                            </span>
+                        </header>
+                        <div className="ticket-user-card">
+                            <strong>{userLabel(selected)}</strong>
+                            <span>
+                                {[
+                                    selected.user && selected.user.username ? `@${selected.user.username}` : null,
+                                    selected.user && selected.user.mobile,
+                                    selected.user && selected.user.email
+                                ].filter(Boolean).join(' · ') || `شناسه کاربر: ${selected.userId}`}
+                            </span>
+                        </div>
+                        <p className="ticket-meta">{selected.groupName} / {selected.subgroup}</p>
+                        {notice && <p className="ticket-mgmt-notice">{notice}</p>}
+                        {error && <p className="ticket-mgmt-error">{error}</p>}
                         <div className="ticket-history">
-                            <p>{selectedTicket.content || selectedTicket.message}</p>
-                            {(selectedTicket.attachments || []).map((url) => (
-                                <p key={url}><a href={url} target="_blank" rel="noreferrer">پیوست</a></p>
-                            ))}
-                            {selectedTicket.replies && selectedTicket.replies.map((r, index) => (
-                                <p key={index} className="reply"><strong>پاسخ ادمین:</strong> {r.content}</p>
+                            <div className="ticket-bubble is-user">
+                                <strong>{userLabel(selected)}</strong>
+                                <p>{selected.content || selected.message}</p>
+                                <small>{formatWhen(selected.createdAt)}</small>
+                                {(selected.attachments || []).map((url) => (
+                                    <p key={url}><a href={url} target="_blank" rel="noreferrer">پیوست</a></p>
+                                ))}
+                            </div>
+                            {(selected.replies || []).map((item, index) => (
+                                <div key={`${item.createdAt || index}-${index}`} className={`ticket-bubble ${item.authorRole === 'admin' ? 'is-admin' : 'is-user'}`}>
+                                    <strong>{item.authorName || (item.authorRole === 'admin' ? 'پشتیبانی' : userLabel(selected))}</strong>
+                                    <p>{item.content}</p>
+                                    <small>{formatWhen(item.createdAt)}</small>
+                                </div>
                             ))}
                         </div>
                         <form onSubmit={handleReplySubmit} className="reply-form">
                             <textarea
                                 value={reply}
                                 onChange={(e) => setReply(e.target.value)}
-                                placeholder="پاسخ خود را اینجا بنویسید..."
+                                placeholder="پاسخ خود را برای کاربر بنویسید..."
                                 rows="4"
-                            ></textarea>
+                            />
                             <div className="modal-actions">
-                                <button type="submit">ارسال پاسخ</button>
-                                <button type="button" onClick={handleCloseModal}>بستن</button>
+                                <button type="submit" disabled={saving || !reply.trim()}>ارسال پاسخ</button>
+                                <button type="button" disabled={saving} onClick={() => updateTicket({ status: 'in_review' })}>در حال بررسی</button>
+                                <button type="button" disabled={saving} onClick={() => updateTicket({ status: 'waiting_user' })}>در انتظار پاسخ کاربر</button>
+                                <button type="button" className="is-danger" disabled={saving} onClick={() => updateTicket({ status: 'closed' })}>بستن تیکت</button>
+                                <button type="button" className="is-ghost" onClick={closeModal}>انصراف</button>
                             </div>
                         </form>
                     </div>

@@ -4,6 +4,7 @@ const { Pool, types } = require('pg');
 const shopStore = require('./shop-store');
 const magazineStore = require('./magazine-store');
 const { buildCategoryTree } = require('./shop-model');
+const { normalizeTicketStatus, ticketPayload, foldStatusCounts } = require('./ticket-utils');
 
 types.setTypeParser(20, (val) => Number(val));
 types.setTypeParser(1700, (val) => Number(val));
@@ -1822,7 +1823,7 @@ function rowToTicket(row) {
         ...payload,
         id: Number(row.id),
         userId: row.user_id == null ? null : Number(row.user_id),
-        status: row.status,
+        status: normalizeTicketStatus(row.status),
         subject: payload.subject || row.subject || '',
         content: payload.content || payload.message || '',
         replies: payload.replies || [],
@@ -1868,12 +1869,23 @@ const tickets = {
         return (await one('SELECT COUNT(*)::int AS n FROM tickets')).n;
     },
     async countOpen() {
-        return (await one("SELECT COUNT(*)::int AS n FROM tickets WHERE status = 'open'")).n;
+        return (await one("SELECT COUNT(*)::int AS n FROM tickets WHERE status IN ('open', 'in_review')")).n;
+    },
+    async countByStatus() {
+        const rows = await many('SELECT status, COUNT(*)::int AS n FROM tickets GROUP BY status');
+        return foldStatusCounts(rows);
     },
     async update(id, ticket) {
+        const next = {
+            ...ticket,
+            id: Number(id),
+            status: normalizeTicketStatus(ticket.status),
+            updatedAt: ticket.updatedAt || new Date().toISOString()
+        };
+        if (!next.ticketNumber) next.ticketNumber = `TK-${String(id).padStart(5, '0')}`;
         const result = await q(
             'UPDATE tickets SET status=$1, updated_at=$2, payload=$3 WHERE id=$4',
-            [ticket.status || 'open', ticket.updatedAt || new Date().toISOString(), JSON.stringify(ticket), Number(id)]
+            [next.status, next.updatedAt, JSON.stringify(ticketPayload(next)), Number(id)]
         );
         return result.rowCount > 0 ? tickets.getById(id) : null;
     }
@@ -2571,6 +2583,7 @@ async function stats() {
         totalArticles: await news.count(),
         totalTickets: await tickets.count(),
         openTickets: await tickets.countOpen(),
+        ticketCounts: await tickets.countByStatus(),
         totalProducts: await products.count(),
         totalOrders: await orders.count(),
         pendingOrders: await orders.countPending()

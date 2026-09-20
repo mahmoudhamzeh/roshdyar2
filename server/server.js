@@ -35,6 +35,13 @@ const {
 const { deliverOtp } = require('./sms');
 const { analyzeConcernWithModel, chatGrowthAssistant, buildAssistantContext } = require('./child-growth-ai');
 const { registerMagazineRoutes, overlayLegacyContent } = require('./magazine-routes');
+const {
+    TICKET_STATUSES,
+    normalizeTicketStatus,
+    displayUserName,
+    normalizeReply,
+    presentTicket
+} = require('./ticket-utils');
 
 const app = express();
 app.set('trust proxy', Number(process.env.TRUST_PROXY || 1));
@@ -254,7 +261,7 @@ const API_CATALOG = {
             'PUT /api/messages/:id/read',
             'DELETE /api/messages/:id'
         ],
-        tickets: ['GET /api/tickets', 'POST /api/tickets', 'GET /api/tickets/:id'],
+        tickets: ['GET /api/tickets', 'POST /api/tickets', 'GET /api/tickets/:id', 'POST /api/tickets/:id/replies'],
         admin: [
             'GET /api/admin/stats',
             'GET /api/admin/users',
@@ -1627,14 +1634,91 @@ app.put('/api/admin/users/:id/set-password', isAdmin, async (req, res) => {
     res.status(200).json({ message: 'رمز عبور کاربر با موفقیت تغییر کرد' });
 });
 
+async function ticketUserLookup() {
+    const cache = new Map();
+    return async (userId) => {
+        if (userId == null || userId === '') return null;
+        const key = Number(userId);
+        if (!Number.isFinite(key)) return null;
+        if (cache.has(key)) return cache.get(key);
+        const user = await store.users.getById(key);
+        cache.set(key, user || null);
+        return user || null;
+    };
+}
+
+async function serializeTicket(ticket, lookup) {
+    if (!ticket) return null;
+    const getUser = lookup || await ticketUserLookup();
+    const owner = await getUser(ticket.userId);
+    const presented = presentTicket(ticket, owner);
+    presented.replies = await Promise.all((presented.replies || []).map(async (reply) => {
+        const author = reply.userId != null ? await getUser(reply.userId) : null;
+        const fallbackName = reply.authorRole === 'admin'
+            ? 'پشتیبانی'
+            : (owner ? displayUserName(owner) : 'کاربر');
+        return {
+            ...reply,
+            authorName: author ? displayUserName(author) : (reply.authorName || fallbackName)
+        };
+    }));
+    return presented;
+}
+
+async function serializeTickets(list) {
+    const lookup = await ticketUserLookup();
+    const tickets = [];
+    for (const ticket of list || []) {
+        tickets.push(await serializeTicket(ticket, lookup));
+    }
+    return tickets;
+}
+
+function requestedTicketStatus(value) {
+    if (value == null || value === '' || value === 'all') return '';
+    if (value === 'answered') return 'waiting_user';
+    const status = normalizeTicketStatus(value);
+    return TICKET_STATUSES.includes(value) || value === 'answered' ? status : '';
+}
+
 app.get('/api/admin/tickets', isAdmin, async (req, res) => {
-    res.json(await store.tickets.list());
+    const all = await store.tickets.list();
+    const counts = store.tickets.countByStatus
+        ? await store.tickets.countByStatus()
+        : {
+            open: all.filter((item) => item.status === 'open').length,
+            in_review: all.filter((item) => item.status === 'in_review').length,
+            waiting_user: all.filter((item) => item.status === 'waiting_user' || item.status === 'answered').length,
+            closed: all.filter((item) => item.status === 'closed').length,
+            total: all.length
+        };
+    const status = requestedTicketStatus(req.query.status);
+    const filtered = status ? all.filter((item) => normalizeTicketStatus(item.status) === status) : all;
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const serialized = await serializeTickets(filtered);
+    const tickets = q
+        ? serialized.filter((ticket) => {
+            const hay = [
+                ticket.ticketNumber,
+                ticket.subject,
+                ticket.content,
+                ticket.groupName,
+                ticket.subgroup,
+                ticket.userName,
+                ticket.user && ticket.user.username,
+                ticket.user && ticket.user.mobile,
+                ticket.user && ticket.user.email
+            ].join(' ').toLowerCase();
+            return hay.includes(q);
+        })
+        : serialized;
+    res.json({ tickets, counts });
 });
 
 app.get('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     const ticket = await store.tickets.getById(req.params.id);
-    if (ticket) res.json(ticket);
-    else res.status(404).json({ message: 'تیکت یافت نشد' });
+    if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
+    res.json(await serializeTicket(ticket));
 });
 
 app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
@@ -1643,18 +1727,32 @@ app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     const ticket = await store.tickets.getById(id);
     if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
 
-    if (status) ticket.status = status;
-    if (reply) {
+    const replyText = String(reply || '').trim();
+    if (status != null && status !== '') {
+        const nextStatus = requestedTicketStatus(status);
+        if (!nextStatus) {
+            return res.status(400).json({ message: 'وضعیت تیکت نامعتبر است' });
+        }
+        ticket.status = nextStatus;
+    }
+    if (replyText) {
         ticket.replies = ticket.replies || [];
-        ticket.replies.push({
+        ticket.replies.push(normalizeReply({
             userId: req.user.id,
-            content: reply,
+            authorRole: 'admin',
+            authorName: displayUserName(req.user),
+            content: replyText,
             createdAt: new Date().toISOString()
-        });
-        ticket.status = 'answered';
+        }));
+        if (status == null || status === '') {
+            ticket.status = 'waiting_user';
+        }
+    } else if (status == null || status === '') {
+        return res.status(400).json({ message: 'پاسخ یا وضعیت جدید الزامی است' });
     }
     ticket.updatedAt = new Date().toISOString();
-    res.json(await store.tickets.update(id, ticket));
+    const updated = await store.tickets.update(id, ticket);
+    res.json(await serializeTicket(updated));
 });
 
 app.get('/api/admin/stats', isAdmin, async (req, res) => {
@@ -1665,7 +1763,8 @@ app.get('/api/admin/stats', isAdmin, async (req, res) => {
 app.get('/api/tickets', async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
-    res.json(await store.tickets.listByUser(user.id));
+    const list = await store.tickets.listByUser(user.id);
+    res.json(await serializeTickets(list));
 });
 
 const TICKET_GROUPS = {
@@ -1714,7 +1813,7 @@ app.post('/api/tickets', maybeMultipart('attachments', 4), async (req, res) => {
         subgroup,
         attachments
     });
-    res.status(201).json(ticket);
+    res.status(201).json(await serializeTicket(ticket));
 });
 
 app.get('/api/tickets/:id', async (req, res) => {
@@ -1722,10 +1821,41 @@ app.get('/api/tickets/:id', async (req, res) => {
     if (!user) return;
     const ticket = await store.tickets.getById(req.params.id);
     if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
-    if (ticket.userId !== user.id && !user.isAdmin) {
+    if (Number(ticket.userId) !== Number(user.id) && !user.isAdmin) {
         return res.status(403).json({ message: 'دسترسی غیرمجاز' });
     }
-    res.json(ticket);
+    res.json(await serializeTicket(ticket));
+});
+
+app.post('/api/tickets/:id/replies', async (req, res) => {
+    const user = await requireUser(req, res);
+    if (!user) return;
+    const ticket = await store.tickets.getById(req.params.id);
+    if (!ticket) return res.status(404).json({ message: 'تیکت یافت نشد' });
+    if (Number(ticket.userId) !== Number(user.id) && !user.isAdmin) {
+        return res.status(403).json({ message: 'دسترسی غیرمجاز' });
+    }
+    const content = String((req.body && (req.body.content || req.body.reply || req.body.message)) || '').trim();
+    if (!content) {
+        return res.status(400).json({ message: 'متن پاسخ الزامی است' });
+    }
+    const current = normalizeTicketStatus(ticket.status);
+    if (current === 'closed') {
+        return res.status(400).json({ message: 'این تیکت بسته شده است' });
+    }
+    const asAdmin = Boolean(user.isAdmin && Number(ticket.userId) !== Number(user.id));
+    ticket.replies = ticket.replies || [];
+    ticket.replies.push(normalizeReply({
+        userId: user.id,
+        authorRole: asAdmin ? 'admin' : 'user',
+        authorName: displayUserName(user),
+        content,
+        createdAt: new Date().toISOString()
+    }));
+    ticket.status = asAdmin ? 'waiting_user' : 'open';
+    ticket.updatedAt = new Date().toISOString();
+    const updated = await store.tickets.update(ticket.id, ticket);
+    res.status(201).json(await serializeTicket(updated));
 });
 
 // --- Banner, News, Video, Podcast Routes (Content Management) ---
