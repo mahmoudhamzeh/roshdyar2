@@ -257,6 +257,30 @@ function registerMagazineRoutes(app, { store, upload, isAdmin, resolveAuthUser }
         if (!updated) return res.status(404).json({ message: 'دیدگاه یافت نشد' });
         res.json(updated);
     });
+    app.post('/api/admin/magazine/comments/:id/reply', isAdmin, async (req, res) => {
+        const parent = await store.magazine.getComment(req.params.id);
+        if (!parent) return res.status(404).json({ message: 'دیدگاه یافت نشد' });
+        const body = String((req.body && req.body.body) || '').trim();
+        if (body.length < 2) return res.status(400).json({ message: 'متن پاسخ کوتاه است' });
+        const user = req.user || {};
+        const authorName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim()
+            || user.username
+            || 'تحریریه تات کیدز';
+        if (parent.status === 'pending') {
+            await store.magazine.moderateComment(parent.id, 'approved');
+        }
+        const reply = await store.magazine.createComment(parent.postId, {
+            parentId: parent.id,
+            userId: user.id || null,
+            authorName,
+            authorEmail: user.email || '',
+            authorPhone: user.mobile || '',
+            body,
+            status: 'approved',
+            isStaff: true
+        });
+        res.status(201).json(reply);
+    });
 
     app.post('/api/admin/magazine/banners', isAdmin, upload.single('image'), async (req, res) => {
         if (!req.file) return res.status(400).json({ message: 'تصویر بنر الزامی است' });

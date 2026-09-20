@@ -1,20 +1,48 @@
 import React, { useEffect, useState } from 'react';
+import MagazineCategoryPicker from './MagazineCategoryPicker';
+import { categoryPathLabel } from '../../utils/magazine';
 import './ArticleManagement.css';
+import './MagazineAdmin.css';
 import '../magazine/Magazine.css';
+
+const STATUS_LABEL = {
+    pending: 'در انتظار',
+    approved: 'تأیید شده',
+    rejected: 'رد شده'
+};
+
+const CategoryTreeList = ({ nodes, depth = 0, onDelete }) => (
+    <ul className={`mag-cat-tree depth-${depth}`}>
+        {(nodes || []).map((node) => (
+            <li key={node.id}>
+                <div className="mag-cat-row">
+                    <div>
+                        <strong>{node.name}</strong>
+                        {(node.children || []).length > 0
+                            ? <em> {node.children.length} زیرگروه</em>
+                            : <span className="mag-cat-leaf"> دسته پایانی</span>}
+                    </div>
+                    <button
+                        type="button"
+                        className="btn-delete"
+                        onClick={() => onDelete(node)}
+                    >
+                        حذف
+                    </button>
+                </div>
+                {(node.children || []).length > 0 && (
+                    <CategoryTreeList nodes={node.children} depth={depth + 1} onDelete={onDelete} />
+                )}
+            </li>
+        ))}
+    </ul>
+);
 
 export const MagazineTaxonomy = () => {
     const [categories, setCategories] = useState([]);
     const [tags, setTags] = useState([]);
     const [catForm, setCatForm] = useState({ name: '', parentId: '', slug: '' });
     const [tagName, setTagName] = useState('');
-
-    const flatten = (nodes, acc = []) => {
-        nodes.forEach((node) => {
-            acc.push(node);
-            if (node.children) flatten(node.children, acc);
-        });
-        return acc;
-    };
 
     const load = async () => {
         const [c, t] = await Promise.all([fetch('/api/magazine/categories'), fetch('/api/magazine/tags')]);
@@ -45,35 +73,34 @@ export const MagazineTaxonomy = () => {
         load();
     };
 
-    const flatCats = flatten(categories);
+    const removeCategory = async (node) => {
+        const path = categoryPathLabel(categories, node.id) || node.name;
+        if (!window.confirm(`دسته «${path}» حذف شود؟`)) return;
+        await fetch(`/api/admin/magazine/categories/${node.id}`, { method: 'DELETE' });
+        load();
+    };
 
     return (
         <div className="article-management">
             <h2>دسته‌بندی و برچسب‌های مجله</h2>
+            <p className="magazine-muted">دسته‌ها به‌صورت درخت نمایش داده می‌شوند؛ اول گروه اصلی، بعد زیرگروه.</p>
             <form className="article-form" onSubmit={saveCategory}>
                 <h3>دسته جدید</h3>
                 <input required placeholder="نام دسته" value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} />
                 <input placeholder="نامک (اختیاری)" value={catForm.slug} onChange={(e) => setCatForm({ ...catForm, slug: e.target.value })} />
-                <select value={catForm.parentId} onChange={(e) => setCatForm({ ...catForm, parentId: e.target.value })}>
-                    <option value="">دسته اصلی</option>
-                    {flatCats.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </select>
+                <label>دسته والد</label>
+                <MagazineCategoryPicker
+                    tree={categories}
+                    value={catForm.parentId}
+                    onChange={(parentId) => setCatForm({ ...catForm, parentId })}
+                    emptyLabel="دسته اصلی (بدون والد)"
+                />
                 <button type="submit">افزودن دسته</button>
             </form>
-            <ul>
-                {flatCats.map((item) => (
-                    <li key={item.id}>
-                        {item.parentId ? '— ' : ''}{item.name}
-                        <button type="button" className="btn-delete" onClick={async () => {
-                            await fetch(`/api/admin/magazine/categories/${item.id}`, { method: 'DELETE' });
-                            load();
-                        }}>حذف</button>
-                    </li>
-                ))}
-            </ul>
+            <CategoryTreeList nodes={categories} onDelete={removeCategory} />
             <form className="article-form" onSubmit={saveTag}>
                 <h3>برچسب جدید</h3>
-                <input required placeholder="نام برچسب" value={tagName} onChange={(e) => setTagName(e.target.value)} />
+                <input required placeholder="نام برچسب" value={tagName} onChange={(e) => setTagName(e.target.value })} />
                 <button type="submit">افزودن برچسب</button>
             </form>
             <div className="magazine-tags">
@@ -141,11 +168,16 @@ export const MagazineAuthors = () => {
 export const MagazineComments = () => {
     const [comments, setComments] = useState([]);
     const [status, setStatus] = useState('pending');
+    const [replyFor, setReplyFor] = useState(null);
+    const [replyBody, setReplyBody] = useState('');
+    const [sending, setSending] = useState(false);
+
     const load = async (next = status) => {
         const res = await fetch(`/api/admin/magazine/comments?status=${next}`);
         if (res.ok) setComments(await res.json());
     };
     useEffect(() => { load(status); }, [status]);
+
     const update = async (id, nextStatus) => {
         await fetch(`/api/admin/magazine/comments/${id}`, {
             method: 'PATCH',
@@ -154,9 +186,41 @@ export const MagazineComments = () => {
         });
         load(status);
     };
+
+    const sendReply = async (comment) => {
+        const body = replyBody.trim();
+        if (body.length < 2) {
+            alert('متن پاسخ را بنویسید.');
+            return;
+        }
+        setSending(true);
+        const res = await fetch(`/api/admin/magazine/comments/${comment.id}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ body })
+        });
+        setSending(false);
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            alert(data.message || 'ارسال پاسخ ناموفق بود');
+            return;
+        }
+        setReplyFor(null);
+        setReplyBody('');
+        load(status === 'pending' ? 'approved' : status);
+        if (status === 'pending') setStatus('approved');
+    };
+
+    const statusClass = (value) => {
+        if (value === 'pending') return 'is-pending';
+        if (value === 'rejected') return 'is-rejected';
+        return '';
+    };
+
     return (
         <div className="article-management">
-            <h2>تأیید نظرات مجله</h2>
+            <h2>نظرات مجله</h2>
+            <p className="magazine-muted">نظر را تأیید یا رد کنید. اگر لازم است، همان‌جا پاسخ تحریریه بفرستید.</p>
             <div className="magazine-filters">
                 {['pending', 'approved', 'rejected', 'all'].map((item) => (
                     <button key={item} type="button" className={status === item ? 'is-active' : ''} onClick={() => setStatus(item)}>
@@ -164,16 +228,62 @@ export const MagazineComments = () => {
                     </button>
                 ))}
             </div>
+            {comments.length === 0 && <p className="magazine-muted">موردی در این فهرست نیست.</p>}
             {comments.map((comment) => (
-                <div key={comment.id} className="article-item">
+                <div key={comment.id} className="article-item magazine-comment-card">
                     <div className="article-item-info">
                         <h3>{comment.postTitle}</h3>
-                        <p>{comment.authorName}{comment.badge ? ` · ${comment.badge}` : ''} · {comment.status}</p>
+                        <p>
+                            {comment.authorName}
+                            {comment.badge ? ` · ${comment.badge}` : ''}
+                            {' '}
+                            <span className={`magazine-status-pill ${statusClass(comment.status)} ${comment.isStaff ? 'is-staff' : ''}`}>
+                                {comment.isStaff ? 'پاسخ تحریریه' : (STATUS_LABEL[comment.status] || comment.status)}
+                            </span>
+                        </p>
+                        {comment.parentBody && (
+                            <blockquote className="magazine-comment-quote">
+                                پاسخ به {comment.parentAuthor || 'دیدگاه قبلی'}: {comment.parentBody}
+                            </blockquote>
+                        )}
                         <small>{comment.body}</small>
+                        {replyFor === comment.id && (
+                            <div className="magazine-comment-reply-box">
+                                <textarea
+                                    value={replyBody}
+                                    onChange={(e) => setReplyBody(e.target.value)}
+                                    placeholder="پاسخ تحریریه را بنویسید. پس از ارسال، روی سایت دیده می‌شود."
+                                />
+                                <div className="magazine-composer-actions">
+                                    <button type="button" className="is-cancel" onClick={() => { setReplyFor(null); setReplyBody(''); }}>
+                                        انصراف
+                                    </button>
+                                    <button type="button" className="is-save" disabled={sending} onClick={() => sendReply(comment)}>
+                                        {sending ? 'در حال ارسال…' : 'ارسال پاسخ'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                     <div className="article-item-actions">
-                        <button type="button" className="btn-edit" onClick={() => update(comment.id, 'approved')}>تأیید</button>
-                        <button type="button" className="btn-delete" onClick={() => update(comment.id, 'rejected')}>رد</button>
+                        {!comment.isStaff && (
+                            <button
+                                type="button"
+                                className="btn-edit"
+                                onClick={() => {
+                                    setReplyFor(comment.id);
+                                    setReplyBody('');
+                                }}
+                            >
+                                پاسخ
+                            </button>
+                        )}
+                        {comment.status !== 'approved' && (
+                            <button type="button" className="btn-edit" onClick={() => update(comment.id, 'approved')}>تأیید</button>
+                        )}
+                        {comment.status !== 'rejected' && (
+                            <button type="button" className="btn-delete" onClick={() => update(comment.id, 'rejected')}>رد</button>
+                        )}
                     </div>
                 </div>
             ))}

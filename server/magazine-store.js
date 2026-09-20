@@ -386,6 +386,26 @@ function mapComment(row) {
     };
 }
 
+function mapAdminComment(row) {
+    if (!row) return null;
+    return {
+        ...mapComment(row),
+        postTitle: row.post_title,
+        postSlug: row.post_slug,
+        parentBody: row.parent_body || '',
+        parentAuthor: row.parent_author || ''
+    };
+}
+
+const ADMIN_COMMENT_SELECT = `
+    SELECT c.*, u.first_name, u.last_name, u.is_admin, p.title AS post_title, p.slug AS post_slug,
+        parent.body AS parent_body, parent.author_name AS parent_author
+    FROM magazine_comments c
+    LEFT JOIN users u ON u.id = c.user_id
+    JOIN magazine_posts p ON p.id = c.post_id
+    LEFT JOIN magazine_comments parent ON parent.id = c.parent_id
+`;
+
 function mapBanner(row) {
     if (!row) return null;
     return {
@@ -1293,24 +1313,20 @@ function sqliteApi(db) {
             return db.prepare('DELETE FROM magazine_posts WHERE id = ?').run(Number(id)).changes > 0;
         },
         listComments,
+        getComment(id) {
+            const row = db.prepare(`
+                SELECT c.*, u.first_name, u.last_name, u.is_admin
+                FROM magazine_comments c
+                LEFT JOIN users u ON u.id = c.user_id
+                WHERE c.id = ?
+            `).get(Number(id));
+            return mapComment(row);
+        },
         listAllComments(status) {
             const rows = status && status !== 'all'
-                ? db.prepare(`
-                    SELECT c.*, u.first_name, u.last_name, u.is_admin, p.title AS post_title, p.slug AS post_slug
-                    FROM magazine_comments c
-                    LEFT JOIN users u ON u.id = c.user_id
-                    JOIN magazine_posts p ON p.id = c.post_id
-                    WHERE c.status = ?
-                    ORDER BY c.created_at DESC
-                `).all(status)
-                : db.prepare(`
-                    SELECT c.*, u.first_name, u.last_name, u.is_admin, p.title AS post_title, p.slug AS post_slug
-                    FROM magazine_comments c
-                    LEFT JOIN users u ON u.id = c.user_id
-                    JOIN magazine_posts p ON p.id = c.post_id
-                    ORDER BY c.created_at DESC
-                `).all();
-            return rows.map((row) => ({ ...mapComment(row), postTitle: row.post_title, postSlug: row.post_slug }));
+                ? db.prepare(`${ADMIN_COMMENT_SELECT} WHERE c.status = ? ORDER BY c.created_at DESC`).all(status)
+                : db.prepare(`${ADMIN_COMMENT_SELECT} ORDER BY c.created_at DESC`).all();
+            return rows.map(mapAdminComment);
         },
         createComment(postId, payload) {
             const info = db.prepare(`
@@ -1689,20 +1705,19 @@ function pgApi(q, one, many) {
             return result.rowCount > 0;
         },
         listComments,
+        async getComment(id) {
+            const row = await one(
+                `SELECT c.*, u.first_name, u.last_name, u.is_admin
+                 FROM magazine_comments c LEFT JOIN users u ON u.id = c.user_id WHERE c.id = $1`,
+                [Number(id)]
+            );
+            return mapComment(row);
+        },
         async listAllComments(status) {
             const rows = status && status !== 'all'
-                ? await many(
-                    `SELECT c.*, u.first_name, u.last_name, u.is_admin, p.title AS post_title, p.slug AS post_slug
-                     FROM magazine_comments c LEFT JOIN users u ON u.id = c.user_id
-                     JOIN magazine_posts p ON p.id = c.post_id WHERE c.status = $1 ORDER BY c.created_at DESC`,
-                    [status]
-                )
-                : await many(
-                    `SELECT c.*, u.first_name, u.last_name, u.is_admin, p.title AS post_title, p.slug AS post_slug
-                     FROM magazine_comments c LEFT JOIN users u ON u.id = c.user_id
-                     JOIN magazine_posts p ON p.id = c.post_id ORDER BY c.created_at DESC`
-                );
-            return rows.map((row) => ({ ...mapComment(row), postTitle: row.post_title, postSlug: row.post_slug }));
+                ? await many(`${ADMIN_COMMENT_SELECT} WHERE c.status = $1 ORDER BY c.created_at DESC`, [status])
+                : await many(`${ADMIN_COMMENT_SELECT} ORDER BY c.created_at DESC`);
+            return rows.map(mapAdminComment);
         },
         async createComment(postId, payload) {
             const row = await one(

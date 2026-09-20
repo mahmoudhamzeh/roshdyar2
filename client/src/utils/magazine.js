@@ -69,6 +69,22 @@ export function flattenCategories(tree, acc = []) {
     return acc;
 }
 
+export function findCategoryPathById(tree, id, acc = []) {
+    if (id == null || id === '') return [];
+    for (const node of tree || []) {
+        const next = [...acc, node];
+        if (String(node.id) === String(id)) return next;
+        const found = findCategoryPathById(node.children || [], id, next);
+        if (found.length) return found;
+    }
+    return [];
+}
+
+export function categoryPathLabel(tree, id) {
+    const names = findCategoryPathById(tree, id).map((node) => node.name).filter(Boolean);
+    return names.join(' ‹ ');
+}
+
 export function pictureSources(src) {
     if (!src) return [];
     const lower = src.toLowerCase();

@@ -152,7 +152,7 @@ const RichTextEditor = ({ value, onChange, onUpload }) => {
                 contentEditable
                 suppressContentEditableWarning
                 dir="rtl"
-                data-placeholder="متن مقاله را همین‌جا بنویسید. مکان‌نما سر جای خودش می‌ماند."
+                data-placeholder="متن مقاله را همین‌جا بنویسید. از نوار بالا عنوان، فهرست و عکس بگذارید."
                 onInput={emit}
                 onKeyUp={saveRange}
                 onMouseUp={saveRange}
