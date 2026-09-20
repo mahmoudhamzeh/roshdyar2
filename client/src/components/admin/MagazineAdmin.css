@@ -79,9 +79,13 @@
 
 .mag-cat-tree.depth-1,
 .mag-cat-tree.depth-2 {
-  margin-right: 1rem;
+  margin-right: 1.15rem;
   padding-right: 0.75rem;
-  border-right: 2px solid #d7e5e2;
+  border-right: 2px solid #99d4c8;
+}
+
+.mag-cat-tree.depth-1 .mag-cat-row {
+  background: #fff;
 }
 
 .mag-cat-row {
