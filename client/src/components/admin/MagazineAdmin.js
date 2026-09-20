@@ -100,7 +100,7 @@ export const MagazineTaxonomy = () => {
             <CategoryTreeList nodes={categories} onDelete={removeCategory} />
             <form className="article-form" onSubmit={saveTag}>
                 <h3>برچسب جدید</h3>
-                <input required placeholder="نام برچسب" value={tagName} onChange={(e) => setTagName(e.target.value })} />
+                <input required placeholder="نام برچسب" value={tagName} onChange={(e) => setTagName(e.target.value)} />
                 <button type="submit">افزودن برچسب</button>
             </form>
             <div className="magazine-tags">
