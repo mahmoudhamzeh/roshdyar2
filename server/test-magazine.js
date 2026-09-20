@@ -167,6 +167,28 @@ async function run() {
         assert.strictEqual(staffReply.data.status, 'approved');
         assert.strictEqual(staffReply.data.isStaff, true);
 
+        const guestTwo = await request('POST', `/api/magazine/posts/${article.id}/comments`, {
+            body: { authorName: 'مینا تست', authorEmail: 'mina@example.com', body: 'سؤال دوم برای پاسخ ادمین' }
+        });
+        assert.strictEqual(guestTwo.status, 201, JSON.stringify(guestTwo.data));
+        const adminReply = await request('POST', `/api/admin/magazine/comments/${guestTwo.data.id}/reply`, {
+            headers: auth,
+            body: { body: 'پاسخ پنل مدیریت به این دیدگاه' }
+        });
+        assert.strictEqual(adminReply.status, 201, JSON.stringify(adminReply.data));
+        assert.strictEqual(adminReply.data.isStaff, true);
+        assert.strictEqual(adminReply.data.status, 'approved');
+        assert.strictEqual(adminReply.data.parentId, guestTwo.data.id);
+
+        const approvedList = await request('GET', '/api/admin/magazine/comments?status=approved', { headers: auth });
+        assert.strictEqual(approvedList.status, 200);
+        const listedReply = (approvedList.data || []).find((item) => item.id === adminReply.data.id);
+        assert.ok(listedReply, 'admin reply should appear in approved list');
+        assert.ok(String(listedReply.parentBody || '').includes('سؤال دوم'));
+        const approvedParent = (approvedList.data || []).find((item) => item.id === guestTwo.data.id);
+        assert.ok(approvedParent, 'replying should approve the parent comment');
+        assert.strictEqual(approvedParent.status, 'approved');
+
         const after = await request('GET', `/api/magazine/posts/${article.id}/comments`);
         const parent = after.data.find((item) => item.id === guest.data.id);
         assert.ok(parent);
@@ -232,6 +254,12 @@ async function run() {
         assert.ok(editorSrc.includes('lastHtml'), 'editor must keep caret while typing');
         assert.ok(editorSrc.includes('type="file"'), 'image button must open a file picker');
         assert.ok(!/نشانی تصویر را وارد کنید/.test(editorSrc), 'image insert must not start with a URL prompt');
+        const postAdminSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/admin/MagazinePostManagement.js'), 'utf8');
+        assert.ok(postAdminSrc.includes('magazine-composer'), 'article admin must use a writing workspace');
+        assert.ok(postAdminSrc.includes('MagazineCategoryPicker'), 'article form must use searchable category picker');
+        const commentsAdminSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/admin/MagazineAdmin.js'), 'utf8');
+        assert.ok(commentsAdminSrc.includes('/reply'), 'comments admin must send staff replies');
+        assert.ok(commentsAdminSrc.includes('CategoryTreeList'), 'taxonomy must render a category tree');
 
         const boundary = `----mag${Date.now()}`;
         const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
