@@ -416,7 +416,8 @@ async function run() {
         assert.ok(!/WithLeftAds/.test(cartPageSrc), 'cart must not wrap with left ads');
         assert.ok(/صورتحساب/.test(cartPageSrc));
         assert.ok(/نام خانوادگی/.test(cartPageSrc), 'cart must show buyer first and last name');
-        assert.ok(/complete=1/.test(cartPageSrc), 'cart must send incomplete profiles to complete flow');
+        const profileUtilSrc = fs.readFileSync(path.join(__dirname, '../client/src/utils/profile.js'), 'utf8');
+        assert.ok(/complete=1/.test(profileUtilSrc), 'profile helper must send users to complete flow');
 
         const userInfoSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/UserInfo.js'), 'utf8');
         assert.ok(/react-multi-date-picker/.test(userInfoSrc), 'profile birth date must use shamsi date picker');
