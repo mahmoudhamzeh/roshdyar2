@@ -54,11 +54,53 @@ app.use('/uploads', express.static(uploadsDir, {
     }
 }));
 
+const PRODUCT_IMAGE_MAX = 20;
+const PRODUCT_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+const safeUploadExt = (originalname) => {
+    const ext = path.extname(String(originalname || '')).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    return ext.slice(0, 12);
+};
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname))
+    filename: (req, file, cb) => {
+        const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        cb(null, unique + safeUploadExt(file && file.originalname));
+    }
 });
 const upload = multer({ storage });
+const productImageUpload = multer({
+    storage,
+    limits: { fileSize: PRODUCT_IMAGE_MAX_BYTES, files: PRODUCT_IMAGE_MAX }
+});
+
+const multerMessage = (err) => {
+    if (!err || err.name !== 'MulterError') return null;
+    if (err.code === 'LIMIT_UNEXPECTED_FILE' || err.code === 'LIMIT_FILE_COUNT') {
+        return 'تعداد فایل‌های انتخاب‌شده بیش از حد مجاز است';
+    }
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return 'حجم فایل بیش از حد مجاز است';
+    }
+    return 'آپلود فایل نامعتبر است';
+};
+
+const uploadProductImages = (req, res, next) => {
+    productImageUpload.array('images', PRODUCT_IMAGE_MAX)(req, res, (err) => {
+        if (!err) return next();
+        if (err && err.name === 'MulterError') {
+            if (err.code === 'LIMIT_UNEXPECTED_FILE' || err.code === 'LIMIT_FILE_COUNT') {
+                return res.status(400).json({ message: `حداکثر ۲۰ تصویر برای هر محصول مجاز است` });
+            }
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({ message: 'حجم هر تصویر باید کمتر از ۸ مگابایت باشد' });
+            }
+            return res.status(400).json({ message: 'آپلود تصویر نامعتبر است' });
+        }
+        return next(err);
+    });
+};
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -2075,7 +2117,7 @@ app.get('/api/admin/products', isAdmin, async (req, res) => {
     res.json(await store.products.listAll());
 });
 
-app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, res) => {
+app.post('/api/admin/products', isAdmin, uploadProductImages, async (req, res) => {
     const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
     if (!name || !String(name).trim()) {
         return res.status(400).json({ message: 'نام محصول الزامی است' });
@@ -2097,7 +2139,7 @@ app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, 
         price: parsedPrice,
         stock: parsedStock,
         imageUrl: uploaded[0] || null,
-        active: true,
+        active: req.body.active === undefined ? true : (req.body.active === true || req.body.active === 'true'),
         createdAt: new Date().toISOString(),
         ageBand,
         brand,
@@ -2113,7 +2155,7 @@ app.post('/api/admin/products', isAdmin, upload.array('images', 8), async (req, 
     res.status(201).json(await store.products.getById(newProduct.id));
 });
 
-app.put('/api/admin/products/:id', isAdmin, upload.array('images', 8), async (req, res) => {
+app.put('/api/admin/products/:id', isAdmin, uploadProductImages, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const current = await store.products.getById(id);
     if (!current) return res.status(404).json({ message: 'محصول یافت نشد' });
@@ -2906,7 +2948,7 @@ app.put('/api/vendor/offers/:id', requireVendor, async (req, res) => {
     res.json(offer);
 });
 
-app.post('/api/vendor/products', requireVendor, upload.array('images', 8), async (req, res) => {
+app.post('/api/vendor/products', requireVendor, uploadProductImages, async (req, res) => {
     const { name, description, category, price, stock, ageBand, brand, safetyWarning, compareAtPrice, gender } = req.body;
     if (!name || !String(name).trim()) return res.status(400).json({ message: 'نام محصول الزامی است' });
     const parsedPrice = parsePrice(price);
@@ -2944,7 +2986,7 @@ async function vendorOwnsCreatedProduct(store, vendor, product) {
     return mine.some((item) => Number(item.id) === firstId);
 }
 
-app.put('/api/vendor/products/:id', requireVendor, upload.array('images', 8), async (req, res) => {
+app.put('/api/vendor/products/:id', requireVendor, uploadProductImages, async (req, res) => {
     const current = await store.products.getById(req.params.id);
     if (!current || !(await vendorOwnsCreatedProduct(store, req.vendor, current))) {
         return res.status(404).json({ message: 'محصول یافت نشد' });
@@ -3027,6 +3069,8 @@ app.patch('/api/admin/products/:id/review', isAdmin, async (req, res) => {
 app.use((err, req, res, next) => {
     console.error(err);
     if (res.headersSent) return next(err);
+    const uploadError = multerMessage(err);
+    if (uploadError) return res.status(400).json({ message: uploadError });
     res.status(500).json({ message: 'خطای داخلی سرور' });
 });
 

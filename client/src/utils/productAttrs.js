@@ -1,3 +1,5 @@
+export const MAX_PRODUCT_IMAGES = 20;
+
 const CLOTHING_SIZES = [
     '۰–۳ ماه',
     '۳–۶ ماه',
@@ -19,7 +21,7 @@ const SHOE_SIZES = Array.from({ length: 20 }, (_, index) => String(16 + index));
 export const ATTR_FIELD_META = {
     color: { label: 'رنگ', type: 'text', placeholder: 'مثلاً آبی، کرم، سفید' },
     clothingSize: { label: 'سایز لباس', type: 'select', options: CLOTHING_SIZES },
-    material: { label: 'جنس', type: 'text', placeholder: 'مثلاً پنبه، کتان' },
+    material: { label: 'جنس', type: 'text', placeholder: 'مثلاً پنبه، کتان، پلاستیک' },
     shoeSize: { label: 'سایز کفش (EU)', type: 'select', options: SHOE_SIZES },
     shoeType: {
         label: 'نوع کفش',
@@ -32,6 +34,14 @@ export const ATTR_FIELD_META = {
     dosage: { label: 'مقدار مصرف', type: 'text', placeholder: 'مثلاً روزانه ۱ قطره' },
     storage: { label: 'شرایط نگهداری', type: 'text', placeholder: 'مثلاً جای خشک و خنک' },
     pieceCount: { label: 'تعداد قطعات', type: 'text', placeholder: 'مثلاً ۴۸ قطعه' },
+    hasRemote: {
+        label: 'کنترل‌دار',
+        type: 'select',
+        options: ['بله', 'خیر', 'رادیویی', 'دستی']
+    },
+    batteryLife: { label: 'مدت نگهداری باتری', type: 'text', placeholder: 'مثلاً ۲۰ دقیقه پرواز' },
+    chargeTime: { label: 'زمان شارژ', type: 'text', placeholder: 'مثلاً ۶۰ دقیقه' },
+    controlRange: { label: 'برد کنترل', type: 'text', placeholder: 'مثلاً ۳۰ متر' },
     publisher: { label: 'ناشر', type: 'text' },
     pages: { label: 'تعداد صفحه', type: 'text' },
     author: { label: 'نویسنده', type: 'text' },
@@ -45,22 +55,28 @@ const addKeys = (keys, extra) => {
     });
 };
 
-export const fieldsForCategoryPath = (path = []) => {
+export const fieldsForCategoryPath = (path = [], extraText = '') => {
     const names = (path || [])
         .map((item) => (typeof item === 'string' ? item : item && item.name))
         .filter(Boolean);
-    const text = names.join(' ');
+    const pathText = names.join(' ');
+    const text = [pathText, extraText].filter(Boolean).join(' ');
     const keys = [];
 
-    if (/کفش/.test(text)) addKeys(keys, ['color', 'shoeSize', 'shoeType', 'material']);
-    else if (/پوشاک|لباس|نوزاد|کودک/.test(text)) addKeys(keys, ['color', 'clothingSize', 'material']);
+    if (/کفش/.test(pathText)) addKeys(keys, ['color', 'shoeSize', 'shoeType', 'material']);
+    else if (/پوشاک|لباس|نوزاد|کودک/.test(pathText)) addKeys(keys, ['color', 'clothingSize', 'material']);
 
-    if (/مکمل|ویتامین/.test(text)) addKeys(keys, ['expiryDate', 'dosage', 'storage', 'netWeight']);
-    else if (/تغذیه|غذا|میوه|میان.?وعده/.test(text)) addKeys(keys, ['expiryDate', 'netWeight', 'ingredients']);
+    if (/مکمل|ویتامین/.test(pathText)) addKeys(keys, ['expiryDate', 'dosage', 'storage', 'netWeight']);
+    else if (/تغذیه|غذا|میوه|میان.?وعده/.test(pathText)) addKeys(keys, ['expiryDate', 'netWeight', 'ingredients']);
 
-    if (/اسباب|بازی|لگو|عروسک|ماشین|ساخت/.test(text)) addKeys(keys, ['material', 'pieceCount']);
-    if (/کتاب|داستان|آموزش/.test(text)) addKeys(keys, ['author', 'publisher', 'pages']);
-    if (/بهداشت|حمام|پوست/.test(text)) addKeys(keys, ['volume', 'expiryDate', 'skinType']);
+    if (/اسباب|بازی|لگو|عروسک|ماشین|ساخت|چوبی|حرکتی/.test(text)) {
+        addKeys(keys, ['material', 'pieceCount']);
+    }
+    if (/حرکتی|کنترل|هلی|هلکوپتر|پهپاد|کواد|ماشین|ربات/.test(text)) {
+        addKeys(keys, ['hasRemote', 'batteryLife', 'chargeTime', 'controlRange']);
+    }
+    if (/کتاب|داستان|آموزش/.test(pathText)) addKeys(keys, ['author', 'publisher', 'pages']);
+    if (/بهداشت|حمام|پوست/.test(pathText)) addKeys(keys, ['volume', 'expiryDate', 'skinType']);
 
     return keys.map((key) => ({ key, ...ATTR_FIELD_META[key] }));
 };
