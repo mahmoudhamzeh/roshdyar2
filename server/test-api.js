@@ -566,7 +566,76 @@ async function run() {
             headers: auth
         });
         assert.strictEqual(myTickets.status, 200);
+        assert.ok(Array.isArray(myTickets.data));
         assert.ok(myTickets.data.some((t) => t.id === ticket.data.id));
+
+        const adminTickets = await request('GET', '/api/admin/tickets', { headers: auth });
+        assert.strictEqual(adminTickets.status, 200, JSON.stringify(adminTickets.data));
+        assert.ok(Array.isArray(adminTickets.data.tickets));
+        assert.ok(adminTickets.data.counts.total >= 1);
+        const listedTicket = adminTickets.data.tickets.find((item) => item.id === ticket.data.id);
+        assert.ok(listedTicket, 'admin must see the created ticket');
+        assert.ok(listedTicket.user && listedTicket.user.displayName);
+        assert.strictEqual(listedTicket.status, 'open');
+
+        const adminReply = await request('PUT', `/api/admin/tickets/${ticket.data.id}`, {
+            headers: auth,
+            body: { reply: 'پاسخ پشتیبانی برای کاربر' }
+        });
+        assert.strictEqual(adminReply.status, 200, JSON.stringify(adminReply.data));
+        assert.strictEqual(adminReply.data.status, 'waiting_user');
+        assert.ok((adminReply.data.replies || []).some((item) => item.content.includes('پاسخ پشتیبانی')));
+        assert.strictEqual(adminReply.data.replies[adminReply.data.replies.length - 1].authorRole, 'admin');
+
+        const waiting = await request('PUT', `/api/admin/tickets/${ticket.data.id}`, {
+            headers: auth,
+            body: { status: 'waiting_user' }
+        });
+        assert.strictEqual(waiting.status, 200);
+        assert.strictEqual(waiting.data.status, 'waiting_user');
+
+        const reviewing = await request('PUT', `/api/admin/tickets/${ticket.data.id}`, {
+            headers: auth,
+            body: { status: 'in_review' }
+        });
+        assert.strictEqual(reviewing.status, 200);
+        assert.strictEqual(reviewing.data.status, 'in_review');
+
+        const closed = await request('PUT', `/api/admin/tickets/${ticket.data.id}`, {
+            headers: auth,
+            body: { status: 'closed' }
+        });
+        assert.strictEqual(closed.status, 200);
+        assert.strictEqual(closed.data.status, 'closed');
+
+        const closedReplyBlocked = await request('POST', `/api/tickets/${ticket.data.id}/replies`, {
+            headers: auth,
+            body: { content: 'نباید روی تیکت بسته جواب بدهم' }
+        });
+        assert.strictEqual(closedReplyBlocked.status, 400);
+
+        const reopened = await request('PUT', `/api/admin/tickets/${ticket.data.id}`, {
+            headers: auth,
+            body: { status: 'open' }
+        });
+        assert.strictEqual(reopened.status, 200);
+        assert.strictEqual(reopened.data.status, 'open');
+
+        const userFollowUp = await request('POST', `/api/tickets/${ticket.data.id}/replies`, {
+            headers: auth,
+            body: { content: 'ممنون، سؤال دیگری دارم' }
+        });
+        assert.strictEqual(userFollowUp.status, 201, JSON.stringify(userFollowUp.data));
+        assert.strictEqual(userFollowUp.data.status, 'open');
+        assert.ok((userFollowUp.data.replies || []).some((item) => item.content.includes('سؤال دیگری')));
+
+        const filteredOpen = await request('GET', '/api/admin/tickets?status=open', { headers: auth });
+        assert.ok(filteredOpen.data.tickets.every((item) => item.status === 'open'));
+        assert.ok(filteredOpen.data.tickets.some((item) => item.id === ticket.data.id));
+
+        const statsAfterTickets = await request('GET', '/api/admin/stats', { headers: auth });
+        assert.ok(statsAfterTickets.data.ticketCounts);
+        assert.ok(statsAfterTickets.data.ticketCounts.total >= 1);
 
         const visit = await request('POST', `/api/visits/${childId}`, {
             headers: auth,
@@ -681,6 +750,14 @@ async function run() {
             }
         });
         assert.strictEqual(pendingTicket.status, 201, JSON.stringify(pendingTicket.data));
+
+        const vendorTicketSeen = await request('GET', '/api/admin/tickets', { headers: auth });
+        const vendorListed = (vendorTicketSeen.data.tickets || []).find((item) => item.id === pendingTicket.data.id);
+        assert.ok(vendorListed, 'admin must see vendor tickets');
+        assert.strictEqual(Number(vendorListed.userId), Number(verify.data.user.id));
+        assert.ok(vendorListed.user);
+        assert.ok(vendorListed.user.displayName);
+        assert.ok(String(vendorListed.user.mobile || '').includes('0912') || String(vendorListed.userName || '').length > 0);
 
         const blockApprove = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,

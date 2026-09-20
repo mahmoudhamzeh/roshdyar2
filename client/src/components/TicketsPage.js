@@ -10,6 +10,16 @@ const FALLBACK_GROUPS = {
     'سایر': ['عمومی']
 };
 
+const STATUS_LABELS = {
+    open: 'باز',
+    in_review: 'در حال بررسی',
+    waiting_user: 'در انتظار پاسخ شما',
+    answered: 'در انتظار پاسخ شما',
+    closed: 'بسته'
+};
+
+const ticketNumberOf = (ticket) => ticket.ticketNumber || (ticket.id != null ? `TK-${String(ticket.id).padStart(5, '0')}` : '');
+
 const TicketsPage = () => {
     const [tickets, setTickets] = useState([]);
     const [groups, setGroups] = useState(FALLBACK_GROUPS);
@@ -23,8 +33,10 @@ const TicketsPage = () => {
     const [files, setFiles] = useState([]);
     const [submitting, setSubmitting] = useState(false);
     const [selected, setSelected] = useState(null);
+    const [reply, setReply] = useState('');
+    const [replying, setReplying] = useState(false);
 
-    const loadTickets = async () => {
+    const loadTickets = async (keepSelectedId) => {
         setLoading(true);
         setError('');
         try {
@@ -33,7 +45,13 @@ const TicketsPage = () => {
                 fetch(`${API}/api/tickets/groups`)
             ]);
             if (!listRes.ok) throw new Error('بارگذاری تیکت‌ها ناموفق بود');
-            setTickets(await listRes.json());
+            const list = await listRes.json();
+            const ticketsList = Array.isArray(list) ? list : (list.tickets || []);
+            setTickets(ticketsList);
+            if (keepSelectedId) {
+                const next = ticketsList.find((item) => Number(item.id) === Number(keepSelectedId));
+                if (next) setSelected(next);
+            }
             if (groupRes.ok) {
                 const data = await groupRes.json();
                 if (data && typeof data === 'object' && !data.message) setGroups(data);
@@ -76,12 +94,32 @@ const TicketsPage = () => {
         }
     };
 
-    const statusLabel = {
-        open: 'باز',
-        answered: 'پاسخ داده‌شده',
-        closed: 'بسته‌شده'
+    const handleReply = async (e) => {
+        e.preventDefault();
+        if (!selected || !reply.trim()) return;
+        setReplying(true);
+        setError('');
+        try {
+            const res = await fetch(`${API}/api/tickets/${selected.id}/replies`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: reply.trim() })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'ارسال پاسخ ناموفق بود');
+            setReply('');
+            setSelected(data);
+            setSuccess('پاسخ شما ثبت شد.');
+            await loadTickets(data.id);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setReplying(false);
+        }
     };
+
     const subgroups = groups[groupName] || [];
+    const canReply = selected && selected.status !== 'closed';
 
     return (
         <div className="tickets-page">
@@ -134,13 +172,13 @@ const TicketsPage = () => {
                 <ul className="tickets-list">
                     {tickets.map((ticket) => (
                         <li key={ticket.id} className="ui-card tickets-item">
-                            <button type="button" onClick={() => setSelected(ticket)}>
+                            <button type="button" onClick={() => { setSelected(ticket); setReply(''); }}>
                                 <span>
                                     <strong>{ticket.subject}</strong>
-                                    <small className="ticket-number">{ticket.ticketNumber || `TK-${String(ticket.id).padStart(5, '0')}`}</small>
+                                    <small className="ticket-number">{ticketNumberOf(ticket)}</small>
                                 </span>
                                 <span className={`ticket-pill status-${ticket.status}`}>
-                                    {statusLabel[ticket.status] || ticket.status}
+                                    {STATUS_LABELS[ticket.status] || ticket.status}
                                 </span>
                             </button>
                         </li>
@@ -154,18 +192,46 @@ const TicketsPage = () => {
                         <h3>{selected.subject}</h3>
                         <button type="button" className="ui-btn-secondary ui-btn" onClick={() => setSelected(null)}>بستن</button>
                     </div>
-                    <p className="ticket-number">شماره تیکت: {selected.ticketNumber || `TK-${String(selected.id).padStart(5, '0')}`}</p>
+                    <p className="ticket-number">شماره تیکت: {ticketNumberOf(selected)}</p>
                     <p>{selected.groupName} / {selected.subgroup}</p>
-                    <p>{selected.content || selected.message}</p>
-                    {(selected.attachments || []).map((url) => (
-                        <a key={url} href={url} target="_blank" rel="noreferrer">مشاهده پیوست</a>
-                    ))}
-                    {(selected.replies || []).map((reply, index) => (
-                        <div key={index} className="tickets-reply">
-                            <strong>پاسخ پشتیبانی</strong>
-                            <p>{reply.content}</p>
+                    <span className={`ticket-pill status-${selected.status}`}>
+                        {STATUS_LABELS[selected.status] || selected.status}
+                    </span>
+                    <div className="tickets-thread">
+                        <div className="tickets-reply is-user">
+                            <strong>پیام شما</strong>
+                            <p>{selected.content || selected.message}</p>
                         </div>
-                    ))}
+                        {(selected.attachments || []).map((url) => (
+                            <a key={url} href={url} target="_blank" rel="noreferrer">مشاهده پیوست</a>
+                        ))}
+                        {(selected.replies || []).map((item, index) => (
+                            <div key={`${item.createdAt || index}-${index}`} className={`tickets-reply ${item.authorRole === 'admin' ? 'is-admin' : 'is-user'}`}>
+                                <strong>{item.authorRole === 'admin' ? (item.authorName || 'پشتیبانی') : 'پیام شما'}</strong>
+                                <p>{item.content}</p>
+                            </div>
+                        ))}
+                    </div>
+                    {canReply ? (
+                        <form className="tickets-reply-form" onSubmit={handleReply}>
+                            <label>
+                                پاسخ شما
+                                <textarea
+                                    className="ui-textarea"
+                                    rows="3"
+                                    value={reply}
+                                    onChange={(e) => setReply(e.target.value)}
+                                    placeholder="اگر پشتیبانی سؤال کرده، اینجا جواب بدهید."
+                                    required
+                                />
+                            </label>
+                            <button type="submit" className="ui-btn" disabled={replying || !reply.trim()}>
+                                {replying ? 'در حال ارسال...' : 'ارسال پاسخ'}
+                            </button>
+                        </form>
+                    ) : (
+                        <p className="tickets-closed">این تیکت بسته شده است.</p>
+                    )}
                 </div>
             )}
         </div>

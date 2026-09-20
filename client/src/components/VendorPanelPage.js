@@ -34,6 +34,14 @@ const DOC_KINDS = [
     { id: 'other', label: 'سایر مدارک' }
 ];
 
+const TICKET_STATUS_LABELS = {
+    open: 'باز',
+    in_review: 'در حال بررسی',
+    waiting_user: 'در انتظار پاسخ شما',
+    answered: 'در انتظار پاسخ شما',
+    closed: 'بسته'
+};
+
 const LINE_STATUSES = [
     { id: 'pending', label: 'ثبت‌شده' },
     { id: 'preparing', label: 'در حال آماده‌سازی' },
@@ -962,7 +970,7 @@ const VendorPanelPage = () => {
                                                     <strong>#{ticket.id} · {ticket.subject}</strong>
                                                     <p>{ticket.groupName} / {ticket.subgroup}</p>
                                                 </div>
-                                                <span className="vendor-pill">{ticket.status || 'open'}</span>
+                                                <span className="vendor-pill">{TICKET_STATUS_LABELS[ticket.status] || ticket.status || 'باز'}</span>
                                             </li>
                                         ))}
                                     </ul>

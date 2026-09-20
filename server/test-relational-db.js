@@ -174,13 +174,23 @@ function run() {
     assert.ok(indexes.includes('idx_growth_child_date'));
     assert.ok(indexes.includes('idx_tickets_user'));
 
+    const ticketUtils = require('./ticket-utils');
+    assert.strictEqual(ticketUtils.normalizeTicketStatus('answered'), 'waiting_user');
+    assert.strictEqual(ticketUtils.displayUserName({ firstName: 'علی', lastName: 'فروشنده' }), 'علی فروشنده');
+
     const ticket = store.tickets.create({
         userId: createdUser.id,
         subject: 'سؤال تست',
         content: 'متن تیکت'
     });
     assert.ok(ticket.id);
+    assert.strictEqual(ticket.status, 'open');
     assert.strictEqual(store.tickets.listByUser(createdUser.id).length, 1);
+    const counts = store.tickets.countByStatus();
+    assert.ok(counts.total >= 1);
+    assert.ok(counts.open >= 1);
+    store.tickets.update(ticket.id, { ...ticket, status: 'answered', replies: [{ content: 'ok', authorRole: 'admin' }] });
+    assert.strictEqual(store.tickets.getById(ticket.id).status, 'waiting_user');
 
     const podcast = store.podcasts.create({
         title: 'پادکست تست',

@@ -51,8 +51,20 @@ const AdminDashboard = () => {
                     <p>{stats.totalArticles}</p>
                 </div>
                 <div className="stat-card">
-                    <h3>تیکت‌های باز</h3>
-                    <p>{stats.openTickets} / {stats.totalTickets}</p>
+                    <h3>تیکت باز</h3>
+                    <p>{(stats.ticketCounts && stats.ticketCounts.open) ?? stats.openTickets ?? 0}</p>
+                </div>
+                <div className="stat-card">
+                    <h3>در حال بررسی</h3>
+                    <p>{(stats.ticketCounts && stats.ticketCounts.in_review) ?? 0}</p>
+                </div>
+                <div className="stat-card">
+                    <h3>در انتظار پاسخ کاربر</h3>
+                    <p>{(stats.ticketCounts && stats.ticketCounts.waiting_user) ?? 0}</p>
+                </div>
+                <div className="stat-card">
+                    <h3>تیکت بسته</h3>
+                    <p>{(stats.ticketCounts && stats.ticketCounts.closed) ?? 0}</p>
                 </div>
                 <div className="stat-card">
                     <h3>محصولات فروشگاه</h3>
