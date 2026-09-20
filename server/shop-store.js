@@ -274,6 +274,7 @@ function mapVendorRow(row) {
         userId: row.user_id != null ? Number(row.user_id) : null,
         phone: row.phone || '',
         docsNote: row.docs_note || '',
+        reviewNote: row.review_note || '',
         personKind: row.person_kind || 'individual',
         nationalId: row.national_id || '',
         legalName: row.legal_name || '',
@@ -300,14 +301,38 @@ function mapVendorDocRow(row) {
     };
 }
 
+function vendorProfileGaps(vendor) {
+    if (!vendor) return ['فروشنده'];
+    const gaps = [];
+    const required = [
+        ['displayName', 'نام فروشگاه'],
+        ['phone', 'شماره تماس'],
+        ['ownerName', 'نام صاحب حساب'],
+        ['nationalId', 'کد ملی / شناسه ملی'],
+        ['bankName', 'نام بانک'],
+        ['bankSheba', 'شماره شبا'],
+        ['address', 'نشانی']
+    ];
+    required.forEach(([key, label]) => {
+        if (!String(vendor[key] || '').trim()) gaps.push(label);
+    });
+    if (vendor.personKind === 'company') {
+        if (!String(vendor.legalName || '').trim()) gaps.push('نام حقوقی شرکت');
+        if (!String(vendor.registrationNo || '').trim()) gaps.push('شماره ثبت');
+    }
+    const docCount = (vendor.docs || []).length;
+    if (docCount < 2) gaps.push(`مدارک (حداقل ۲ فایل؛ فعلی ${docCount})`);
+    return gaps;
+}
+
 function isVendorProfileComplete(vendor) {
-    if (!vendor) return false;
-    const hasCore = vendor.displayName && vendor.phone && vendor.ownerName && vendor.nationalId
-        && vendor.bankName && vendor.bankSheba && vendor.address;
-    if (!hasCore) return false;
-    if (vendor.personKind === 'company' && (!vendor.legalName || !vendor.registrationNo)) return false;
-    const docs = vendor.docs || [];
-    return docs.length >= 2;
+    return vendorProfileGaps(vendor).length === 0;
+}
+
+function nextVendorApplyStatus(existing) {
+    if (!existing) return 'pending';
+    if (existing.status === 'returned' || existing.status === 'rejected') return 'pending';
+    return existing.status;
 }
 
 function slugifyVendor(name) {
@@ -321,7 +346,7 @@ function slugifyVendor(name) {
 }
 
 function seedShopExtrasSqlite(db) {
-    ['user_id', 'phone', 'docs_note'].forEach((col) => {
+    ['user_id', 'phone', 'docs_note', 'review_note'].forEach((col) => {
         const type = col === 'user_id' ? 'INTEGER' : 'TEXT';
         if (!sqliteHasColumn(db, 'shop_vendors', col)) {
             db.exec(`ALTER TABLE shop_vendors ADD COLUMN ${col} ${type}`);
@@ -628,7 +653,8 @@ function ensureShopSchemaSqlite(db) {
         ['address', 'TEXT'],
         ['bank_name', 'TEXT'],
         ['bank_sheba', 'TEXT'],
-        ['bank_account', 'TEXT']
+        ['bank_account', 'TEXT'],
+        ['review_note', 'TEXT']
     ].forEach(([col, type]) => {
         if (!sqliteHasColumn(db, 'shop_vendors', col)) {
             db.exec(`ALTER TABLE shop_vendors ADD COLUMN ${col} ${type}`);
@@ -782,7 +808,8 @@ function hydrateVendorSqlite(db, vendor) {
     if (!vendor) return null;
     const docs = listVendorDocsSqlite(db, vendor.id);
     const next = { ...vendor, docs };
-    return { ...next, profileComplete: isVendorProfileComplete(next) };
+    const profileGaps = vendorProfileGaps(next);
+    return { ...next, profileGaps, profileComplete: profileGaps.length === 0 };
 }
 
 function listVendorsSqlite(db) {
@@ -801,6 +828,7 @@ function writeVendorSqlite(db, id, next) {
     db.prepare(`
         UPDATE shop_vendors SET
             display_name = ?, status = ?, commission_pct = ?, settlement_cycle = ?, phone = ?, docs_note = ?,
+            review_note = ?,
             person_kind = ?, national_id = ?, legal_name = ?, registration_no = ?, economic_code = ?,
             owner_name = ?, province = ?, city = ?, address = ?, bank_name = ?, bank_sheba = ?, bank_account = ?
         WHERE id = ?
@@ -811,6 +839,7 @@ function writeVendorSqlite(db, id, next) {
         next.settlementCycle || 'weekly',
         next.phone || null,
         next.docsNote || null,
+        next.reviewNote || null,
         next.personKind || 'individual',
         next.nationalId || null,
         next.legalName || null,
@@ -840,7 +869,7 @@ function applyVendorSqlite(db, payload) {
             ...existing,
             ...compactPatch(payload),
             displayName,
-            status: existing.status
+            status: nextVendorApplyStatus(existing)
         });
     }
     const info = db.prepare(`
@@ -1128,6 +1157,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS user_id BIGINT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS phone TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS docs_note TEXT');
+    await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS review_note TEXT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS placement TEXT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS product_id BIGINT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0');
@@ -1325,7 +1355,8 @@ async function hydrateVendorPg(many, vendor) {
     if (!vendor) return null;
     const docs = await listVendorDocsPg(many, vendor.id);
     const next = { ...vendor, docs };
-    return { ...next, profileComplete: isVendorProfileComplete(next) };
+    const profileGaps = vendorProfileGaps(next);
+    return { ...next, profileGaps, profileComplete: profileGaps.length === 0 };
 }
 
 async function listVendorsPg(many) {
@@ -1343,9 +1374,10 @@ async function writeVendorPg(q, one, many, id, next) {
     const row = await one(
         `UPDATE shop_vendors SET
             display_name=$1, status=$2, commission_pct=$3, settlement_cycle=$4, phone=$5, docs_note=$6,
-            person_kind=$7, national_id=$8, legal_name=$9, registration_no=$10, economic_code=$11,
-            owner_name=$12, province=$13, city=$14, address=$15, bank_name=$16, bank_sheba=$17, bank_account=$18
-         WHERE id=$19 RETURNING *`,
+            review_note=$7,
+            person_kind=$8, national_id=$9, legal_name=$10, registration_no=$11, economic_code=$12,
+            owner_name=$13, province=$14, city=$15, address=$16, bank_name=$17, bank_sheba=$18, bank_account=$19
+         WHERE id=$20 RETURNING *`,
         [
             next.displayName,
             next.status,
@@ -1353,6 +1385,7 @@ async function writeVendorPg(q, one, many, id, next) {
             next.settlementCycle || 'weekly',
             next.phone || null,
             next.docsNote || null,
+            next.reviewNote || null,
             next.personKind || 'individual',
             next.nationalId || null,
             next.legalName || null,
@@ -1375,7 +1408,12 @@ async function applyVendorPg(q, one, many, payload) {
     const existing = await getVendorByUserPg(one, many, payload.userId);
     const displayName = String(payload.displayName || (existing && existing.displayName) || '').trim();
     if (existing) {
-        return writeVendorPg(q, one, many, existing.id, { ...existing, ...compactPatch(payload), displayName, status: existing.status });
+        return writeVendorPg(q, one, many, existing.id, {
+            ...existing,
+            ...compactPatch(payload),
+            displayName,
+            status: nextVendorApplyStatus(existing)
+        });
     }
     const row = await one(
         `INSERT INTO shop_vendors (slug, display_name, kind, status, commission_pct, settlement_cycle, user_id, phone, docs_note)
@@ -1651,6 +1689,7 @@ module.exports = {
     requestPayoutSqlite,
     offerPriceRangesSqlite,
     isVendorProfileComplete,
+    vendorProfileGaps,
     ensureShopSchemaPg,
     listSkillsPg,
     getInternalVendorPg,

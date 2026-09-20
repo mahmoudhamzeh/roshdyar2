@@ -627,6 +627,43 @@ async function run() {
             body: { status: 'active' }
         });
         assert.strictEqual(blockApprove.status, 400);
+        assert.ok(Array.isArray(blockApprove.data.profileGaps));
+        assert.ok(blockApprove.data.profileGaps.some((item) => String(item).includes('مدارک')));
+
+        const listedVendors = await request('GET', '/api/admin/vendors', { headers: auth });
+        const listedVendor = (listedVendors.data || []).find((item) => Number(item.id) === Number(vendorApply.data.id));
+        assert.ok(listedVendor);
+        assert.strictEqual(listedVendor.profileComplete, false);
+        assert.ok((listedVendor.profileGaps || []).length > 0);
+
+        const needNote = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'returned' }
+        });
+        assert.strictEqual(needNote.status, 400);
+
+        const requestDocs = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'returned', reviewNote: 'کارت ملی و تأییدیه شبا لازم است' }
+        });
+        assert.strictEqual(requestDocs.status, 200, JSON.stringify(requestDocs.data));
+        assert.strictEqual(requestDocs.data.status, 'returned');
+        assert.strictEqual(requestDocs.data.reviewNote, 'کارت ملی و تأییدیه شبا لازم است');
+
+        const vendorSeesNote = await request('GET', '/api/shop/vendors/me', {
+            headers: { Authorization: `Bearer ${verify.data.token}` }
+        });
+        assert.strictEqual(vendorSeesNote.status, 200);
+        assert.strictEqual(vendorSeesNote.data.status, 'returned');
+        assert.strictEqual(vendorSeesNote.data.reviewNote, 'کارت ملی و تأییدیه شبا لازم است');
+
+        const rejectVendor = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'rejected', note: 'اطلاعات با مدارک همخوانی ندارد' }
+        });
+        assert.strictEqual(rejectVendor.status, 200, JSON.stringify(rejectVendor.data));
+        assert.strictEqual(rejectVendor.data.status, 'rejected');
+        assert.strictEqual(rejectVendor.data.reviewNote, 'اطلاعات با مدارک همخوانی ندارد');
 
         const boundary = `----tatkids${Date.now()}`;
         const fileBody = Buffer.concat([
@@ -661,6 +698,7 @@ async function run() {
         });
         assert.strictEqual(docs.status, 201, JSON.stringify(docs.data));
         assert.ok(docs.data.profileComplete);
+        assert.strictEqual(docs.data.status, 'pending');
 
         const approveVendor = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
@@ -669,6 +707,7 @@ async function run() {
         assert.strictEqual(approveVendor.status, 200, JSON.stringify(approveVendor.data));
         assert.strictEqual(approveVendor.data.status, 'active');
         assert.strictEqual(approveVendor.data.personKind, 'individual');
+        assert.strictEqual(approveVendor.data.reviewNote, '');
 
         const vendorProduct = await request('POST', '/api/vendor/products', {
             headers: { Authorization: `Bearer ${verify.data.token}` },

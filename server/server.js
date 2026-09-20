@@ -2843,8 +2843,14 @@ app.post('/api/shop/vendors/me/docs', upload.array('docs', 8), async (req, res) 
             originalName: files[i].originalname
         });
     }
-    res.status(201).json(await store.shop.getVendorByUser(user.id));
+    vendor = await store.shop.getVendorByUser(user.id);
+    if (vendor && (vendor.status === 'returned' || vendor.status === 'rejected')) {
+        vendor = await store.shop.updateVendor(vendor.id, { status: 'pending' });
+    }
+    res.status(201).json(vendor);
 });
+
+const ALLOWED_VENDOR_STATUS = ['pending', 'active', 'suspended', 'returned', 'rejected'];
 
 app.get('/api/admin/vendors', isAdmin, async (req, res) => {
     res.json(await store.shop.listVendors());
@@ -2852,18 +2858,43 @@ app.get('/api/admin/vendors', isAdmin, async (req, res) => {
 
 app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
     const current = (await store.shop.listVendors()).find((item) => Number(item.id) === Number(req.params.id));
-    if (req.body.status === 'active' && current && !current.profileComplete) {
-        return res.status(400).json({ message: 'مدارک و اطلاعات حقیقی/حقوقی و مالی هنوز کامل نیست' });
+    if (!current) return res.status(404).json({ message: 'فروشنده یافت نشد' });
+    const status = req.body.status;
+    if (status != null && !ALLOWED_VENDOR_STATUS.includes(status)) {
+        return res.status(400).json({ message: 'وضعیت نامعتبر است' });
     }
-    const updated = await store.shop.updateVendor(req.params.id, {
-        ...vendorPayloadFromBody(req.body, null),
-        displayName: req.body.displayName,
-        status: req.body.status,
-        commissionPct: req.body.commissionPct,
-        settlementCycle: req.body.settlementCycle,
-        phone: req.body.phone,
-        docsNote: req.body.docsNote
+    if (status === 'active' && !current.profileComplete) {
+        return res.status(400).json({
+            message: 'مدارک و اطلاعات حقیقی/حقوقی و مالی هنوز کامل نیست',
+            profileGaps: current.profileGaps || []
+        });
+    }
+    const reviewNoteRaw = req.body.reviewNote !== undefined
+        ? req.body.reviewNote
+        : req.body.note;
+    const reviewNote = reviewNoteRaw !== undefined ? String(reviewNoteRaw).trim() : undefined;
+    if ((status === 'returned' || status === 'rejected') && !reviewNote) {
+        return res.status(400).json({ message: 'برای رد، درخواست اصلاح یا درخواست مدارک، توضیح کارشناس لازم است' });
+    }
+    const body = req.body || {};
+    const kyc = vendorPayloadFromBody(body, null);
+    const kycPatch = {};
+    [
+        'displayName', 'phone', 'docsNote', 'personKind', 'nationalId', 'legalName',
+        'registrationNo', 'economicCode', 'ownerName', 'province', 'city', 'address',
+        'bankName', 'bankSheba', 'bankAccount'
+    ].forEach((key) => {
+        if (body[key] !== undefined) kycPatch[key] = kyc[key];
     });
+    const patch = {
+        ...kycPatch,
+        ...(status !== undefined ? { status } : {}),
+        ...(body.commissionPct !== undefined ? { commissionPct: body.commissionPct } : {}),
+        ...(body.settlementCycle !== undefined ? { settlementCycle: body.settlementCycle } : {})
+    };
+    if (status === 'active') patch.reviewNote = reviewNote || '';
+    else if (reviewNote !== undefined) patch.reviewNote = reviewNote;
+    const updated = await store.shop.updateVendor(req.params.id, patch);
     if (!updated) return res.status(404).json({ message: 'فروشنده یافت نشد' });
     res.json(updated);
 });

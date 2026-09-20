@@ -484,9 +484,13 @@ const VendorPanelPage = () => {
             ? 'فعال'
             : me.status === 'pending'
                 ? 'در انتظار تأیید'
-                : me.status === 'suspended'
-                    ? 'تعلیق‌شده'
-                    : me.status;
+                : me.status === 'returned'
+                    ? 'نیاز به اصلاح / مدارک'
+                    : me.status === 'rejected'
+                        ? 'رد شده'
+                        : me.status === 'suspended'
+                            ? 'تعلیق‌شده'
+                            : me.status;
 
     const profileForm = (
         <form className="vendor-form" onSubmit={(e) => saveProfile(e, !!me)}>
@@ -607,6 +611,9 @@ const VendorPanelPage = () => {
                                 ? 'پرونده کامل است و منتظر تأیید کارشناس می‌ماند. پروفایل و تیکت پشتیبانی همین حالا در دسترس است.'
                                 : 'برای تکمیل، هویت، شبا و حداقل دو مدرک لازم است.'}
                         </p>
+                        {me.reviewNote && (
+                            <p className="vendor-warn">پیام کارشناس: {me.reviewNote}</p>
+                        )}
                         <form className="vendor-form" onSubmit={uploadDocs}>
                             <Field label="نوع مدرک">
                                 <select value={docKind} onChange={(e) => setDocKind(e.target.value)}>
@@ -684,6 +691,9 @@ const VendorPanelPage = () => {
                                     )}
                                     {!isActive && (
                                         <p className="vendor-muted">تا تأیید کارشناس، از پروفایل و پشتیبانی استفاده کنید. محصولات و تسویه بعد از فعال شدن باز می‌شود.</p>
+                                    )}
+                                    {!isActive && me.reviewNote && (
+                                        <p className="vendor-warn">پیام کارشناس: {me.reviewNote}</p>
                                     )}
                                     <div className="vendor-home-actions">
                                         <button type="button" className="vendor-btn vendor-btn-primary" onClick={() => openTab('profile')}>پروفایل فروشگاه</button>

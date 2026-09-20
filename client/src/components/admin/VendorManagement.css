@@ -1,0 +1,343 @@
+.vendor-review {
+    direction: rtl;
+    text-align: right;
+}
+
+.vendor-review-head h2 {
+    margin: 0 0 0.35rem;
+}
+
+.vendor-review-head p {
+    margin: 0;
+    color: #5b716e;
+    line-height: 1.7;
+}
+
+.vendor-review-error {
+    background: #fee2e2;
+    color: #b91c1c;
+    padding: 0.75rem 1rem;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.vendor-review-empty {
+    color: #5b716e;
+}
+
+.vendor-review-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 1rem 0;
+}
+
+.vendor-review-filters button {
+    border: 1px solid #d7e5e2;
+    background: #fff;
+    color: #134e4a;
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.vendor-review-filters button em {
+    font-style: normal;
+    background: #ecfdf5;
+    color: #0f766e;
+    border-radius: 999px;
+    min-width: 1.4rem;
+    padding: 0 0.35rem;
+    font-size: 0.75rem;
+}
+
+.vendor-review-filters button.is-on {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+}
+
+.vendor-review-filters button.is-on em {
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+}
+
+.vendor-review-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.vendor-review-card {
+    background: #fff;
+    border: 1px solid #d7e5e2;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.06);
+    overflow: hidden;
+}
+
+.vendor-review-card.is-returned,
+.vendor-review-card.is-pending {
+    border-color: #fdba74;
+}
+
+.vendor-review-card.is-rejected {
+    border-color: #fca5a5;
+}
+
+.vendor-review-card-head {
+    padding: 1rem 1.15rem 0.85rem;
+}
+
+.vendor-review-toggle {
+    width: 100%;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    text-align: right;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    color: inherit;
+}
+
+.vendor-review-toggle h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.vendor-review-card-head p {
+    margin: 0.45rem 0 0;
+    color: #5b716e;
+}
+
+.vendor-review-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    background: #f1f5f4;
+    color: #3f4f4c;
+}
+
+.vendor-review-pill.is-active,
+.vendor-review-pill.is-complete {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.vendor-review-pill.is-pending,
+.vendor-review-pill.is-returned {
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.vendor-review-pill.is-rejected,
+.vendor-review-pill.is-suspended,
+.vendor-review-pill.is-incomplete {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.vendor-review-kind {
+    color: #5b716e;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.vendor-review-body {
+    padding: 0 1.15rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    border-top: 1px solid #e8f0ee;
+}
+
+.vendor-review-body section h4 {
+    margin: 0.85rem 0 0.55rem;
+    color: #0f766e;
+    font-size: 0.9rem;
+}
+
+.vendor-review-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.55rem;
+}
+
+.vendor-review-field {
+    background: #f7fbfa;
+    border: 1px solid #e4eeeb;
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.vendor-review-field span {
+    font-size: 0.75rem;
+    color: #5b716e;
+    font-weight: 700;
+}
+
+.vendor-review-field strong {
+    font-size: 0.92rem;
+    color: #134e4a;
+    word-break: break-word;
+}
+
+.vendor-review-field.is-empty {
+    background: #fff7ed;
+    border-color: #fed7aa;
+}
+
+.vendor-review-field.is-empty strong {
+    color: #c2410c;
+    font-weight: 700;
+}
+
+.vendor-review-gaps {
+    margin-top: 0.85rem;
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+    border-radius: 10px;
+    padding: 0.7rem 0.9rem;
+}
+
+.vendor-review-gaps ul {
+    margin: 0.4rem 0 0;
+    padding-right: 1.1rem;
+}
+
+.vendor-review-note-current,
+.vendor-review-docs-note {
+    margin: 0.35rem 0 0;
+    background: #ecfeff;
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    color: #155e75;
+}
+
+.vendor-review-muted {
+    color: #8aa09c;
+    margin: 0;
+}
+
+.vendor-review-docs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.65rem;
+}
+
+.vendor-review-docs li {
+    border: 1px solid #d7e5e2;
+    border-radius: 10px;
+    padding: 0.55rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    background: #f7fbfa;
+}
+
+.vendor-review-docs img {
+    width: 100%;
+    height: 110px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.vendor-review-docs a {
+    color: #0f766e;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.vendor-review-docs small {
+    display: block;
+    color: #8aa09c;
+    word-break: break-all;
+}
+
+.vendor-review-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    background: #f4faf8;
+    border-radius: 12px;
+    padding: 0.85rem;
+}
+
+.vendor-review-actions label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 700;
+    color: #134e4a;
+}
+
+.vendor-review-actions textarea,
+.vendor-review-commission input {
+    border: 1px solid #d7e5e2;
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    font: inherit;
+}
+
+.vendor-review-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.vendor-review-buttons button {
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 0.9rem;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.vendor-review-buttons button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.vendor-review-buttons .is-approve { background: #0f766e; }
+.vendor-review-buttons .is-fix { background: #d97706; }
+.vendor-review-buttons .is-docs { background: #0369a1; }
+.vendor-review-buttons .is-reject,
+.vendor-review-buttons .is-suspend { background: #dc2626; }
+
+.vendor-review-commission {
+    margin-right: auto;
+    font-size: 0.85rem;
+}
+
+.vendor-review-commission input {
+    width: 5rem;
+}
+
+@media (max-width: 700px) {
+    .vendor-review-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .vendor-review-commission {
+        margin-right: 0;
+    }
+}
