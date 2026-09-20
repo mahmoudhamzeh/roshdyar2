@@ -210,7 +210,8 @@ body.vendor-world .magazine-mini-player {
   color: #047857;
 }
 
-.vendor-pill-pending {
+.vendor-pill-pending,
+.vendor-pill-returned {
   background: #fff7ed;
   color: #c2410c;
 }
