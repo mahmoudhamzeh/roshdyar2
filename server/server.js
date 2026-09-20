@@ -841,7 +841,7 @@ app.put('/api/users/:id', async (req, res) => {
     };
     const nextFirst = patch.firstName !== undefined ? patch.firstName : current.firstName;
     const nextLast = patch.lastName !== undefined ? patch.lastName : current.lastName;
-    patch.profileComplete = Boolean(String(nextFirst || '').trim() || String(nextLast || '').trim());
+    patch.profileComplete = Boolean(String(nextFirst || '').trim() && String(nextLast || '').trim());
     const updated = await store.users.update(id, patch);
     res.json({ message: 'اطلاعات با موفقیت ذخیره شد.', user: publicUser(updated) });
 });
@@ -1290,6 +1290,18 @@ const parseOptionalNumber = (value) => {
     return Number.isFinite(num) ? num : null;
 };
 
+const growthDateError = (date, child) => {
+    if (!date) return 'تاریخ معتبر الزامی است.';
+    if (date > tehranYmd()) {
+        return 'نمی‌توان برای تاریخ آینده قد، وزن یا دور سر ثبت کرد.';
+    }
+    const birth = normalizeGrowthDate(child && child.birthDate);
+    if (birth && date < birth) {
+        return 'تاریخ ثبت نمی‌تواند قبل از تاریخ تولد باشد.';
+    }
+    return '';
+};
+
 const compareGrowthDates = (a, b) => {
     const da = normalizeGrowthDate(a) || String(a || '');
     const db = normalizeGrowthDate(b) || String(b || '');
@@ -1305,6 +1317,9 @@ app.get('/api/growth/:childId', async (req, res) => {
 
 app.post('/api/growth/:childId', async (req, res) => {
     const { childId } = req.params;
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
+
     const date = normalizeGrowthDate(req.body?.date);
     const height = parseOptionalNumber(req.body?.height);
     const weight = parseOptionalNumber(req.body?.weight);
@@ -1316,7 +1331,10 @@ app.post('/api/growth/:childId', async (req, res) => {
     if (height == null && weight == null && headCircumference == null) {
         return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
     }
-    if (!(await requireOwnedChild(req, res))) return;
+    const dateError = growthDateError(date, owned.child);
+    if (dateError) {
+        return res.status(400).json({ message: dateError });
+    }
 
     const result = await store.growth.upsert(childId, { date, height, weight, headCircumference });
     res.status(result.created ? 201 : 200).json(result.record);
@@ -1324,7 +1342,8 @@ app.post('/api/growth/:childId', async (req, res) => {
 
 app.put('/api/growth/:childId/record/:recordId', async (req, res) => {
     const { childId, recordId } = req.params;
-    if (!(await requireOwnedChild(req, res))) return;
+    const owned = await requireOwnedChild(req, res);
+    if (!owned) return;
 
     const list = await store.growth.list(childId);
     const current = list.find((r) => String(r.id) === String(recordId));
@@ -1344,6 +1363,10 @@ app.put('/api/growth/:childId/record/:recordId', async (req, res) => {
     }
     if (height == null && weight == null && headCircumference == null) {
         return res.status(400).json({ message: 'حداقل یکی از موارد قد، وزن یا دور سر را وارد کنید.' });
+    }
+    const dateError = growthDateError(date, owned.child);
+    if (dateError) {
+        return res.status(400).json({ message: dateError });
     }
 
     const result = await store.growth.update(childId, recordId, { date, height, weight, headCircumference });
@@ -2336,15 +2359,29 @@ app.post('/api/shop/orders', async (req, res) => {
         lat,
         lng,
         addressId,
-        startPayment
+        startPayment,
+        recipient,
+        recipientType,
+        recipientPhone
     } = req.body;
+    if (!String(user.firstName || '').trim() || !String(user.lastName || '').trim()) {
+        return res.status(400).json({ message: 'برای ثبت سفارش ابتدا نام و نام خانوادگی را در پروفایل تکمیل کنید.' });
+    }
     if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: 'سبد خرید خالی است' });
     }
     if (!shippingAddress || !String(shippingAddress).trim()) {
         return res.status(400).json({ message: 'آدرس ارسال الزامی است' });
     }
-    if (!phone || !String(phone).trim()) {
+    const otherRecipient = String(recipientType || '') === 'other';
+    const recipientName = String(
+        recipient || [user.firstName, user.lastName].filter(Boolean).join(' ')
+    ).trim();
+    const deliveryPhone = String(recipientPhone || phone || '').trim();
+    if (otherRecipient && (!recipientName || !deliveryPhone)) {
+        return res.status(400).json({ message: 'اطلاعات تحویل‌گیرنده را وارد کنید.' });
+    }
+    if (!deliveryPhone) {
         return res.status(400).json({ message: 'شماره تماس الزامی است' });
     }
     const wantsCheckout = Boolean(startPayment || deliveryDate || deliverySlot);
@@ -2407,13 +2444,16 @@ app.post('/api/shop/orders', async (req, res) => {
     }
 
     try {
+        const recipientLine = recipientName
+            ? `تحویل گیرنده: ${recipientName}${otherRecipient ? ' (شخص دیگر)' : ' (خودم)'}${deliveryPhone ? ` — ${deliveryPhone}` : ''}`
+            : '';
         const newOrder = await store.orders.create({
             userId,
             items: orderItems,
             total,
             shippingAddress: String(shippingAddress).trim(),
-            phone: String(phone).trim(),
-            notes: notes ? String(notes).trim() : '',
+            phone: deliveryPhone,
+            notes: [recipientLine, notes ? String(notes).trim() : ''].filter(Boolean).join('\n'),
             deliveryDate: wantsCheckout ? deliveryDate : null,
             deliverySlot: wantsCheckout ? deliverySlot : null,
             lat,

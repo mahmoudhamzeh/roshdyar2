@@ -145,6 +145,28 @@ async function run() {
         const adminId = login.data.user.id;
         const auth = { Authorization: `Bearer ${login.data.token}` };
 
+        const namedProfile = await request('PUT', `/api/users/${adminId}`, {
+            headers: auth,
+            body: { firstName: 'امین', lastName: 'ادمین' }
+        });
+        assert.strictEqual(namedProfile.status, 200, JSON.stringify(namedProfile.data));
+        assert.strictEqual(namedProfile.data.user.profileComplete, true);
+
+        const incompleteProfile = await request('PUT', `/api/users/${adminId}`, {
+            headers: auth,
+            body: { firstName: 'امین', lastName: '   ' }
+        });
+        assert.strictEqual(incompleteProfile.status, 200, JSON.stringify(incompleteProfile.data));
+        assert.strictEqual(incompleteProfile.data.user.profileComplete, false);
+
+        const restoredProfile = await request('PUT', `/api/users/${adminId}`, {
+            headers: auth,
+            body: { firstName: 'امین', lastName: 'ادمین', birthDate: '1990-05-01' }
+        });
+        assert.strictEqual(restoredProfile.status, 200, JSON.stringify(restoredProfile.data));
+        assert.strictEqual(restoredProfile.data.user.profileComplete, true);
+        assert.strictEqual(restoredProfile.data.user.birthDate, '1990-05-01');
+
         const unauthChildren = await request('GET', '/api/children');
         assert.strictEqual(unauthChildren.status, 401);
 
@@ -357,6 +379,21 @@ async function run() {
         assert.ok(Array.isArray(createdChild.data.growthData));
         assert.ok(createdChild.data.growthData.length >= 1);
 
+        const tehranTodayEarly = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Tehran',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date());
+        const [ty, tm, td] = tehranTodayEarly.split('-').map(Number);
+        const tomorrowGrowth = new Date(Date.UTC(ty, tm - 1, td + 1)).toISOString().slice(0, 10);
+        const futureGrowth = await request('POST', `/api/growth/${createdChild.data.id}`, {
+            headers: auth,
+            body: { date: tomorrowGrowth, height: 80, weight: 10 }
+        });
+        assert.strictEqual(futureGrowth.status, 400, JSON.stringify(futureGrowth.data));
+        assert.ok(/آینده/.test(String(futureGrowth.data && futureGrowth.data.message || '')));
+
         const order = await request('POST', '/api/shop/orders', {
             headers: auth,
             body: {
@@ -378,6 +415,28 @@ async function run() {
         const cartPageSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/CartPage.js'), 'utf8');
         assert.ok(!/WithLeftAds/.test(cartPageSrc), 'cart must not wrap with left ads');
         assert.ok(/صورتحساب/.test(cartPageSrc));
+        assert.ok(/نام خانوادگی/.test(cartPageSrc), 'cart must show buyer first and last name');
+        assert.ok(/complete=1/.test(cartPageSrc), 'cart must send incomplete profiles to complete flow');
+
+        const userInfoSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/UserInfo.js'), 'utf8');
+        assert.ok(/react-multi-date-picker/.test(userInfoSrc), 'profile birth date must use shamsi date picker');
+        assert.ok(/calendars\/persian/.test(userInfoSrc));
+        assert.ok(!/type: 'date'/.test(userInfoSrc), 'profile must not use native gregorian date input');
+
+        const childGrowthSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/ChildGrowthPage.js'), 'utf8');
+        assert.ok(/سانتی‌متر/.test(childGrowthSrc));
+        assert.ok(/کیلوگرم/.test(childGrowthSrc));
+        assert.ok(!/`\$\{heightAnalysis\.value\} سم`/.test(childGrowthSrc));
+        assert.ok(!/`\$\{weightAnalysis\.value\} کگ`/.test(childGrowthSrc));
+
+        const growthChartSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/GrowthChartPage.js'), 'utf8');
+        assert.ok(/maxDate/.test(growthChartSrc), 'growth chart must block future dates');
+        assert.ok(/سانتی‌متر/.test(growthChartSrc));
+        assert.ok(/کیلوگرم/.test(growthChartSrc));
+
+        const shippingSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/CheckoutShippingPage.js'), 'utf8');
+        assert.ok(/خودم/.test(shippingSrc));
+        assert.ok(/شخص دیگری/.test(shippingSrc));
 
         const savedAddress = await request('POST', '/api/shop/addresses', {
             headers: auth,

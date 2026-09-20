@@ -15,7 +15,9 @@ Modal.setAppElement('#root');
 const ProfilePage = () => {
     const history = useHistory();
     const location = useLocation();
-    const needsComplete = new URLSearchParams(location.search).get('complete') === '1';
+    const searchParams = new URLSearchParams(location.search);
+    const needsComplete = searchParams.get('complete') === '1';
+    const nextPath = searchParams.get('next') || '';
     const [activeTab, setActiveTab] = useState('userInfo');
     const [childrenOpen, setChildrenOpen] = useState(false);
     const [children, setChildren] = useState([]);
@@ -110,7 +112,9 @@ const ProfilePage = () => {
 
             {needsComplete && (
                 <div className="profile-complete-banner" role="status">
-                    لطفاً اطلاعات کاربری خود را تکمیل کنید تا تجربه بهتری داشته باشید.
+                    {nextPath.includes('/cart') || nextPath.includes('/checkout')
+                        ? 'برای ثبت سفارش، نام و نام خانوادگی را در پروفایل تکمیل کنید.'
+                        : 'لطفاً اطلاعات کاربری خود را تکمیل کنید تا تجربه بهتری داشته باشید.'}
                 </div>
             )}
 

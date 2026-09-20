@@ -77,3 +77,12 @@ export const formatAgeLabel = (months) => {
     if (value == null) return '—';
     return `${value} ماهگی`;
 };
+
+export const startOfLocalDay = (date = new Date()) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+export const isFutureLocalDate = (value) => {
+    const date = value instanceof Date ? value : parseLocalDate(value);
+    if (!date || Number.isNaN(date.getTime())) return false;
+    return date.getTime() > startOfLocalDay().getTime();
+};

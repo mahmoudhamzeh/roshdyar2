@@ -13,12 +13,12 @@ import {
     getCheckoutDraft,
     saveCheckoutDraft
 } from '../utils/checkout';
-import { getLoggedInUser } from '../api';
+import { getAuthToken, getLoggedInUser, setAuthSession } from '../api';
+import { isUserProfileComplete, profileCompletePath, userFullName } from '../utils/profile';
 import './CheckoutPages.css';
 
 const emptyForm = {
     title: 'خانه',
-    recipient: '',
     phone: '',
     province: '',
     city: '',
@@ -26,9 +26,17 @@ const emptyForm = {
     postalCode: ''
 };
 
+const splitName = (value) => {
+    const parts = String(value || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { firstName: '', lastName: '' };
+    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+};
+
 const CheckoutShippingPage = () => {
     const history = useHistory();
     const days = useMemo(() => deliveryDays(7), []);
+    const [buyer, setBuyer] = useState(getLoggedInUser());
     const [addresses, setAddresses] = useState([]);
     const [selectedId, setSelectedId] = useState(null);
     const [adding, setAdding] = useState(false);
@@ -38,10 +46,14 @@ const CheckoutShippingPage = () => {
     const [deliveryDate, setDeliveryDate] = useState(days[0] ? days[0].iso : '');
     const [deliverySlot, setDeliverySlot] = useState(DELIVERY_SLOTS[0].id);
     const [notes, setNotes] = useState('');
+    const [recipientType, setRecipientType] = useState('self');
+    const [otherFirstName, setOtherFirstName] = useState('');
+    const [otherLastName, setOtherLastName] = useState('');
+    const [otherPhone, setOtherPhone] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
 
-    const loadAddresses = useCallback(async () => {
+    const loadAddresses = useCallback(async (user) => {
         setLoading(true);
         try {
             const res = await fetch('/api/shop/addresses');
@@ -66,13 +78,19 @@ const CheckoutShippingPage = () => {
             if (draft.deliveryDate) setDeliveryDate(draft.deliveryDate);
             if (draft.deliverySlot) setDeliverySlot(draft.deliverySlot);
             if (draft.notes) setNotes(draft.notes);
-            const user = getLoggedInUser() || {};
+            const nextType = draft.recipientType === 'other' ? 'other' : 'self';
+            setRecipientType(nextType);
+            if (nextType === 'other') {
+                const parts = splitName(draft.recipient);
+                setOtherFirstName(draft.recipientFirstName || parts.firstName);
+                setOtherLastName(draft.recipientLastName || parts.lastName);
+                setOtherPhone(draft.recipientPhone || draft.phone || '');
+            }
             setForm((prev) => ({
                 ...prev,
-                recipient: draft.recipient || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || '',
-                phone: draft.phone || user.mobile || '',
-                province: user.province || prev.province,
-                city: user.city || prev.city
+                phone: draft.phone || (preferred && preferred.phone) || (user && user.mobile) || '',
+                province: (user && user.province) || prev.province,
+                city: (user && user.city) || prev.city
             }));
         } catch (err) {
             setError(err.message || 'خطا در دریافت آدرس‌ها');
@@ -86,7 +104,30 @@ const CheckoutShippingPage = () => {
             history.replace('/cart');
             return;
         }
-        loadAddresses();
+        const logged = getLoggedInUser();
+        if (!logged || !logged.id) {
+            history.replace('/login?next=/checkout/shipping');
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            let current = logged;
+            try {
+                const res = await fetch(`/api/users/${logged.id}`);
+                if (res.ok) current = await res.json();
+            } catch {
+                current = logged;
+            }
+            if (cancelled) return;
+            setBuyer(current);
+            if (current && current.id) setAuthSession(current, getAuthToken());
+            if (!isUserProfileComplete(current)) {
+                history.replace(profileCompletePath('/checkout/shipping'));
+                return;
+            }
+            await loadAddresses(current);
+        })();
+        return () => { cancelled = true; };
     }, [history, loadAddresses]);
 
     const selectAddress = (item) => {
@@ -116,6 +157,7 @@ const CheckoutShippingPage = () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     ...form,
+                    recipient: userFullName(buyer),
                     lat,
                     lng,
                     isDefault: addresses.length === 0
@@ -134,6 +176,10 @@ const CheckoutShippingPage = () => {
 
     const handleContinue = () => {
         setError('');
+        if (!isUserProfileComplete(buyer)) {
+            history.replace(profileCompletePath('/checkout/shipping'));
+            return;
+        }
         const chosen = addresses.find((item) => Number(item.id) === Number(selectedId));
         if (!chosen) {
             setError('یک آدرس ارسال انتخاب کنید یا آدرس جدید ثبت کنید.');
@@ -143,11 +189,32 @@ const CheckoutShippingPage = () => {
             setError('روز و بازه زمانی ارسال را انتخاب کنید.');
             return;
         }
+        let recipient = userFullName(buyer);
+        let recipientPhone = (buyer && buyer.mobile) || chosen.phone || form.phone || '';
+        let recipientFirstName = String(buyer && buyer.firstName || '').trim();
+        let recipientLastName = String(buyer && buyer.lastName || '').trim();
+        if (recipientType === 'other') {
+            recipientFirstName = otherFirstName.trim();
+            recipientLastName = otherLastName.trim();
+            recipientPhone = otherPhone.trim();
+            recipient = [recipientFirstName, recipientLastName].filter(Boolean).join(' ');
+            if (!recipientFirstName || !recipientLastName || !recipientPhone) {
+                setError('نام، نام خانوادگی و شماره تماس تحویل‌گیرنده را وارد کنید.');
+                return;
+            }
+        } else if (!recipientPhone) {
+            setError('شماره تماس را در پروفایل یا آدرس وارد کنید.');
+            return;
+        }
         saveCheckoutDraft({
             addressId: chosen.id,
             shippingAddress: formatAddressLine(chosen),
-            phone: chosen.phone,
-            recipient: chosen.recipient,
+            phone: recipientPhone,
+            recipient,
+            recipientType,
+            recipientFirstName,
+            recipientLastName,
+            recipientPhone,
             lat: lat != null ? lat : chosen.lat,
             lng: lng != null ? lng : chosen.lng,
             deliveryDate,
@@ -156,6 +223,8 @@ const CheckoutShippingPage = () => {
         });
         history.push('/checkout/review');
     };
+
+    const buyerName = userFullName(buyer);
 
     return (
         <div className="checkout-page shop-world">
@@ -168,6 +237,61 @@ const CheckoutShippingPage = () => {
                 <h1>آدرس و زمان ارسال</h1>
                 {loading && <p className="shop-status">در حال بارگذاری...</p>}
                 {error && <p className="checkout-error">{error}</p>}
+
+                <section className="checkout-card">
+                    <h2>تحویل گیرنده</h2>
+                    <p className="checkout-muted">سفارش را خودتان تحویل می‌گیرید یا شخص دیگری؟</p>
+                    <div className="checkout-chips" role="radiogroup" aria-label="تحویل گیرنده">
+                        <button
+                            type="button"
+                            className={recipientType === 'self' ? 'is-on' : ''}
+                            onClick={() => setRecipientType('self')}
+                        >
+                            خودم
+                        </button>
+                        <button
+                            type="button"
+                            className={recipientType === 'other' ? 'is-on' : ''}
+                            onClick={() => setRecipientType('other')}
+                        >
+                            شخص دیگری
+                        </button>
+                    </div>
+                    {recipientType === 'self' ? (
+                        <p className="checkout-recipient-self">
+                            سفارش به نام <strong>{buyerName}</strong>
+                            {buyer && buyer.mobile ? ` — ${buyer.mobile}` : ''} تحویل می‌شود.
+                        </p>
+                    ) : (
+                        <div className="checkout-form">
+                            <label>
+                                نام
+                                <input
+                                    value={otherFirstName}
+                                    onChange={(e) => setOtherFirstName(e.target.value)}
+                                    placeholder="نام تحویل‌گیرنده"
+                                />
+                            </label>
+                            <label>
+                                نام خانوادگی
+                                <input
+                                    value={otherLastName}
+                                    onChange={(e) => setOtherLastName(e.target.value)}
+                                    placeholder="نام خانوادگی تحویل‌گیرنده"
+                                />
+                            </label>
+                            <label className="is-full">
+                                شماره تماس
+                                <input
+                                    type="tel"
+                                    value={otherPhone}
+                                    onChange={(e) => setOtherPhone(e.target.value)}
+                                    placeholder="۰۹۱۲..."
+                                />
+                            </label>
+                        </div>
+                    )}
+                </section>
 
                 <section className="checkout-card">
                     <header>
@@ -199,10 +323,6 @@ const CheckoutShippingPage = () => {
                             <label>
                                 عنوان
                                 <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} placeholder="خانه، محل کار" />
-                            </label>
-                            <label>
-                                گیرنده
-                                <input value={form.recipient} onChange={(e) => setForm((p) => ({ ...p, recipient: e.target.value }))} />
                             </label>
                             <label>
                                 شماره تماس

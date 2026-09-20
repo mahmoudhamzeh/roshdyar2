@@ -141,8 +141,8 @@ function buildAssistantContext(guide, extra) {
         expectMotor: sectionItems(guide, 'motor'),
         expectSpeech: sectionItems(guide, 'speech'),
         expectSleep: sectionItems(guide, 'sleep'),
-        heightLabel: src.heightLabel || (last.height != null ? `قد ${last.height} سم` : ''),
-        weightLabel: src.weightLabel || (last.weight != null ? `وزن ${last.weight} کگ` : ''),
+        heightLabel: src.heightLabel || (last.height != null ? `قد ${last.height} سانتی‌متر` : ''),
+        weightLabel: src.weightLabel || (last.weight != null ? `وزن ${last.weight} کیلوگرم` : ''),
         allergies: src.allergies || collectTags(src.child && src.child.allergies),
         illnesses: src.illnesses || collectTags(src.child && src.child.special_illnesses)
     };
