@@ -275,6 +275,7 @@ function mapVendorRow(row) {
         phone: row.phone || '',
         docsNote: row.docs_note || '',
         reviewNote: row.review_note || '',
+        requestedDocs: parseRequestedDocs(row.requested_docs),
         personKind: row.person_kind || 'individual',
         nationalId: row.national_id || '',
         legalName: row.legal_name || '',
@@ -301,6 +302,25 @@ function mapVendorDocRow(row) {
     };
 }
 
+const VENDOR_DOC_LABELS = {
+    national_card: 'کارت ملی',
+    company_id: 'شناسه ملی / آگهی',
+    business_license: 'جواز کسب',
+    bank_certificate: 'تأییدیه شبا',
+    other: 'سایر'
+};
+
+function parseRequestedDocs(raw) {
+    if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+    if (!raw) return [];
+    try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
 function vendorProfileGaps(vendor) {
     if (!vendor) return ['فروشنده'];
     const gaps = [];
@@ -320,8 +340,15 @@ function vendorProfileGaps(vendor) {
         if (!String(vendor.legalName || '').trim()) gaps.push('نام حقوقی شرکت');
         if (!String(vendor.registrationNo || '').trim()) gaps.push('شماره ثبت');
     }
-    const docCount = (vendor.docs || []).length;
-    if (docCount < 2) gaps.push(`مدارک (حداقل ۲ فایل؛ فعلی ${docCount})`);
+    const docs = vendor.docs || [];
+    const hasNationalCard = docs.some((doc) => doc && doc.kind === 'national_card');
+    if (!hasNationalCard) gaps.push('کارت ملی');
+    parseRequestedDocs(vendor.requestedDocs).forEach((kind) => {
+        if (kind === 'national_card') return;
+        if (!docs.some((doc) => doc && doc.kind === kind)) {
+            gaps.push(VENDOR_DOC_LABELS[kind] || kind);
+        }
+    });
     return gaps;
 }
 
@@ -346,7 +373,7 @@ function slugifyVendor(name) {
 }
 
 function seedShopExtrasSqlite(db) {
-    ['user_id', 'phone', 'docs_note', 'review_note'].forEach((col) => {
+    ['user_id', 'phone', 'docs_note', 'review_note', 'requested_docs'].forEach((col) => {
         const type = col === 'user_id' ? 'INTEGER' : 'TEXT';
         if (!sqliteHasColumn(db, 'shop_vendors', col)) {
             db.exec(`ALTER TABLE shop_vendors ADD COLUMN ${col} ${type}`);
@@ -654,7 +681,8 @@ function ensureShopSchemaSqlite(db) {
         ['bank_name', 'TEXT'],
         ['bank_sheba', 'TEXT'],
         ['bank_account', 'TEXT'],
-        ['review_note', 'TEXT']
+        ['review_note', 'TEXT'],
+        ['requested_docs', 'TEXT']
     ].forEach(([col, type]) => {
         if (!sqliteHasColumn(db, 'shop_vendors', col)) {
             db.exec(`ALTER TABLE shop_vendors ADD COLUMN ${col} ${type}`);
@@ -828,7 +856,7 @@ function writeVendorSqlite(db, id, next) {
     db.prepare(`
         UPDATE shop_vendors SET
             display_name = ?, status = ?, commission_pct = ?, settlement_cycle = ?, phone = ?, docs_note = ?,
-            review_note = ?,
+            review_note = ?, requested_docs = ?,
             person_kind = ?, national_id = ?, legal_name = ?, registration_no = ?, economic_code = ?,
             owner_name = ?, province = ?, city = ?, address = ?, bank_name = ?, bank_sheba = ?, bank_account = ?
         WHERE id = ?
@@ -840,6 +868,7 @@ function writeVendorSqlite(db, id, next) {
         next.phone || null,
         next.docsNote || null,
         next.reviewNote || null,
+        JSON.stringify(parseRequestedDocs(next.requestedDocs)),
         next.personKind || 'individual',
         next.nationalId || null,
         next.legalName || null,
@@ -1158,6 +1187,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS phone TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS docs_note TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS review_note TEXT');
+    await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS requested_docs TEXT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS placement TEXT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS product_id BIGINT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0');
@@ -1374,10 +1404,10 @@ async function writeVendorPg(q, one, many, id, next) {
     const row = await one(
         `UPDATE shop_vendors SET
             display_name=$1, status=$2, commission_pct=$3, settlement_cycle=$4, phone=$5, docs_note=$6,
-            review_note=$7,
-            person_kind=$8, national_id=$9, legal_name=$10, registration_no=$11, economic_code=$12,
-            owner_name=$13, province=$14, city=$15, address=$16, bank_name=$17, bank_sheba=$18, bank_account=$19
-         WHERE id=$20 RETURNING *`,
+            review_note=$7, requested_docs=$8,
+            person_kind=$9, national_id=$10, legal_name=$11, registration_no=$12, economic_code=$13,
+            owner_name=$14, province=$15, city=$16, address=$17, bank_name=$18, bank_sheba=$19, bank_account=$20
+         WHERE id=$21 RETURNING *`,
         [
             next.displayName,
             next.status,
@@ -1386,6 +1416,7 @@ async function writeVendorPg(q, one, many, id, next) {
             next.phone || null,
             next.docsNote || null,
             next.reviewNote || null,
+            JSON.stringify(parseRequestedDocs(next.requestedDocs)),
             next.personKind || 'individual',
             next.nationalId || null,
             next.legalName || null,
@@ -1690,6 +1721,8 @@ module.exports = {
     offerPriceRangesSqlite,
     isVendorProfileComplete,
     vendorProfileGaps,
+    parseRequestedDocs,
+    VENDOR_DOC_LABELS,
     ensureShopSchemaPg,
     listSkillsPg,
     getInternalVendorPg,

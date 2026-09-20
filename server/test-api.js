@@ -628,7 +628,7 @@ async function run() {
         });
         assert.strictEqual(blockApprove.status, 400);
         assert.ok(Array.isArray(blockApprove.data.profileGaps));
-        assert.ok(blockApprove.data.profileGaps.some((item) => String(item).includes('مدارک')));
+        assert.ok(blockApprove.data.profileGaps.some((item) => String(item).includes('کارت ملی')));
 
         const listedVendors = await request('GET', '/api/admin/vendors', { headers: auth });
         const listedVendor = (listedVendors.data || []).find((item) => Number(item.id) === Number(vendorApply.data.id));
@@ -644,18 +644,20 @@ async function run() {
 
         const requestDocs = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
-            body: { status: 'returned', reviewNote: 'کارت ملی و تأییدیه شبا لازم است' }
+            body: { status: 'returned', requestedDocs: ['national_card', 'bank_certificate'] }
         });
         assert.strictEqual(requestDocs.status, 200, JSON.stringify(requestDocs.data));
         assert.strictEqual(requestDocs.data.status, 'returned');
-        assert.strictEqual(requestDocs.data.reviewNote, 'کارت ملی و تأییدیه شبا لازم است');
+        assert.deepStrictEqual(requestDocs.data.requestedDocs, ['national_card', 'bank_certificate']);
+        assert.ok(String(requestDocs.data.reviewNote).includes('کارت ملی'));
 
         const vendorSeesNote = await request('GET', '/api/shop/vendors/me', {
             headers: { Authorization: `Bearer ${verify.data.token}` }
         });
         assert.strictEqual(vendorSeesNote.status, 200);
         assert.strictEqual(vendorSeesNote.data.status, 'returned');
-        assert.strictEqual(vendorSeesNote.data.reviewNote, 'کارت ملی و تأییدیه شبا لازم است');
+        assert.ok(String(vendorSeesNote.data.reviewNote).includes('کارت ملی'));
+        assert.deepStrictEqual(vendorSeesNote.data.requestedDocs, ['national_card', 'bank_certificate']);
 
         const rejectVendor = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
@@ -669,7 +671,6 @@ async function run() {
         const fileBody = Buffer.concat([
             Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="kind"\r\n\r\nnational_card\r\n`),
             Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="docs"; filename="card1.txt"\r\nContent-Type: text/plain\r\n\r\ncard-one\r\n`),
-            Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="docs"; filename="card2.txt"\r\nContent-Type: text/plain\r\n\r\ncard-two\r\n`),
             Buffer.from(`--${boundary}--\r\n`)
         ]);
         const docs = await new Promise((resolve, reject) => {
@@ -723,6 +724,15 @@ async function run() {
         assert.strictEqual(vendorProduct.data.reviewStatus, 'pending');
         assert.strictEqual(vendorProduct.data.active, false);
         assert.strictEqual(vendorProduct.data.gender, 'boy');
+
+        const workspace = await request('GET', `/api/admin/vendors/${vendorApply.data.id}/workspace`, { headers: auth });
+        assert.strictEqual(workspace.status, 200, JSON.stringify(workspace.data));
+        assert.ok(workspace.data.vendor);
+        assert.ok(Array.isArray(workspace.data.products));
+        assert.ok(workspace.data.products.some((item) => Number(item.id) === Number(vendorProduct.data.id)));
+        assert.ok(workspace.data.finance);
+        assert.ok(Array.isArray(workspace.data.orders));
+        assert.ok(Array.isArray(workspace.data.tickets));
 
         const hiddenVendorProduct = await request('GET', `/api/shop/products/${vendorProduct.data.id}`);
         assert.strictEqual(hiddenVendorProduct.status, 404);

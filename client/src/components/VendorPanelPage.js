@@ -609,10 +609,17 @@ const VendorPanelPage = () => {
                         <p className="vendor-muted">
                             {me.profileComplete
                                 ? 'پرونده کامل است و منتظر تأیید کارشناس می‌ماند. پروفایل و تیکت پشتیبانی همین حالا در دسترس است.'
-                                : 'برای تکمیل، هویت، شبا و حداقل دو مدرک لازم است.'}
+                                : 'برای تکمیل، هویت، شبا و کارت ملی لازم است.'}
                         </p>
                         {me.reviewNote && (
                             <p className="vendor-warn">پیام کارشناس: {me.reviewNote}</p>
+                        )}
+                        {!!(me.requestedDocs || []).length && (
+                            <p className="vendor-warn">
+                                مدارک درخواستی:
+                                {' '}
+                                {(me.requestedDocs || []).map((kind) => (DOC_KINDS.find((item) => item.id === kind) || {}).label || kind).join('، ')}
+                            </p>
                         )}
                         <form className="vendor-form" onSubmit={uploadDocs}>
                             <Field label="نوع مدرک">
@@ -694,6 +701,13 @@ const VendorPanelPage = () => {
                                     )}
                                     {!isActive && me.reviewNote && (
                                         <p className="vendor-warn">پیام کارشناس: {me.reviewNote}</p>
+                                    )}
+                                    {!isActive && !!(me.requestedDocs || []).length && (
+                                        <p className="vendor-warn">
+                                            مدارک درخواستی:
+                                            {' '}
+                                            {(me.requestedDocs || []).map((kind) => (DOC_KINDS.find((item) => item.id === kind) || {}).label || kind).join('، ')}
+                                        </p>
                                     )}
                                     <div className="vendor-home-actions">
                                         <button type="button" className="vendor-btn vendor-btn-primary" onClick={() => openTab('profile')}>پروفایل فروشگاه</button>

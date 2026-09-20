@@ -13,6 +13,7 @@ const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
 const { AGE_BANDS, flattenCategories, GENDER_OPTIONS, parseProductAttrs } = require('./shop-model');
+const { VENDOR_DOC_LABELS } = require('./shop-store');
 const zarinpal = require('./zarinpal');
 const rateLimit = require('express-rate-limit');
 const {
@@ -2851,17 +2852,66 @@ app.post('/api/shop/vendors/me/docs', upload.array('docs', 8), async (req, res) 
 });
 
 const ALLOWED_VENDOR_STATUS = ['pending', 'active', 'suspended', 'returned', 'rejected'];
+const ALLOWED_VENDOR_DOC_KINDS = Object.keys(VENDOR_DOC_LABELS);
+
+async function findAdminVendor(id) {
+    return (await store.shop.listVendors()).find((item) => Number(item.id) === Number(id)) || null;
+}
+
+async function buildVendorWorkspace(vendor) {
+    const offers = await store.shop.listOffersByVendor(vendor.id);
+    const products = [];
+    const listings = [];
+    for (const offer of offers || []) {
+        const productOffers = await store.shop.listOffers(offer.productId);
+        const firstId = Math.min(...(productOffers || []).map((item) => Number(item.id)).filter(Number.isFinite));
+        const ownsSku = Number(offer.id) === firstId;
+        const product = await store.products.getById(offer.productId);
+        if (ownsSku && product) products.push(product);
+        else listings.push(offer);
+    }
+    const finance = store.shop.vendorFinance
+        ? await store.shop.vendorFinance(vendor.id)
+        : { sales: [], recent: [], salesTotal: 0 };
+    const orders = store.orders.listByVendor
+        ? await store.orders.listByVendor(vendor.id)
+        : [];
+    const tickets = vendor.userId && store.tickets.listByUser
+        ? await store.tickets.listByUser(vendor.userId)
+        : [];
+    return { products, listings, finance, orders, tickets };
+}
 
 app.get('/api/admin/vendors', isAdmin, async (req, res) => {
     res.json(await store.shop.listVendors());
 });
 
+app.get('/api/admin/vendors/:id/workspace', isAdmin, async (req, res) => {
+    const vendor = await findAdminVendor(req.params.id);
+    if (!vendor) return res.status(404).json({ message: 'فروشنده یافت نشد' });
+    res.json({ vendor, ...(await buildVendorWorkspace(vendor)) });
+});
+
 app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
-    const current = (await store.shop.listVendors()).find((item) => Number(item.id) === Number(req.params.id));
+    const current = await findAdminVendor(req.params.id);
     if (!current) return res.status(404).json({ message: 'فروشنده یافت نشد' });
     const status = req.body.status;
     if (status != null && !ALLOWED_VENDOR_STATUS.includes(status)) {
         return res.status(400).json({ message: 'وضعیت نامعتبر است' });
+    }
+    const body = req.body || {};
+    const requestedDocs = Array.isArray(body.requestedDocs)
+        ? body.requestedDocs.map(String).filter((kind) => ALLOWED_VENDOR_DOC_KINDS.includes(kind))
+        : undefined;
+    const reviewNoteRaw = body.reviewNote !== undefined ? body.reviewNote : body.note;
+    let reviewNote = reviewNoteRaw !== undefined ? String(reviewNoteRaw).trim() : undefined;
+    if (requestedDocs && requestedDocs.length) {
+        const labels = requestedDocs.map((kind) => VENDOR_DOC_LABELS[kind] || kind).join('، ');
+        const prefix = `مدارک درخواستی: ${labels}`;
+        reviewNote = reviewNote ? `${prefix}. ${reviewNote}` : prefix;
+    }
+    if ((status === 'returned' || status === 'rejected') && !reviewNote) {
+        return res.status(400).json({ message: 'برای رد، درخواست اصلاح یا درخواست مدارک، توضیح کارشناس لازم است' });
     }
     if (status === 'active' && !current.profileComplete) {
         return res.status(400).json({
@@ -2869,14 +2919,6 @@ app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
             profileGaps: current.profileGaps || []
         });
     }
-    const reviewNoteRaw = req.body.reviewNote !== undefined
-        ? req.body.reviewNote
-        : req.body.note;
-    const reviewNote = reviewNoteRaw !== undefined ? String(reviewNoteRaw).trim() : undefined;
-    if ((status === 'returned' || status === 'rejected') && !reviewNote) {
-        return res.status(400).json({ message: 'برای رد، درخواست اصلاح یا درخواست مدارک، توضیح کارشناس لازم است' });
-    }
-    const body = req.body || {};
     const kyc = vendorPayloadFromBody(body, null);
     const kycPatch = {};
     [
@@ -2892,8 +2934,14 @@ app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
         ...(body.commissionPct !== undefined ? { commissionPct: body.commissionPct } : {}),
         ...(body.settlementCycle !== undefined ? { settlementCycle: body.settlementCycle } : {})
     };
-    if (status === 'active') patch.reviewNote = reviewNote || '';
-    else if (reviewNote !== undefined) patch.reviewNote = reviewNote;
+    if (status === 'active') {
+        patch.reviewNote = reviewNote || '';
+        patch.requestedDocs = [];
+    } else {
+        if (reviewNote !== undefined) patch.reviewNote = reviewNote;
+        if (requestedDocs !== undefined) patch.requestedDocs = requestedDocs;
+        if (status === 'rejected') patch.requestedDocs = [];
+    }
     const updated = await store.shop.updateVendor(req.params.id, patch);
     if (!updated) return res.status(404).json({ message: 'فروشنده یافت نشد' });
     res.json(updated);

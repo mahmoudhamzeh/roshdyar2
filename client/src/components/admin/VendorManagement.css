@@ -32,7 +32,8 @@
     margin: 1rem 0;
 }
 
-.vendor-review-filters button {
+.vendor-review-filters button,
+.vendor-review-work-tabs button {
     border: 1px solid #d7e5e2;
     background: #fff;
     color: #134e4a;
@@ -55,7 +56,8 @@
     font-size: 0.75rem;
 }
 
-.vendor-review-filters button.is-on {
+.vendor-review-filters button.is-on,
+.vendor-review-work-tabs button.is-on {
     background: #0f766e;
     border-color: #0f766e;
     color: #fff;
@@ -66,55 +68,51 @@
     color: #fff;
 }
 
-.vendor-review-list {
+.vendor-review-table {
     display: flex;
     flex-direction: column;
-    gap: 0.85rem;
+    gap: 0.55rem;
 }
 
-.vendor-review-card {
+.vendor-review-row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 0.65rem;
+    text-align: right;
     background: #fff;
     border: 1px solid #d7e5e2;
-    border-radius: 14px;
-    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.06);
-    overflow: hidden;
-}
-
-.vendor-review-card.is-returned,
-.vendor-review-card.is-pending {
-    border-color: #fdba74;
-}
-
-.vendor-review-card.is-rejected {
-    border-color: #fca5a5;
-}
-
-.vendor-review-card-head {
-    padding: 1rem 1.15rem 0.85rem;
-}
-
-.vendor-review-toggle {
-    width: 100%;
-    background: none;
-    border: 0;
-    padding: 0;
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
     cursor: pointer;
-    text-align: right;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.45rem;
     color: inherit;
 }
 
-.vendor-review-toggle h3 {
-    margin: 0;
-    font-size: 1.05rem;
+.vendor-review-row:hover {
+    border-color: #0f766e;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
 }
 
-.vendor-review-card-head p {
-    margin: 0.45rem 0 0;
+.vendor-review-row.is-pending,
+.vendor-review-row.is-returned {
+    border-color: #fdba74;
+}
+
+.vendor-review-row.is-rejected {
+    border-color: #fca5a5;
+}
+
+.vendor-review-row strong {
+    display: block;
+    font-size: 1rem;
+}
+
+.vendor-review-row small,
+.vendor-review-row em {
     color: #5b716e;
+    font-style: normal;
+    font-weight: 700;
 }
 
 .vendor-review-pill {
@@ -126,6 +124,7 @@
     font-weight: 800;
     background: #f1f5f4;
     color: #3f4f4c;
+    white-space: nowrap;
 }
 
 .vendor-review-pill.is-active,
@@ -147,22 +146,43 @@
     color: #b91c1c;
 }
 
-.vendor-review-kind {
-    color: #5b716e;
-    font-size: 0.8rem;
-    font-weight: 700;
+.vendor-review-dossier-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.5rem 0 1rem;
 }
 
-.vendor-review-body {
-    padding: 0 1.15rem 1.15rem;
+.vendor-review-dossier-bar h3 {
+    margin: 0;
+}
+
+.vendor-review-back,
+.vendor-review-icon-btn,
+.vendor-review-modal footer .is-ghost {
+    border: 1px solid #d7e5e2;
+    background: #fff;
+    color: #134e4a;
+    border-radius: 8px;
+    padding: 0.45rem 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.vendor-review-card {
+    background: #fff;
+    border: 1px solid #d7e5e2;
+    border-radius: 14px;
+    padding: 1rem 1.15rem 1.15rem;
     display: flex;
     flex-direction: column;
     gap: 1rem;
-    border-top: 1px solid #e8f0ee;
 }
 
-.vendor-review-body section h4 {
-    margin: 0.85rem 0 0.55rem;
+.vendor-review-card section h4,
+.vendor-review-workspace h4 {
+    margin: 0.35rem 0 0.55rem;
     color: #0f766e;
     font-size: 0.9rem;
 }
@@ -202,11 +222,9 @@
 
 .vendor-review-field.is-empty strong {
     color: #c2410c;
-    font-weight: 700;
 }
 
 .vendor-review-gaps {
-    margin-top: 0.85rem;
     background: #fff7ed;
     border: 1px solid #fdba74;
     border-radius: 10px;
@@ -220,7 +238,7 @@
 
 .vendor-review-note-current,
 .vendor-review-docs-note {
-    margin: 0.35rem 0 0;
+    margin: 0;
     background: #ecfeff;
     border-radius: 8px;
     padding: 0.55rem 0.7rem;
@@ -241,13 +259,11 @@
     gap: 0.65rem;
 }
 
-.vendor-review-docs li {
+.vendor-review-docs li,
+.vendor-review-plain li {
     border: 1px solid #d7e5e2;
     border-radius: 10px;
-    padding: 0.55rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
+    padding: 0.55rem 0.7rem;
     background: #f7fbfa;
 }
 
@@ -264,35 +280,37 @@
     text-decoration: none;
 }
 
-.vendor-review-docs small {
-    display: block;
-    color: #8aa09c;
-    word-break: break-all;
-}
-
-.vendor-review-actions {
+.vendor-review-plain {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.45rem;
+}
+
+.vendor-review-plain li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.vendor-review-actions,
+.vendor-review-workspace {
     background: #f4faf8;
     border-radius: 12px;
     padding: 0.85rem;
 }
 
-.vendor-review-actions label {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-    font-weight: 700;
-    color: #134e4a;
+.vendor-review-workspace {
+    margin-top: 1rem;
 }
 
-.vendor-review-actions textarea,
-.vendor-review-commission input {
-    border: 1px solid #d7e5e2;
-    border-radius: 8px;
-    padding: 0.55rem 0.7rem;
-    font: inherit;
+.vendor-review-work-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 0.85rem;
 }
 
 .vendor-review-buttons {
@@ -302,7 +320,8 @@
     align-items: center;
 }
 
-.vendor-review-buttons button {
+.vendor-review-buttons button,
+.vendor-review-modal footer button {
     border: none;
     border-radius: 8px;
     padding: 0.5rem 0.9rem;
@@ -316,23 +335,102 @@
     cursor: not-allowed;
 }
 
-.vendor-review-buttons .is-approve { background: #0f766e; }
-.vendor-review-buttons .is-fix { background: #d97706; }
-.vendor-review-buttons .is-docs { background: #0369a1; }
+.vendor-review-buttons .is-approve,
+.vendor-review-modal footer .is-approve { background: #0f766e; }
+.vendor-review-buttons .is-fix,
+.vendor-review-modal footer .is-fix { background: #d97706; }
+.vendor-review-buttons .is-docs,
+.vendor-review-modal footer .is-docs { background: #0369a1; }
 .vendor-review-buttons .is-reject,
-.vendor-review-buttons .is-suspend { background: #dc2626; }
+.vendor-review-buttons .is-suspend,
+.vendor-review-modal footer .is-reject { background: #dc2626; }
 
 .vendor-review-commission {
     margin-right: auto;
     font-size: 0.85rem;
+    font-weight: 700;
+    color: #134e4a;
+}
+
+.vendor-review-commission input,
+.vendor-review-note-field textarea {
+    border: 1px solid #d7e5e2;
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    font: inherit;
 }
 
 .vendor-review-commission input {
     width: 5rem;
+    margin-right: 0.35rem;
+}
+
+.vendor-review-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 80;
+    padding: 1rem;
+}
+
+.vendor-review-modal {
+    width: min(520px, 100%);
+    background: #fff;
+    border-radius: 16px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.2);
+}
+
+.vendor-review-modal header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.vendor-review-modal header h3 {
+    margin: 0;
+}
+
+.vendor-review-modal footer {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.85rem;
+}
+
+.vendor-review-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    margin: 0.75rem 0;
+}
+
+.vendor-review-checkboxes label {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-weight: 700;
+}
+
+.vendor-review-note-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-weight: 700;
+    color: #134e4a;
 }
 
 @media (max-width: 700px) {
-    .vendor-review-buttons {
+    .vendor-review-row {
+        grid-template-columns: 1fr auto;
+    }
+
+    .vendor-review-buttons,
+    .vendor-review-modal footer {
         flex-direction: column;
         align-items: stretch;
     }
