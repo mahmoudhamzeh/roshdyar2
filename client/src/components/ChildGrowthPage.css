@@ -396,7 +396,7 @@
 }
 
 .cg-edu-modal {
-  min-height: min(58dvh, 480px);
+  min-height: 0;
 }
 
 .cg-modal-actions {
