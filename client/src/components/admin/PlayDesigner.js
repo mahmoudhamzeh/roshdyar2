@@ -53,7 +53,7 @@ const PlayDesigner = () => {
         goal: form.goal,
         instructions: form.instructions
             .split(/\r?\n/)
-            .map((line) => line.replace(/^\s*\d+[\.\-)]\s*/, '').trim())
+            .map((line) => line.replace(/^\s*\d+[.\-)]\s*/, '').trim())
             .filter(Boolean),
         scene: form.scene,
         imageUrl: form.image ? URL.createObjectURL(form.image) : currentImage,
