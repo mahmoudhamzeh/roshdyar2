@@ -13,6 +13,7 @@ const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
 const shopStore = require('./shop-store');
+const { parseStoredOrderStatus } = require('./order-status');
 const { AGE_BANDS, flattenCategories, GENDER_OPTIONS, parseProductAttrs } = require('./shop-model');
 const zarinpal = require('./zarinpal');
 const rateLimit = require('express-rate-limit');
@@ -2127,7 +2128,6 @@ registerMagazineRoutes(app, { store, upload, isAdmin, resolveAuthUser });
 
 // --- Shop / Products / Orders ---
 const SHOP_CATEGORIES = ['تغذیه', 'اسباب‌بازی', 'پوشاک', 'کتاب', 'بهداشت'];
-const ORDER_STATUSES = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 
 const englishDigits = (value) =>
     String(value == null ? '' : value)
@@ -2555,7 +2555,7 @@ app.post('/api/shop/payments/verify', async (req, res) => {
             paymentRefId: result.ref_id != null ? String(result.ref_id) : order.paymentRefId,
             paymentCardPan: result.card_pan || null,
             paidAt: new Date().toISOString(),
-            status: 'confirmed'
+            status: 'processing'
         });
         res.json({
             ok: true,
@@ -2736,10 +2736,11 @@ app.get('/api/admin/orders', isAdmin, async (req, res) => {
 app.put('/api/admin/orders/:id', isAdmin, async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const { status } = req.body;
-    if (!ORDER_STATUSES.includes(status)) {
+    const nextStatus = parseStoredOrderStatus(status);
+    if (!nextStatus) {
         return res.status(400).json({ message: 'وضعیت سفارش نامعتبر است' });
     }
-    const updated = await store.orders.updateStatus(id, status);
+    const updated = await store.orders.updateStatus(id, nextStatus);
     if (!updated) return res.status(404).json({ message: 'سفارش یافت نشد' });
     res.json(updated);
 });
@@ -3377,9 +3378,13 @@ app.get('/api/vendor/orders', requireVendor, async (req, res) => {
 });
 
 app.put('/api/vendor/orders/items/:itemId', requireVendor, async (req, res) => {
-    const updated = await store.orders.updateLineStatus(req.params.itemId, req.body.status, req.vendor.id);
-    if (!updated) return res.status(400).json({ message: 'به‌روزرسانی وضعیت قلم سفارش ممکن نیست' });
-    res.json(updated);
+    const result = await store.orders.updateLineStatus(req.params.itemId, req.body.status, req.vendor.id);
+    if (!result || result.ok === false) {
+        return res.status(result && result.statusCode ? result.statusCode : 400).json({
+            message: (result && result.message) || 'به‌روزرسانی وضعیت قلم سفارش ممکن نیست'
+        });
+    }
+    res.json(result.item);
 });
 
 app.get('/api/vendor/finance', requireVendor, async (req, res) => {

@@ -22,6 +22,12 @@ import { clearAuthSession } from '../api';
 import { formatPrice } from '../utils/cart';
 import { findCategoryPath } from '../utils/shop';
 import { MAX_PRODUCT_IMAGES } from '../utils/productAttrs';
+import {
+    canonicalOrderStatus,
+    isVendorLineLocked,
+    orderStatusLabel,
+    vendorLineOptions
+} from '../utils/orderStatus';
 import CategoryCascade from './CategoryCascade';
 import ProductAttrFields from './ProductAttrFields';
 import './VendorPanelPage.css';
@@ -41,14 +47,6 @@ const TICKET_STATUS_LABELS = {
     answered: 'در انتظار پاسخ شما',
     closed: 'بسته'
 };
-
-const LINE_STATUSES = [
-    { id: 'pending', label: 'ثبت‌شده' },
-    { id: 'preparing', label: 'در حال آماده‌سازی' },
-    { id: 'shipped', label: 'ارسال‌شده' },
-    { id: 'delivered', label: 'تحویل‌شده' },
-    { id: 'cancelled', label: 'لغو' }
-];
 
 const LEDGER_LABELS = {
     sale: 'فروش',
@@ -418,7 +416,13 @@ const VendorPanelPage = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status })
         });
-        if (!res.ok) return;
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            setMessage(data.message || 'به‌روزرسانی وضعیت سفارش ممکن نیست');
+            load();
+            return;
+        }
+        setMessage('');
         load();
     };
 
@@ -1010,21 +1014,47 @@ const VendorPanelPage = () => {
                                     {orders.length === 0 && <p className="vendor-empty">سفارشی برای این فروشگاه ثبت نشده است.</p>}
                                     {orders.map((order) => (
                                         <article key={order.id} className="vendor-order">
-                                            <h3>سفارش #{order.id}</h3>
+                                            <h3>
+                                                سفارش #{order.id}
+                                                <span className="vendor-order-status">
+                                                    {orderStatusLabel(order.status, order.paymentStatus)}
+                                                </span>
+                                            </h3>
+                                            {order.paymentStatus === 'paid' && (
+                                                <p className="vendor-order-lock">سفارش پرداخت‌شده را نمی‌توان لغو کرد</p>
+                                            )}
                                             <ul>
-                                                {(order.items || []).map((item) => (
+                                                {(order.items || []).map((item) => {
+                                                    const lineStatus = canonicalOrderStatus(
+                                                        item.lineStatus,
+                                                        order.paymentStatus
+                                                    );
+                                                    const locked = isVendorLineLocked(
+                                                        item.lineStatus,
+                                                        order.paymentStatus
+                                                    );
+                                                    const options = vendorLineOptions(
+                                                        item.lineStatus,
+                                                        order.paymentStatus
+                                                    );
+                                                    return (
                                                     <li key={item.id || item.productId}>
                                                         <span>{item.name} × {item.quantity} — {formatPrice(item.lineTotal)}</span>
                                                         <select
-                                                            value={item.lineStatus || 'pending'}
+                                                            value={lineStatus}
+                                                            disabled={locked}
                                                             onChange={(e) => updateLine(item.id, e.target.value)}
                                                         >
-                                                            {LINE_STATUSES.map((opt) => (
+                                                            {options.map((opt) => (
                                                                 <option key={opt.id} value={opt.id}>{opt.label}</option>
                                                             ))}
                                                         </select>
+                                                        {locked && (
+                                                            <small className="vendor-order-lock">سفارش لغو شده را نمی‌توان تغییر داد</small>
+                                                        )}
                                                     </li>
-                                                ))}
+                                                    );
+                                                })}
                                             </ul>
                                         </article>
                                     ))}

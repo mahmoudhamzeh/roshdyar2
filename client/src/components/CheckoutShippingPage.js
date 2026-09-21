@@ -360,31 +360,36 @@ const CheckoutShippingPage = () => {
 
                 <section className="checkout-card">
                     <h2>زمان ارسال</h2>
-                    <p className="checkout-muted">ارسال از روز بعد ممکن است. یک روز و یک بازه زمانی انتخاب کنید.</p>
-                    <div className="checkout-chips">
+                    <p className="checkout-muted">ارسال از روز بعد ممکن است. یک روز را انتخاب کنید تا بازه‌های زمانی همان روز نمایش داده شود.</p>
+                    <div className="checkout-days" role="listbox" aria-label="روز ارسال">
                         {days.map((day) => (
                             <button
                                 type="button"
                                 key={day.iso}
-                                className={day.iso === deliveryDate ? 'is-on' : ''}
+                                className={`checkout-day${day.iso === deliveryDate ? ' is-on' : ''}`}
                                 onClick={() => setDeliveryDate(day.iso)}
+                                aria-pressed={day.iso === deliveryDate}
                             >
-                                {day.label}
+                                <strong>{day.weekday}</strong>
+                                <span>{day.date}</span>
                             </button>
                         ))}
                     </div>
-                    <div className="checkout-chips">
-                        {DELIVERY_SLOTS.map((slot) => (
-                            <button
-                                type="button"
-                                key={slot.id}
-                                className={slot.id === deliverySlot ? 'is-on' : ''}
-                                onClick={() => setDeliverySlot(slot.id)}
-                            >
-                                {slot.label}
-                            </button>
-                        ))}
-                    </div>
+                    {deliveryDate && (
+                        <div className="checkout-slots" role="listbox" aria-label="بازه زمانی ارسال">
+                            {DELIVERY_SLOTS.map((slot) => (
+                                <button
+                                    type="button"
+                                    key={slot.id}
+                                    className={`checkout-slot${slot.id === deliverySlot ? ' is-on' : ''}`}
+                                    onClick={() => setDeliverySlot(slot.id)}
+                                    aria-pressed={slot.id === deliverySlot}
+                                >
+                                    {slot.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <label className="checkout-notes">
                         توضیحات سفارش (اختیاری)
                         <textarea rows="2" value={notes} onChange={(e) => setNotes(e.target.value)} />

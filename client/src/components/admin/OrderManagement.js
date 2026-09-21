@@ -1,17 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { formatPrice } from '../../utils/cart';
 import { toShamsi } from '../../utils/dateConverter';
+import { STORED_ORDER_STATUSES, orderStatusLabel, canonicalOrderStatus } from '../../utils/orderStatus';
 import './OrderManagement.css';
 
 const API = '';
 
-const STATUS_OPTIONS = [
-    { value: 'pending', label: 'در انتظار تایید' },
-    { value: 'confirmed', label: 'تایید شده' },
-    { value: 'shipped', label: 'ارسال شده' },
-    { value: 'delivered', label: 'تحویل شده' },
-    { value: 'cancelled', label: 'لغو شده' },
-];
+const STATUS_OPTIONS = STORED_ORDER_STATUSES.map((value) => ({
+    value,
+    label: orderStatusLabel(value)
+}));
 
 const getAdmin = () => {
     try {
@@ -107,7 +105,7 @@ const OrderManagement = () => {
                             <label>
                                 وضعیت
                                 <select
-                                    value={order.status}
+                                    value={canonicalOrderStatus(order.status, order.paymentStatus)}
                                     onChange={(e) => handleStatusChange(order.id, e.target.value)}
                                 >
                                     {STATUS_OPTIONS.map((opt) => (

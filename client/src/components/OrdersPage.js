@@ -4,26 +4,12 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowRight, faBoxOpen } from '@fortawesome/free-solid-svg-icons';
 import MainNavbar from './MainNavbar';
 import Footer from './Footer';
-import { formatPrice } from '../utils/cart';
+import { formatPrice, getCart } from '../utils/cart';
 import { formatToShamsi } from '../utils/dateConverter';
+import { canonicalOrderStatus, orderStatusLabel } from '../utils/orderStatus';
 import './OrdersPage.css';
 
 const API = '';
-
-const STATUS_LABELS = {
-    pending: 'در انتظار تایید',
-    confirmed: 'تایید شده',
-    shipped: 'ارسال شده',
-    delivered: 'تحویل شده',
-    cancelled: 'لغو شده',
-};
-
-const PAYMENT_LABELS = {
-    unpaid: 'پرداخت در محل',
-    pending: 'در انتظار پرداخت',
-    paid: 'پرداخت شده',
-    failed: 'پرداخت ناموفق'
-};
 
 const SLOT_LABELS = {
     '09-13': '۹ تا ۱۳',
@@ -34,6 +20,7 @@ const SLOT_LABELS = {
 const OrdersPage = () => {
     const history = useHistory();
     const [orders, setOrders] = useState([]);
+    const [cart, setCart] = useState(() => getCart());
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
@@ -69,6 +56,13 @@ const OrdersPage = () => {
 
     useEffect(() => {
         fetchOrders();
+        const refreshCart = () => setCart(getCart());
+        window.addEventListener('cart-updated', refreshCart);
+        window.addEventListener('storage', refreshCart);
+        return () => {
+            window.removeEventListener('cart-updated', refreshCart);
+            window.removeEventListener('storage', refreshCart);
+        };
     }, [fetchOrders]);
 
     return (
@@ -86,7 +80,7 @@ const OrdersPage = () => {
                 {loading && <p className="shop-status">در حال بارگذاری...</p>}
                 {error && <p className="shop-status shop-error">{error}</p>}
 
-                {!loading && !error && orders.length === 0 && (
+                {!loading && !error && orders.length === 0 && cart.length === 0 && (
                     <div className="orders-empty animate-fade-up">
                         <FontAwesomeIcon icon={faBoxOpen} />
                         <p>هنوز سفارشی ثبت نکرده‌اید</p>
@@ -94,9 +88,35 @@ const OrdersPage = () => {
                     </div>
                 )}
 
-                {!loading && !error && orders.length > 0 && (
+                {!loading && !error && (orders.length > 0 || cart.length > 0) && (
                     <div className="orders-list">
-                        {orders.map((order, index) => (
+                        {cart.length > 0 && (
+                            <article className="order-card animate-fade-up">
+                                <header className="order-card-head">
+                                    <div>
+                                        <h2>سبد خرید</h2>
+                                        <time>{cart.length} کالا</time>
+                                    </div>
+                                    <span className="order-status status-cart">
+                                        {orderStatusLabel('cart')}
+                                    </span>
+                                </header>
+                                <ul className="order-items">
+                                    {cart.map((item) => (
+                                        <li key={item.lineKey || item.productId || item.offerId}>
+                                            <span>{item.name} × {item.quantity}</span>
+                                            <strong>{formatPrice((item.price || 0) * (item.quantity || 0))}</strong>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <footer className="order-card-foot">
+                                    <Link to="/cart" className="shop-btn shop-btn-primary">ادامه خرید</Link>
+                                </footer>
+                            </article>
+                        )}
+                        {orders.map((order, index) => {
+                            const statusId = canonicalOrderStatus(order.status, order.paymentStatus);
+                            return (
                             <article
                                 key={order.id}
                                 className="order-card animate-fade-up"
@@ -111,10 +131,8 @@ const OrdersPage = () => {
                                                 : '—'}
                                         </time>
                                     </div>
-                                    <span className={`order-status status-${order.status}`}>
-                                        {order.paymentStatus === 'pending'
-                                            ? PAYMENT_LABELS.pending
-                                            : (STATUS_LABELS[order.status] || order.status)}
+                                    <span className={`order-status status-${statusId}`}>
+                                        {orderStatusLabel(order.status, order.paymentStatus)}
                                     </span>
                                 </header>
                                 <ul className="order-items">
@@ -139,7 +157,8 @@ const OrdersPage = () => {
                                     <strong>جمع: {formatPrice(order.total)}</strong>
                                 </footer>
                             </article>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </main>

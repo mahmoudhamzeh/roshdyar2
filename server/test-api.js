@@ -434,7 +434,7 @@ async function run() {
             }
         });
         assert.strictEqual(order.status, 201, JSON.stringify(order.data));
-        assert.strictEqual(order.data.status, 'pending');
+        assert.strictEqual(order.data.status, 'pending_payment');
 
         const productAfter = await request('GET', `/api/shop/products/${product.id}`);
         assert.strictEqual(productAfter.data.stock, stockBefore - 1);
@@ -527,7 +527,7 @@ async function run() {
         assert.strictEqual(verifiedPay.status, 200, JSON.stringify(verifiedPay.data));
         assert.strictEqual(verifiedPay.data.ok, true);
         assert.strictEqual(verifiedPay.data.order.paymentStatus, 'paid');
-        assert.strictEqual(verifiedPay.data.order.status, 'confirmed');
+        assert.strictEqual(verifiedPay.data.order.status, 'processing');
         assert.ok(verifiedPay.data.refId);
 
         const badDay = await request('POST', '/api/shop/orders', {
@@ -1079,6 +1079,79 @@ async function run() {
         });
         assert.strictEqual(invoices.status, 200, JSON.stringify(invoices.data));
         assert.ok(Array.isArray(invoices.data));
+
+        const vendorUnpaid = await request('POST', '/api/shop/orders', {
+            headers: auth,
+            body: {
+                items: [{ productId: existingSku.id, offerId: sellExisting.data.id, quantity: 1 }],
+                shippingAddress: 'تهران',
+                phone: '09120000000'
+            }
+        });
+        assert.strictEqual(vendorUnpaid.status, 201, JSON.stringify(vendorUnpaid.data));
+        assert.strictEqual(vendorUnpaid.data.status, 'pending_payment');
+        const unpaidLine = (vendorUnpaid.data.items || []).find((item) => item.id);
+        assert.ok(unpaidLine && unpaidLine.id, JSON.stringify(vendorUnpaid.data));
+
+        const vendorPaidOrder = await request('POST', '/api/shop/orders', {
+            headers: auth,
+            body: {
+                items: [{ productId: existingSku.id, offerId: sellExisting.data.id, quantity: 1 }],
+                shippingAddress: savedAddress.data.address || 'تهران',
+                phone: savedAddress.data.phone || '09120000000',
+                addressId: savedAddress.data.id,
+                deliveryDate,
+                deliverySlot: '09-13',
+                lat: 35.7,
+                lng: 51.4,
+                startPayment: true
+            }
+        });
+        assert.strictEqual(vendorPaidOrder.status, 201, JSON.stringify(vendorPaidOrder.data));
+        const vendorPaidVerify = await request('POST', '/api/shop/payments/verify', {
+            headers: auth,
+            body: { authority: vendorPaidOrder.data.authority, status: 'OK' }
+        });
+        assert.strictEqual(vendorPaidVerify.status, 200, JSON.stringify(vendorPaidVerify.data));
+        assert.strictEqual(vendorPaidVerify.data.order.status, 'processing');
+        assert.strictEqual(vendorPaidVerify.data.order.paymentStatus, 'paid');
+        const paidLine = (vendorPaidVerify.data.order.items || []).find((item) => item.id);
+        assert.ok(paidLine && paidLine.id, JSON.stringify(vendorPaidVerify.data));
+
+        const vendorCancelPaid = await request('PUT', `/api/vendor/orders/items/${paidLine.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { status: 'cancelled' }
+        });
+        assert.strictEqual(vendorCancelPaid.status, 409, JSON.stringify(vendorCancelPaid.data));
+        assert.ok(/پرداخت/.test(String(vendorCancelPaid.data && vendorCancelPaid.data.message || '')));
+
+        const vendorShipPaid = await request('PUT', `/api/vendor/orders/items/${paidLine.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { status: 'shipping' }
+        });
+        assert.strictEqual(vendorShipPaid.status, 200, JSON.stringify(vendorShipPaid.data));
+        assert.strictEqual(vendorShipPaid.data.lineStatus, 'shipping');
+
+        const vendorCancelUnpaid = await request('PUT', `/api/vendor/orders/items/${unpaidLine.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { status: 'cancelled' }
+        });
+        assert.strictEqual(vendorCancelUnpaid.status, 200, JSON.stringify(vendorCancelUnpaid.data));
+        assert.strictEqual(vendorCancelUnpaid.data.lineStatus, 'cancelled');
+
+        const vendorChangeCancelled = await request('PUT', `/api/vendor/orders/items/${unpaidLine.id}`, {
+            headers: { Authorization: `Bearer ${verify.data.token}` },
+            body: { status: 'processing' }
+        });
+        assert.strictEqual(vendorChangeCancelled.status, 409, JSON.stringify(vendorChangeCancelled.data));
+        assert.ok(/لغو شده/.test(String(vendorChangeCancelled.data && vendorChangeCancelled.data.message || '')));
+
+        const adminStatuses = await request('PUT', `/api/admin/orders/${vendorPaidVerify.data.order.id}`, {
+            headers: auth,
+            body: { status: 'returned' }
+        });
+        assert.strictEqual(adminStatuses.status, 200, JSON.stringify(adminStatuses.data));
+        assert.strictEqual(adminStatuses.data.status, 'returned');
 
         const withdraw = await request('POST', '/api/vendor/wallet/withdraw', {
             headers: { Authorization: `Bearer ${verify.data.token}` },
