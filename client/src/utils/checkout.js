@@ -20,6 +20,8 @@ export const deliveryDays = (count = 7) => {
         const day = start.clone().add(i, 'day');
         days.push({
             iso: day.format('YYYY-MM-DD'),
+            weekday: day.locale('fa').format('dddd'),
+            date: day.locale('fa').format('D MMMM'),
             label: day.locale('fa').format('dddd D MMMM')
         });
     }

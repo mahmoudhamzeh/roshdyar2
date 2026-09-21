@@ -6,6 +6,12 @@ const magazineStore = require('./magazine-store');
 const growthPlaysStore = require('./growth-plays-store');
 const { buildCategoryTree } = require('./shop-model');
 const { normalizeTicketStatus, ticketPayload, foldStatusCounts } = require('./ticket-utils');
+const {
+    canonicalOrderStatus,
+    initialOrderStatus,
+    vendorLineDecision,
+    LINE_PROMOTE_AFTER_PAY
+} = require('./order-status');
 
 types.setTypeParser(20, (val) => Number(val));
 types.setTypeParser(1700, (val) => Number(val));
@@ -255,7 +261,7 @@ function rowToOrder(row, items) {
         shippingAddress: row.shipping_address,
         phone: row.phone,
         notes: row.notes || '',
-        status: row.status,
+        status: canonicalOrderStatus(row.status, row.payment_status),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         deliveryDate: row.delivery_date || null,
@@ -430,7 +436,11 @@ async function hydrateOrders(orderRows, client) {
             'SELECT * FROM order_items WHERE order_id = $1',
             [row.id],
             client
-        )).map(shopStore.mapOrderItemRow);
+        )).map((item) => {
+            const mapped = shopStore.mapOrderItemRow(item);
+            mapped.lineStatus = canonicalOrderStatus(mapped.lineStatus, row.payment_status);
+            return mapped;
+        });
         result.push(rowToOrder(row, items));
     }
     return result;
@@ -1987,7 +1997,7 @@ const orders = {
         return (await one('SELECT COUNT(*)::int AS n FROM orders')).n;
     },
     async countPending() {
-        return (await one("SELECT COUNT(*)::int AS n FROM orders WHERE status = 'pending'")).n;
+        return (await one("SELECT COUNT(*)::int AS n FROM orders WHERE status IN ('pending', 'pending_payment')")).n;
     },
     async create({
         userId,
@@ -2047,19 +2057,22 @@ const orders = {
                 }
             }
             const createdAt = new Date().toISOString();
+            const orderStatus = initialOrderStatus(paymentStatus);
+            const lineStatus = orderStatus;
             const orderRow = await one(
                 `INSERT INTO orders (
                     user_id, total, shipping_address, phone, notes, status,
                     delivery_date, delivery_slot, lat, lng, address_id,
                     items_subtotal, discount_total, payment_status, created_at
                  )
-                 VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
                 [
                     Number(userId),
                     total,
                     shippingAddress,
                     phone,
                     notes || '',
+                    orderStatus,
                     deliveryDate || null,
                     deliverySlot || null,
                     lat != null && lat !== '' ? Number(lat) : null,
@@ -2077,7 +2090,7 @@ const orders = {
                     `INSERT INTO order_items (
                         order_id, product_id, name, price, quantity, line_total,
                         offer_id, vendor_id, vendor_name, commission_pct, commission_amount, line_status
-                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending') RETURNING id`,
+                    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
                     [
                         orderRow.id,
                         item.product.id,
@@ -2089,7 +2102,8 @@ const orders = {
                         item.offer ? item.offer.vendorId : null,
                         item.offer ? item.offer.vendorName : null,
                         item.commissionPct,
-                        item.commissionAmount
+                        item.commissionAmount,
+                        lineStatus
                     ],
                     client
                 );
@@ -2130,6 +2144,8 @@ const orders = {
     async updatePayment(id, patch = {}) {
         const current = await one('SELECT * FROM orders WHERE id = $1', [Number(id)]);
         if (!current) return null;
+        const nextPayment = patch.paymentStatus != null ? patch.paymentStatus : current.payment_status;
+        const nextStatus = patch.status != null ? patch.status : current.status;
         await q(
             `UPDATE orders SET
                 payment_status = $1,
@@ -2141,16 +2157,23 @@ const orders = {
                 updated_at = $7
              WHERE id = $8`,
             [
-                patch.paymentStatus != null ? patch.paymentStatus : current.payment_status,
+                nextPayment,
                 patch.paymentAuthority !== undefined ? patch.paymentAuthority : current.payment_authority,
                 patch.paymentRefId !== undefined ? patch.paymentRefId : current.payment_ref_id,
                 patch.paymentCardPan !== undefined ? patch.paymentCardPan : current.payment_card_pan,
                 patch.paidAt !== undefined ? patch.paidAt : current.paid_at,
-                patch.status != null ? patch.status : current.status,
+                nextStatus,
                 new Date().toISOString(),
                 Number(id)
             ]
         );
+        if (nextPayment === 'paid') {
+            await q(
+                `UPDATE order_items SET line_status = 'processing'
+                 WHERE order_id = $1 AND line_status = ANY($2::text[])`,
+                [Number(id), LINE_PROMOTE_AFTER_PAY]
+            );
+        }
         return orders.getById(id);
     },
     async updateStatus(id, status) {
@@ -2210,13 +2233,28 @@ const orders = {
         }));
     },
     async updateLineStatus(itemId, status, vendorId) {
-        const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'];
-        if (!allowed.includes(status)) return null;
-        const item = await one('SELECT * FROM order_items WHERE id = $1', [Number(itemId)]);
-        if (!item) return null;
-        if (vendorId && Number(item.vendor_id) !== Number(vendorId)) return null;
-        await q('UPDATE order_items SET line_status = $1 WHERE id = $2', [status, Number(itemId)]);
-        return shopStore.mapOrderItemRow(await one('SELECT * FROM order_items WHERE id = $1', [Number(itemId)]));
+        const row = await one(
+            `SELECT i.*, o.payment_status AS payment_status
+             FROM order_items i
+             JOIN orders o ON o.id = i.order_id
+             WHERE i.id = $1`,
+            [Number(itemId)]
+        );
+        if (!row) return { ok: false, statusCode: 400, message: 'قلم سفارش یافت نشد' };
+        if (vendorId && Number(row.vendor_id) !== Number(vendorId)) {
+            return { ok: false, statusCode: 403, message: 'این سفارش متعلق به فروشگاه شما نیست' };
+        }
+        const decision = vendorLineDecision({
+            currentLineStatus: row.line_status,
+            nextStatus: status,
+            paymentStatus: row.payment_status
+        });
+        if (!decision.ok) return decision;
+        await q('UPDATE order_items SET line_status = $1 WHERE id = $2', [decision.status, Number(itemId)]);
+        const updated = await one('SELECT * FROM order_items WHERE id = $1', [Number(itemId)]);
+        const item = shopStore.mapOrderItemRow(updated);
+        item.lineStatus = canonicalOrderStatus(item.lineStatus, row.payment_status);
+        return { ok: true, item };
     }
 };
 

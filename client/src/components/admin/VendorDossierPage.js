@@ -9,6 +9,7 @@ import {
     LINE_STATUS_LABELS,
     statusCaption
 } from './vendorAdminShared';
+import { orderStatusLabel } from '../../utils/orderStatus';
 import { VendorDocs } from './vendorAdminShared';
 import './VendorManagement.css';
 
@@ -303,13 +304,13 @@ const VendorDossierPage = () => {
                                     <header>
                                         <strong>سفارش #{order.id}</strong>
                                         <span>{order.createdAt ? toShamsi(order.createdAt) : ''}</span>
-                                        <em>{order.status}</em>
+                                        <em>{orderStatusLabel(order.status, order.paymentStatus)}</em>
                                     </header>
                                     <ul>
                                         {(order.items || []).map((item) => (
                                             <li key={item.id}>
                                                 {item.name} × {item.quantity} — {formatPrice(item.lineTotal)}
-                                                <small>{LINE_STATUS_LABELS[item.lineStatus] || item.lineStatus}</small>
+                                                <small>{LINE_STATUS_LABELS[item.lineStatus] || orderStatusLabel(item.lineStatus, order.paymentStatus)}</small>
                                             </li>
                                         ))}
                                     </ul>

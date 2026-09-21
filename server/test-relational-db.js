@@ -138,7 +138,7 @@ function run() {
         notes: ''
     });
     assert.ok(order.id);
-    assert.strictEqual(order.status, 'pending');
+    assert.strictEqual(order.status, 'pending_payment');
     assert.strictEqual(store.products.getById(product.id).stock, stockBefore - 1);
 
     const cancelled = store.orders.updateStatus(order.id, 'cancelled');

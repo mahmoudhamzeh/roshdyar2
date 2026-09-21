@@ -1,4 +1,5 @@
 import React from 'react';
+import { ORDER_STATUS_LABELS } from '../../utils/orderStatus';
 
 export const DOC_KINDS = [
     { id: 'national_card', label: 'کارت ملی / شناسنامه' },
@@ -18,13 +19,7 @@ export const STATUS_LABELS = {
     rejected: 'رد شده'
 };
 
-export const LINE_STATUS_LABELS = {
-    pending: 'ثبت‌شده',
-    preparing: 'در حال آماده‌سازی',
-    shipped: 'ارسال‌شده',
-    delivered: 'تحویل‌شده',
-    cancelled: 'لغو'
-};
+export const LINE_STATUS_LABELS = ORDER_STATUS_LABELS;
 
 export const LEDGER_LABELS = {
     sale: 'فروش',

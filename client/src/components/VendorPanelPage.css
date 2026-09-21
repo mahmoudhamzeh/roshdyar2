@@ -169,6 +169,28 @@ body.vendor-world .magazine-mini-player {
   color: #134e4a;
 }
 
+.vendor-order h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.vendor-order-status {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #0f766e;
+  background: #ecfdf5;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+}
+
+.vendor-order-lock {
+  color: #9a3412;
+  font-size: 0.78rem;
+  margin: 0.15rem 0 0.45rem;
+}
+
 .vendor-card-head p,
 .vendor-muted {
   margin: 0;
@@ -318,6 +340,12 @@ body.vendor-world .magazine-mini-player {
   padding: 0.75rem 0.8rem;
   font: inherit;
   background: #fbfdfc;
+}
+
+.vendor-order select:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  background: #eef3f1;
 }
 
 .vendor-kind {

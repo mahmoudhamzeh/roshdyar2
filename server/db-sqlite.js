@@ -6,6 +6,12 @@ const magazineStore = require('./magazine-store');
 const growthPlaysStore = require('./growth-plays-store');
 const { buildCategoryTree } = require('./shop-model');
 const { normalizeTicketStatus, ticketPayload, foldStatusCounts } = require('./ticket-utils');
+const {
+    canonicalOrderStatus,
+    initialOrderStatus,
+    vendorLineDecision,
+    LINE_PROMOTE_AFTER_PAY
+} = require('./order-status');
 
 const SCHEMA_VERSION = 3;
 const DB_FILE = process.env.SQLITE_PATH || path.join(__dirname, 'data', 'roshdyar.db');
@@ -249,7 +255,7 @@ function rowToOrder(row, items) {
         shippingAddress: row.shipping_address,
         phone: row.phone,
         notes: row.notes || '',
-        status: row.status,
+        status: canonicalOrderStatus(row.status, row.payment_status),
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         deliveryDate: row.delivery_date || null,
@@ -507,7 +513,7 @@ function prepareStatements() {
         listAllOrders: db.prepare('SELECT * FROM orders ORDER BY created_at DESC, id DESC'),
         listOrderItems: db.prepare('SELECT * FROM order_items WHERE order_id = ?'),
         countOrders: db.prepare('SELECT COUNT(*) AS n FROM orders'),
-        countPendingOrders: db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'"),
+        countPendingOrders: db.prepare("SELECT COUNT(*) AS n FROM orders WHERE status IN ('pending', 'pending_payment')"),
         insertOrder: db.prepare(`
             INSERT INTO orders (
                 user_id, total, shipping_address, phone, notes, status,
@@ -686,7 +692,11 @@ function replaceVaccinationRecords(childId, records) {
 
 function hydrateOrders(orderRows) {
     return orderRows.map((row) => {
-        const items = stmts.listOrderItems.all(row.id).map(shopStore.mapOrderItemRow);
+        const items = stmts.listOrderItems.all(row.id).map((item) => {
+            const mapped = shopStore.mapOrderItemRow(item);
+            mapped.lineStatus = canonicalOrderStatus(mapped.lineStatus, row.payment_status);
+            return mapped;
+        });
         return rowToOrder(row, items);
     });
 }
@@ -2143,13 +2153,15 @@ const orders = {
                 }
             }
             const createdAt = new Date().toISOString();
+            const orderStatus = initialOrderStatus(paymentStatus);
+            const lineStatus = orderStatus;
             const info = stmts.insertOrder.run({
                 user_id: Number(userId),
                 total,
                 shipping_address: shippingAddress,
                 phone,
                 notes: notes || '',
-                status: 'pending',
+                status: orderStatus,
                 delivery_date: deliveryDate || null,
                 delivery_slot: deliverySlot || null,
                 lat: lat != null && lat !== '' ? Number(lat) : null,
@@ -2175,7 +2187,7 @@ const orders = {
                     vendor_name: item.offer ? item.offer.vendorName : null,
                     commission_pct: item.commissionPct,
                     commission_amount: item.commissionAmount,
-                    line_status: 'pending'
+                    line_status: lineStatus
                 });
                 const orderItemId = Number(line.lastInsertRowid);
                 shopStore.insertLedgerSqlite(db, {
@@ -2220,16 +2232,24 @@ const orders = {
         connect();
         const current = stmts.getOrder.get(Number(id));
         if (!current) return null;
+        const nextPayment = patch.paymentStatus != null ? patch.paymentStatus : current.payment_status;
+        const nextStatus = patch.status != null ? patch.status : current.status;
         stmts.updateOrderPayment.run({
             id: Number(id),
-            payment_status: patch.paymentStatus != null ? patch.paymentStatus : current.payment_status,
+            payment_status: nextPayment,
             payment_authority: patch.paymentAuthority !== undefined ? patch.paymentAuthority : current.payment_authority,
             payment_ref_id: patch.paymentRefId !== undefined ? patch.paymentRefId : current.payment_ref_id,
             payment_card_pan: patch.paymentCardPan !== undefined ? patch.paymentCardPan : current.payment_card_pan,
             paid_at: patch.paidAt !== undefined ? patch.paidAt : current.paid_at,
-            status: patch.status != null ? patch.status : current.status,
+            status: nextStatus,
             updated_at: new Date().toISOString()
         });
+        if (nextPayment === 'paid') {
+            const placeholders = LINE_PROMOTE_AFTER_PAY.map(() => '?').join(', ');
+            db.prepare(
+                `UPDATE order_items SET line_status = 'processing' WHERE order_id = ? AND line_status IN (${placeholders})`
+            ).run(Number(id), ...LINE_PROMOTE_AFTER_PAY);
+        }
         return orders.getById(id);
     },
     updateStatus(id, status) {
@@ -2282,13 +2302,27 @@ const orders = {
     },
     updateLineStatus(itemId, status, vendorId) {
         connect();
-        const allowed = ['pending', 'preparing', 'shipped', 'delivered', 'cancelled', 'returned'];
-        if (!allowed.includes(status)) return null;
-        const item = db.prepare('SELECT * FROM order_items WHERE id = ?').get(Number(itemId));
-        if (!item) return null;
-        if (vendorId && Number(item.vendor_id) !== Number(vendorId)) return null;
-        db.prepare('UPDATE order_items SET line_status = ? WHERE id = ?').run(status, Number(itemId));
-        return shopStore.mapOrderItemRow(db.prepare('SELECT * FROM order_items WHERE id = ?').get(Number(itemId)));
+        const row = db.prepare(`
+            SELECT i.*, o.payment_status AS payment_status
+            FROM order_items i
+            JOIN orders o ON o.id = i.order_id
+            WHERE i.id = ?
+        `).get(Number(itemId));
+        if (!row) return { ok: false, statusCode: 400, message: 'قلم سفارش یافت نشد' };
+        if (vendorId && Number(row.vendor_id) !== Number(vendorId)) {
+            return { ok: false, statusCode: 403, message: 'این سفارش متعلق به فروشگاه شما نیست' };
+        }
+        const decision = vendorLineDecision({
+            currentLineStatus: row.line_status,
+            nextStatus: status,
+            paymentStatus: row.payment_status
+        });
+        if (!decision.ok) return decision;
+        db.prepare('UPDATE order_items SET line_status = ? WHERE id = ?').run(decision.status, Number(itemId));
+        const updated = db.prepare('SELECT * FROM order_items WHERE id = ?').get(Number(itemId));
+        const item = shopStore.mapOrderItemRow(updated);
+        item.lineStatus = canonicalOrderStatus(item.lineStatus, row.payment_status);
+        return { ok: true, item };
     }
 };
 
