@@ -327,8 +327,39 @@ async function run() {
         assert.ok(Array.isArray(ageGuide.data.milestones.items));
         assert.ok(Array.isArray(ageGuide.data.expectSections) && ageGuide.data.expectSections.length >= 3);
         assert.ok(Array.isArray(ageGuide.data.activities));
-        assert.ok(ageGuide.data.activities.length <= 3);
+        assert.ok(ageGuide.data.activities.length <= 6);
         assert.ok(ageGuide.data.today);
+
+        const playCreate = await request('POST', '/api/admin/growth-plays', {
+            headers: auth,
+            body: {
+                title: 'داستان تصویری تست',
+                duration: 8,
+                bandId: '',
+                instructions: 'صفحه را با هم ببینید.\nبپرسید چه احساسی دارید؟',
+                scene: 'blocks',
+                active: true
+            }
+        });
+        assert.strictEqual(playCreate.status, 201, JSON.stringify(playCreate.data));
+        assert.strictEqual(playCreate.data.title, 'داستان تصویری تست');
+
+        const playList = await request('GET', '/api/admin/growth-plays', { headers: auth });
+        assert.strictEqual(playList.status, 200, JSON.stringify(playList.data));
+        assert.ok(Array.isArray(playList.data.plays));
+        assert.ok(playList.data.plays.some((item) => item.title === 'داستان تصویری تست'));
+
+        const afterPlay = await request('GET', `/api/children/${childId}/age-guide`, { headers: auth });
+        assert.strictEqual(afterPlay.status, 200, JSON.stringify(afterPlay.data));
+        assert.ok(
+            afterPlay.data.activities.some((item) => item.id === playCreate.data.publicId),
+            JSON.stringify(afterPlay.data.activities)
+        );
+
+        const unauthPlay = await request('POST', '/api/admin/growth-plays', {
+            body: { title: 'نباید ذخیره شود', instructions: 'مرحله' }
+        });
+        assert.strictEqual(unauthPlay.status, 401);
 
         const analyzed = await request('POST', `/api/children/${childId}/concerns/analyze`, {
             headers: auth,

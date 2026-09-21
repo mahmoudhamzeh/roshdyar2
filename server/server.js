@@ -27,6 +27,7 @@ const {
 } = require('./auth');
 const {
     MILESTONE_STATUS,
+    AGE_BANDS: GROWTH_AGE_BANDS,
     getBandForAge,
     recommendActivities,
     buildAgeGuidePayload,
@@ -36,6 +37,7 @@ const {
 const { deliverOtp } = require('./sms');
 const { analyzeConcernWithModel, chatGrowthAssistant, buildAssistantContext } = require('./child-growth-ai');
 const { registerMagazineRoutes, overlayLegacyContent } = require('./magazine-routes');
+const growthPlaysStore = require('./growth-plays-store');
 const {
     TICKET_STATUSES,
     normalizeTicketStatus,
@@ -273,7 +275,10 @@ const API_CATALOG = {
             'GET /api/admin/tickets',
             'GET /api/admin/tickets/:id',
             'PUT /api/admin/tickets/:id',
-            'POST /api/admin/banners',
+            'GET /api/admin/growth-plays',
+            'POST /api/admin/growth-plays',
+            'PUT /api/admin/growth-plays/:id',
+            'DELETE /api/admin/growth-plays/:id',
             'PUT /api/admin/banners/:id',
             'DELETE /api/admin/banners/:id',
             'POST /api/admin/news',
@@ -1003,6 +1008,15 @@ app.get('/api/children/:childId/age-guide', async (req, res) => {
         completed: isCompletedOnDay(completions[activity.id], today),
         completion: completions[activity.id] || null
     }));
+    const customPlays = await store.growthPlays.listForAge(
+        payload.child.ageInMonths,
+        payload.band && payload.band.id
+    );
+    payload.activities = growthPlaysStore.mergePlayActivities(payload.activities, customPlays).map((activity) => ({
+        ...activity,
+        completed: isCompletedOnDay(completions[activity.id], today),
+        completion: completions[activity.id] || null
+    }));
     res.json(payload);
 });
 
@@ -1071,7 +1085,14 @@ app.get('/api/children/:childId/activities', async (req, res) => {
     res.json({
         band: { id: band.id, title: band.title },
         today,
-        activities: recommended.map((activity) => ({
+        activities: growthPlaysStore.mergePlayActivities(
+            recommended.map((activity) => ({
+                ...activity,
+                completed: isCompletedOnDay(completions[activity.id], today),
+                completion: completions[activity.id] || null
+            })),
+            await store.growthPlays.listForAge(contentAge, band && band.id)
+        ).map((activity) => ({
             ...activity,
             completed: isCompletedOnDay(completions[activity.id], today),
             completion: completions[activity.id] || null
@@ -1906,6 +1927,80 @@ app.put('/api/admin/banners/:id', isAdmin, upload.single('image'), async (req, r
 app.delete('/api/admin/banners/:id', isAdmin, async (req, res) => {
     if (await store.banners.remove(req.params.id)) res.status(200).json({ message: 'بنر با موفقیت حذف شد' });
     else res.status(404).json({ message: 'بنر یافت نشد' });
+});
+
+function parsePlayFields(body, file, current) {
+    const source = body || {};
+    const title = String(source.title || (current && current.title) || '').trim();
+    const duration = Number(source.duration != null ? source.duration : (current && current.duration) || 8);
+    const bandId = source.bandId != null ? String(source.bandId) : (current ? current.bandId : '');
+    const band = GROWTH_AGE_BANDS.find((item) => item.id === bandId);
+    const minMonths = source.minMonths != null && source.minMonths !== ''
+        ? Number(source.minMonths)
+        : (band ? band.minMonths : (current ? current.minMonths : null));
+    const maxMonths = source.maxMonths != null && source.maxMonths !== ''
+        ? Number(source.maxMonths)
+        : (band ? band.maxMonths : (current ? current.maxMonths : null));
+    const instructions = source.instructions != null
+        ? growthPlaysStore.parseInstructions(source.instructions)
+        : ((current && current.instructions) || []);
+    const activeRaw = source.active;
+    const active = activeRaw === false || activeRaw === 'false' || activeRaw === '0'
+        ? false
+        : (activeRaw === true || activeRaw === 'true' || activeRaw === '1' || activeRaw == null
+            ? (current ? current.active : true)
+            : Boolean(activeRaw));
+    return {
+        title,
+        duration: Number.isFinite(duration) && duration > 0 ? duration : 8,
+        bandId,
+        minMonths: Number.isFinite(minMonths) ? minMonths : null,
+        maxMonths: Number.isFinite(maxMonths) ? maxMonths : null,
+        instructions,
+        goal: source.goal != null ? String(source.goal) : (current ? current.goal : ''),
+        materials: source.materials != null ? String(source.materials) : (current ? current.materials : ''),
+        imageUrl: file ? `/uploads/${file.filename}` : (source.imageUrl != null ? source.imageUrl : (current ? current.imageUrl : '')),
+        scene: source.scene || (current && current.scene) || 'blocks',
+        active: current && activeRaw == null ? current.active : active !== false,
+        sortOrder: source.sortOrder != null ? Number(source.sortOrder) : (current ? current.sortOrder : 0)
+    };
+}
+
+app.get('/api/admin/growth-plays', isAdmin, async (req, res) => {
+    const plays = await store.growthPlays.list();
+    res.json({
+        plays,
+        bands: GROWTH_AGE_BANDS.map((band) => ({
+            id: band.id,
+            title: band.title,
+            minMonths: band.minMonths,
+            maxMonths: band.maxMonths
+        }))
+    });
+});
+
+app.post('/api/admin/growth-plays', isAdmin, upload.single('image'), async (req, res) => {
+    const fields = parsePlayFields(req.body, req.file);
+    if (!fields.title) return res.status(400).json({ message: 'عنوان بازی الزامی است' });
+    if (!fields.instructions.length) return res.status(400).json({ message: 'حداقل یک مرحله برای بازی بنویسید' });
+    const created = await store.growthPlays.create(fields);
+    res.status(201).json(created);
+});
+
+app.put('/api/admin/growth-plays/:id', isAdmin, upload.single('image'), async (req, res) => {
+    const current = await store.growthPlays.getById(req.params.id);
+    if (!current) return res.status(404).json({ message: 'بازی یافت نشد' });
+    const fields = parsePlayFields(req.body, req.file, current);
+    if (!fields.title) return res.status(400).json({ message: 'عنوان بازی الزامی است' });
+    const updated = await store.growthPlays.update(req.params.id, fields);
+    res.json(updated);
+});
+
+app.delete('/api/admin/growth-plays/:id', isAdmin, async (req, res) => {
+    const current = await store.growthPlays.getById(req.params.id);
+    if (!current) return res.status(404).json({ message: 'بازی یافت نشد' });
+    await store.growthPlays.remove(req.params.id);
+    res.json({ message: 'بازی حذف شد' });
 });
 
 app.get('/api/news', async (req, res) => res.json(paginateList(await store.news.list(), req)));
