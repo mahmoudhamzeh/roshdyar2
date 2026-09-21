@@ -124,6 +124,8 @@
 .profile-messages-actions {
   display: flex;
   justify-content: flex-start;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 
 .generate-reminders-btn {
@@ -136,6 +138,14 @@
   padding: 0.7rem 1rem;
   min-height: var(--tap-min);
   cursor: pointer;
+}
+
+.generate-reminders-btn.is-soft {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .profile-loading {

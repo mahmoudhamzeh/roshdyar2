@@ -180,6 +180,18 @@
   color: var(--ink-muted);
 }
 
+.reminders-toolbar-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.btn-add-reminder.is-ghost {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  text-decoration: none;
+}
+
 .btn-add-reminder,
 .btn-submit {
   background: var(--brand);

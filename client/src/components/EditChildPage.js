@@ -207,6 +207,8 @@ const EditChildPage = () => {
             const formattedBirthDate = gregorianDate.toISOString().split('T')[0];
             const finalData = {
                 ...formData,
+                birthType: formData.birthType || null,
+                bloodType: formData.bloodType || null,
                 name: `${formData.firstName || ''} ${formData.lastName || ''}`.trim(),
                 birthDate: formattedBirthDate,
                 avatar: newAvatarPath,
@@ -394,7 +396,14 @@ const EditChildPage = () => {
                                     <div className="choice-pills">
                                         <button
                                             type="button"
-                                            className={`choice-pill ${(formData.birthType || 'natural') === 'natural' ? 'selected' : ''}`}
+                                            className={`choice-pill ${!formData.birthType ? 'selected' : ''}`}
+                                            onClick={() => setFormData((p) => ({ ...p, birthType: '' }))}
+                                        >
+                                            انتخاب نشده
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`choice-pill ${formData.birthType === 'natural' ? 'selected' : ''}`}
                                             onClick={() => setFormData((p) => ({ ...p, birthType: 'natural' }))}
                                         >
                                             طبیعی
@@ -448,15 +457,15 @@ const EditChildPage = () => {
                                 <div className="form-group">
                                     <label>گروه خونی</label>
                                     <select name="bloodType" value={formData.bloodType || ''} onChange={handleChange}>
-                                        <option>A+</option>
-                                        <option>A-</option>
-                                        <option>B+</option>
-                                        <option>B-</option>
-                                        <option>AB+</option>
-                                        <option>AB-</option>
-                                        <option>O+</option>
-                                        <option>O-</option>
-                                        <option value="">نمی‌دانم</option>
+                                        <option value="">انتخاب نشده</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A-</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B-</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB-</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O-</option>
                                     </select>
                                 </div>
                                 <div className="form-group" />

@@ -30,6 +30,7 @@ import CheckoutReviewPage from './components/CheckoutReviewPage';
 import CheckoutCallbackPage from './components/CheckoutCallbackPage';
 import OrdersPage from './components/OrdersPage';
 import ChildGrowthPage from './components/ChildGrowthPage';
+import RemindersPage from './components/RemindersPage';
 import MobileBottomNav from './components/MobileBottomNav';
 import { MagazineAudioProvider } from './components/magazine/AudioProvider';
 import './App.css';
@@ -54,6 +55,7 @@ const App = () => {
                 <PrivateRoute path="/vaccination/:childId" component={VaccinationPage} />
                 <PrivateRoute path="/child-growth/:childId" component={ChildGrowthPage} />
                 <PrivateRoute path="/age-guidance/:childId" component={ChildGrowthPage} />
+                <PrivateRoute path="/reminders" component={RemindersPage} />
                 <PrivateRoute path="/profile" component={ProfilePage} />
                 <PrivateRoute exact path="/shop" component={ShopPage} />
                 <PrivateRoute exact path="/shop/categories" component={ShopCategoriesPage} />

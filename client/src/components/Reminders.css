@@ -49,15 +49,30 @@
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-md);
-  max-height: min(70vh, 480px);
+  max-height: min(70vh, 520px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   color: var(--ink);
 }
 
-.reminders-dropdown.is-mobile {
-  max-height: min(65vh, 460px);
+.reminders-dropdown .reminders-cal {
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.reminders-dropdown.is-mobile,
+.reminders-dropdown.is-top {
+  max-height: min(78vh, calc(100vh - 5.75rem));
+}
+
+.reminders-dropdown .reminders-cal-link {
+  padding: 0 0.85rem 0.85rem;
+}
+
+.add-reminder-btn.is-on {
+  background: var(--brand-soft);
+  border-radius: 8px;
 }
 
 .reminders-header-actions {

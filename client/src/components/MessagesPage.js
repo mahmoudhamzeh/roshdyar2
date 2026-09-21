@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useHistory } from 'react-router-dom';
+import { useHistory, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faEnvelopeOpenText,
@@ -23,14 +23,14 @@ const getUser = () => {
     }
 };
 
-const MessagesPage = () => {
+const MessagesPage = ({ startOnReminders = false, openForm = false }) => {
     const history = useHistory();
     const [messages, setMessages] = useState([]);
     const [reminders, setReminders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [activeSection, setActiveSection] = useState('inbox');
-    const [showReminderForm, setShowReminderForm] = useState(false);
+    const [activeSection, setActiveSection] = useState(startOnReminders ? 'reminders' : 'inbox');
+    const [showReminderForm, setShowReminderForm] = useState(openForm);
     const [reminderForm, setReminderForm] = useState({
         title: '',
         description: '',
@@ -61,6 +61,12 @@ const MessagesPage = () => {
         const data = await res.json();
         setReminders(data);
     }, []);
+
+    useEffect(() => {
+        if (!openForm && !startOnReminders) return;
+        setActiveSection('reminders');
+        if (openForm) setShowReminderForm(true);
+    }, [openForm, startOnReminders]);
 
     useEffect(() => {
         const load = async () => {
@@ -296,14 +302,17 @@ const MessagesPage = () => {
                     <div className="reminders-section">
                         <div className="reminders-toolbar">
                             <p>یادآوری شخصی با توضیحات و زمان آلارم ثبت کنید.</p>
-                            <button
-                                type="button"
-                                className="btn-add-reminder"
-                                onClick={() => setShowReminderForm(v => !v)}
-                            >
-                                <FontAwesomeIcon icon={faPlus} />
-                                ثبت یادآوری
-                            </button>
+                            <div className="reminders-toolbar-actions">
+                                <Link className="btn-add-reminder is-ghost" to="/reminders">تقویم</Link>
+                                <button
+                                    type="button"
+                                    className="btn-add-reminder"
+                                    onClick={() => setShowReminderForm(v => !v)}
+                                >
+                                    <FontAwesomeIcon icon={faPlus} />
+                                    ثبت یادآوری
+                                </button>
+                            </div>
                         </div>
 
                         {showReminderForm && (

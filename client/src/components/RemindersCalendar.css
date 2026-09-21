@@ -1,0 +1,151 @@
+.reminders-cal {
+  padding: 0.7rem 0.75rem 0.85rem;
+  background: var(--surface);
+}
+
+.reminders-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.reminders-cal-head strong {
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+}
+
+.reminders-cal-head button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--brand-wash);
+  color: var(--brand-deep);
+  cursor: pointer;
+}
+
+.reminders-cal-week,
+.reminders-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.2rem;
+}
+
+.reminders-cal-week span {
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--ink-muted);
+  padding: 0.2rem 0;
+}
+
+.reminders-cal-day,
+.reminders-cal-blank {
+  min-height: 42px;
+  border: 0;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.reminders-cal-day {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  color: var(--ink);
+  font: inherit;
+}
+
+.reminders-cal-day em {
+  font-style: normal;
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+.reminders-cal-day i {
+  font-style: normal;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--brand);
+  line-height: 1;
+}
+
+.reminders-cal-day.is-today {
+  outline: 2px solid var(--brand-mid);
+}
+
+.reminders-cal-day.has-items {
+  background: var(--brand-soft);
+}
+
+.reminders-cal-day.is-on {
+  background: var(--brand);
+  color: #fff;
+}
+
+.reminders-cal-day.is-on i {
+  color: #fff;
+}
+
+.reminders-cal-link {
+  display: block;
+  margin-top: 0.7rem;
+  text-align: center;
+  font-weight: 800;
+  color: var(--brand);
+  text-decoration: none;
+}
+
+.reminders-cal-daylist {
+  margin-top: 0.85rem;
+}
+
+.reminders-cal-daylist h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.reminders-cal-daylist p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.reminders-cal-daylist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.reminders-cal-daylist li {
+  background: var(--brand-wash);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+
+.reminders-cal-daylist strong {
+  display: block;
+}
+
+.reminders-cal-daylist span,
+.reminders-cal-daylist small {
+  display: block;
+  color: var(--ink-muted);
+  margin-top: 0.15rem;
+}
+
+.reminders-cal.is-compact {
+  padding: 0.55rem 0.65rem 0.7rem;
+}
+
+.reminders-cal.is-compact .reminders-cal-day,
+.reminders-cal.is-compact .reminders-cal-blank {
+  min-height: 34px;
+  border-radius: 8px;
+}

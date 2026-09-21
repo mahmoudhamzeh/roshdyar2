@@ -6,7 +6,7 @@ import ChangePassword from './ChangePassword';
 import MessagesPage from './MessagesPage';
 import TicketsPage from './TicketsPage';
 import MainNavbar from './MainNavbar';
-import { clearAuthSession, getLoggedInUser } from '../api';
+import { clearAuthSession } from '../api';
 import { getChildDisplayName } from '../utils/childName';
 import './ProfilePage.css';
 
@@ -24,25 +24,16 @@ const ProfilePage = () => {
     const [selectedChild, setSelectedChild] = useState('');
     const [childrenError, setChildrenError] = useState('');
 
+    const [openReminderForm, setOpenReminderForm] = useState(false);
+
     const handleLogout = () => {
         clearAuthSession();
         history.push('/register');
     };
 
-    const handleGenerateReminders = async () => {
-        const user = getLoggedInUser();
-        if (!user) return;
-
-        try {
-            const res = await fetch(`/api/generate-reminders/${user.id}`, {
-                method: 'POST',
-            });
-            if (!res.ok) throw new Error('Failed to generate reminders');
-            alert('یادآورها با موفقیت تولید شدند.');
-            setActiveTab('messages');
-        } catch (error) {
-            alert(error.message);
-        }
+    const handleRegisterReminder = () => {
+        setOpenReminderForm(true);
+        setActiveTab('messages');
     };
 
     const openChildrenPicker = async () => {
@@ -86,11 +77,14 @@ const ProfilePage = () => {
                 return (
                     <div className="profile-messages-wrap">
                         <div className="profile-messages-actions">
-                            <button type="button" onClick={handleGenerateReminders} className="generate-reminders-btn">
-                                تولید یادآورها
+                            <button type="button" onClick={handleRegisterReminder} className="generate-reminders-btn">
+                                ثبت یادآوری
                             </button>
+                            <Link to="/reminders" className="generate-reminders-btn is-soft">
+                                تقویم یادآوری‌ها
+                            </Link>
                         </div>
-                        <MessagesPage />
+                        <MessagesPage startOnReminders={openReminderForm} openForm={openReminderForm} />
                     </div>
                 );
             case 'tickets':
