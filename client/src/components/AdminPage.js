@@ -12,6 +12,7 @@ import MessageManagement from './admin/MessageManagement';
 import ProductManagement from './admin/ProductManagement';
 import CategoryManagement from './admin/CategoryManagement';
 import VendorManagement from './admin/VendorManagement';
+import VendorDossierPage from './admin/VendorDossierPage';
 import OrderManagement from './admin/OrderManagement';
 import CommentModeration from './admin/CommentModeration';
 
@@ -115,7 +116,8 @@ const AdminPage = () => {
                     <Route path={`${path}/messages`} component={MessageManagement} />
                     <Route path={`${path}/products`} component={ProductManagement} />
                     <Route path={`${path}/product-categories`} component={CategoryManagement} />
-                    <Route path={`${path}/vendors`} component={VendorManagement} />
+                    <Route exact path={`${path}/vendors`} component={VendorManagement} />
+                    <Route path={`${path}/vendors/:vendorId`} component={VendorDossierPage} />
                     <Route path={`${path}/orders`} component={OrderManagement} />
                     <Route path={`${path}/comments`} component={CommentModeration} />
                     <Route path={`${path}/banners`} component={BannerManagement} />

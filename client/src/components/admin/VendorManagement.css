@@ -321,6 +321,423 @@
 .vendor-review-buttons .is-docs { background: #0369a1; }
 .vendor-review-buttons .is-reject,
 .vendor-review-buttons .is-suspend { background: #dc2626; }
+.vendor-review-buttons .is-file { background: #334155; }
+
+.vendor-review-row {
+    background: #fff;
+    border: 1px solid #d7e5e2;
+    border-radius: 14px;
+    box-shadow: 0 2px 8px rgba(15, 118, 110, 0.06);
+    overflow: hidden;
+}
+
+.vendor-review-row.is-returned,
+.vendor-review-row.is-pending {
+    border-color: #fdba74;
+}
+
+.vendor-review-row.is-rejected {
+    border-color: #fca5a5;
+}
+
+.vendor-review-row-main {
+    width: 100%;
+    border: 0;
+    background: none;
+    text-align: right;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.15rem;
+    color: inherit;
+    font: inherit;
+}
+
+.vendor-review-row-main h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+}
+
+.vendor-review-row-main p {
+    margin: 0;
+    color: #5b716e;
+}
+
+.vendor-review-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+}
+
+.vendor-review-row-meta strong {
+    color: #0f766e;
+    font-size: 0.85rem;
+}
+
+.vendor-review-requested {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 0.7rem 0.9rem;
+}
+
+.vendor-review-requested ul {
+    margin: 0.4rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.vendor-review-requested li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.vendor-review-requested .is-needed em { color: #c2410c; }
+.vendor-review-requested .is-done em { color: #047857; }
+
+.vendor-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1200;
+    padding: 1rem;
+}
+
+.vendor-action-overlay {
+    z-index: 1300;
+}
+
+.vendor-modal {
+    background: #fff;
+    width: min(920px, 100%);
+    max-height: 92vh;
+    overflow: auto;
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+    display: flex;
+    flex-direction: column;
+}
+
+.vendor-action-modal {
+    width: min(560px, 100%);
+    padding: 0 0 1rem;
+}
+
+.vendor-modal-head,
+.vendor-action-modal header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 1.15rem;
+    border-bottom: 1px solid #e8f0ee;
+}
+
+.vendor-modal-head h3,
+.vendor-action-modal h3 {
+    margin: 0;
+}
+
+.vendor-modal-head p {
+    margin: 0.45rem 0 0;
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.vendor-modal-head button,
+.vendor-action-modal header button {
+    border: 0;
+    background: #f1f5f4;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    font-size: 1.2rem;
+    cursor: pointer;
+}
+
+.vendor-modal-body {
+    padding: 0 1.15rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.vendor-modal-sub {
+    margin: 0 1.15rem 0.5rem;
+    color: #5b716e;
+}
+
+.vendor-modal-footer {
+    margin: 0 1.15rem 1.15rem;
+}
+
+.vendor-doc-picker {
+    border: 1px solid #d7e5e2;
+    border-radius: 12px;
+    margin: 0 1.15rem 0.85rem;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.vendor-doc-picker legend {
+    font-weight: 800;
+    color: #0f766e;
+    padding: 0 0.35rem;
+}
+
+.vendor-doc-picker label {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 0.55rem;
+    align-items: center;
+    padding: 0.45rem 0.55rem;
+    border-radius: 10px;
+    background: #f8fbfa;
+}
+
+.vendor-doc-picker label.is-on {
+    background: #ecfeff;
+}
+
+.vendor-doc-picker input[type="text"] {
+    grid-column: 1 / -1;
+    border: 1px solid #d7e5e2;
+    border-radius: 8px;
+    padding: 0.45rem 0.6rem;
+    font: inherit;
+}
+
+.vendor-action-note {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0 1.15rem 0.85rem;
+    font-weight: 700;
+    color: #134e4a;
+}
+
+.vendor-action-note textarea {
+    border: 1px solid #d7e5e2;
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    font: inherit;
+}
+
+.vendor-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    padding: 0 1.15rem;
+}
+
+.vendor-modal-actions button {
+    border: 0;
+    border-radius: 8px;
+    padding: 0.55rem 0.95rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.vendor-modal-actions button[type="button"] {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.vendor-modal-actions .is-approve { background: #0f766e; color: #fff; }
+.vendor-modal-actions .is-fix { background: #d97706; color: #fff; }
+.vendor-modal-actions .is-docs { background: #0369a1; color: #fff; }
+.vendor-modal-actions .is-reject { background: #dc2626; color: #fff; }
+.vendor-modal-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.vendor-edit-form button.is-approve {
+    border: none;
+    border-radius: 8px;
+    padding: 0.55rem 0.95rem;
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    background: #0f766e;
+    margin-top: 0.75rem;
+}
+
+.vendor-dossier-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.vendor-dossier-head h2 {
+    margin: 0.25rem 0 0.5rem;
+}
+
+.vendor-dossier-head p {
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.vendor-dossier-back {
+    color: #0f766e;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.vendor-dossier-ok {
+    background: #ecfdf5;
+    color: #047857;
+    padding: 0.65rem 0.85rem;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.vendor-dossier-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+}
+
+.vendor-dossier-tabs button {
+    border: 1px solid #d7e5e2;
+    background: #fff;
+    border-radius: 999px;
+    padding: 0.4rem 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+    color: #134e4a;
+}
+
+.vendor-dossier-tabs button.is-on {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+}
+
+.vendor-card {
+    background: #fff;
+    border: 1px solid #d7e5e2;
+    border-radius: 14px;
+    padding: 1rem 1.15rem 1.2rem;
+}
+
+.vendor-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.vendor-card-head h3 {
+    margin: 0;
+}
+
+.vendor-edit-toggle {
+    border: 1px solid #0f766e;
+    background: #fff;
+    color: #0f766e;
+    border-radius: 8px;
+    padding: 0.4rem 0.8rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.vendor-edit-form label,
+.vendor-kind label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-weight: 700;
+    color: #134e4a;
+}
+
+.vendor-edit-form input,
+.vendor-edit-form select,
+.vendor-edit-form textarea {
+    border: 1px solid #d7e5e2;
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font: inherit;
+}
+
+.vendor-edit-wide {
+    margin: 0.75rem 0;
+}
+
+.vendor-kind {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+}
+
+.vendor-kind label {
+    flex-direction: row;
+    align-items: center;
+    border: 1px solid #d7e5e2;
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+}
+
+.vendor-kind label.is-on {
+    background: #ecfdf5;
+    border-color: #0f766e;
+}
+
+.vendor-dossier-table {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.vendor-dossier-table li,
+.vendor-dossier-orders article {
+    background: #f7fbfa;
+    border: 1px solid #e4eeeb;
+    border-radius: 10px;
+    padding: 0.7rem 0.85rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.85rem;
+    justify-content: space-between;
+}
+
+.vendor-dossier-orders {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.vendor-dossier-orders header {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.vendor-dossier-orders ul {
+    width: 100%;
+    margin: 0.3rem 0 0;
+    padding-right: 1rem;
+}
 
 .vendor-review-commission {
     margin-right: auto;
@@ -339,5 +756,14 @@
 
     .vendor-review-commission {
         margin-right: 0;
+    }
+
+    .vendor-review-row-main {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .vendor-review-row-meta {
+        justify-content: flex-start;
     }
 }

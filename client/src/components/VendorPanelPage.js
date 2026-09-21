@@ -169,8 +169,12 @@ const VendorPanelPage = () => {
         if (vendor) {
             const ticketRes = await fetch('/api/tickets');
             setTickets(ticketRes.ok ? await ticketRes.json() : []);
-            if (vendor.docs && vendor.docs.length) setStep(3);
-            else if (vendor.bankSheba) setStep(3);
+        if (vendor.docs && vendor.docs.length) setStep(3);
+        else if (vendor.bankSheba) setStep(3);
+        const pendingKind = (vendor.requestedDocs || []).find((item) =>
+            !(vendor.docs || []).some((doc) => doc.kind === item.kind)
+        );
+        if (pendingKind) setDocKind(pendingKind.kind);
         }
         if (vendor && vendor.status === 'active') {
             const [offerRes, orderRes, financeRes, catalogRes, invoiceRes] = await Promise.all([
@@ -493,12 +497,30 @@ const VendorPanelPage = () => {
             : me.status === 'pending'
                 ? 'در انتظار تأیید'
                 : me.status === 'returned'
-                    ? 'نیاز به اصلاح / مدارک'
+                    ? ((me.requestedDocs || []).length ? 'ارسال مدارک درخواستی' : 'نیاز به اصلاح')
                     : me.status === 'rejected'
                         ? 'رد شده'
                         : me.status === 'suspended'
                             ? 'تعلیق‌شده'
                             : me.status;
+
+    const requestedDocsList = me && (me.requestedDocs || []).length ? (
+        <div className="vendor-requested-docs">
+            <strong>مدارک درخواستی کارشناس</strong>
+            <ul>
+                {(me.requestedDocs || []).map((item) => {
+                    const uploaded = (me.docs || []).some((doc) => doc.kind === item.kind);
+                    return (
+                        <li key={item.kind} className={uploaded ? 'is-done' : 'is-needed'}>
+                            <span>{DOC_KINDS.find((kind) => kind.id === item.kind)?.label || item.kind}</span>
+                            {item.note ? <em>{item.note}</em> : null}
+                            <small>{uploaded ? 'بارگذاری شده' : 'لازم است'}</small>
+                        </li>
+                    );
+                })}
+            </ul>
+        </div>
+    ) : null;
 
     const profileForm = (
         <form className="vendor-form" onSubmit={(e) => saveProfile(e, !!me)}>
@@ -622,6 +644,7 @@ const VendorPanelPage = () => {
                         {me.reviewNote && (
                             <p className="vendor-warn">پیام کارشناس: {me.reviewNote}</p>
                         )}
+                        {requestedDocsList}
                         <form className="vendor-form" onSubmit={uploadDocs}>
                             <Field label="نوع مدرک">
                                 <select value={docKind} onChange={(e) => setDocKind(e.target.value)}>
@@ -703,6 +726,7 @@ const VendorPanelPage = () => {
                                     {!isActive && me.reviewNote && (
                                         <p className="vendor-warn">پیام کارشناس: {me.reviewNote}</p>
                                     )}
+                                    {!isActive && requestedDocsList}
                                     <div className="vendor-home-actions">
                                         <button type="button" className="vendor-btn vendor-btn-primary" onClick={() => openTab('profile')}>پروفایل فروشگاه</button>
                                         {isActive && (
@@ -724,6 +748,7 @@ const VendorPanelPage = () => {
                                         <h2>اطلاعات پروفایل</h2>
                                         <p>در صورت تغییر مشخصات، درخواست برای پشتیبانی ارسال می‌شود.</p>
                                     </header>
+                                    {requestedDocsList}
                                     {profileForm}
                                 </section>
                             )}

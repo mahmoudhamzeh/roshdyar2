@@ -2756,6 +2756,10 @@ module.exports = {
             connect();
             return shopStore.getVendorByUserSqlite(db, userId);
         },
+        getVendorById(id) {
+            connect();
+            return shopStore.getVendorByIdSqlite(db, id);
+        },
         applyVendor(payload) {
             connect();
             return shopStore.applyVendorSqlite(db, payload);
