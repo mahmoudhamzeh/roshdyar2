@@ -342,7 +342,8 @@
 
 .choice-pill {
   flex: 1;
-  min-width: 5rem;
+  min-width: 6.5rem;
+  white-space: nowrap;
   padding: 0.7rem 0.9rem;
   border-radius: 10px;
   border: 1px solid var(--border);
