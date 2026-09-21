@@ -3,6 +3,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const shopStore = require('./shop-store');
 const magazineStore = require('./magazine-store');
+const growthPlaysStore = require('./growth-plays-store');
 const { buildCategoryTree } = require('./shop-model');
 const { normalizeTicketStatus, ticketPayload, foldStatusCounts } = require('./ticket-utils');
 
@@ -973,6 +974,7 @@ function connect() {
     db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
     shopStore.ensureShopSchemaSqlite(db);
     magazineStore.ensureMagazineSchemaSqlite(db);
+    growthPlaysStore.ensureSqlite(db);
     prepareStatements();
     seedShopCategories();
 
@@ -984,6 +986,7 @@ function connect() {
     }
     shopStore.ensureShopSchemaSqlite(db);
     magazineStore.ensureMagazineSchemaSqlite(db);
+    growthPlaysStore.ensureSqlite(db);
 
     stmts.purgeOtp.run(Date.now());
     console.log(`Connected to relational SQLite (${DB_FILE}) schema v${SCHEMA_VERSION}`);
@@ -2697,6 +2700,33 @@ function stats() {
     };
 }
 
+const growthPlays = {
+    list() {
+        connect();
+        return growthPlaysStore.listSqlite(db);
+    },
+    getById(id) {
+        connect();
+        return growthPlaysStore.getSqlite(db, id);
+    },
+    create(payload) {
+        connect();
+        return growthPlaysStore.createSqlite(db, payload);
+    },
+    update(id, payload) {
+        connect();
+        return growthPlaysStore.updateSqlite(db, id, payload);
+    },
+    remove(id) {
+        connect();
+        return growthPlaysStore.removeSqlite(db, id);
+    },
+    listForAge(months, bandId) {
+        connect();
+        return growthPlaysStore.listForAgeSqlite(db, months, bandId);
+    }
+};
+
 module.exports = {
     engine: 'sqlite',
     connect,
@@ -2723,6 +2753,7 @@ module.exports = {
     videos,
     podcasts,
     tickets,
+    growthPlays,
     products,
     productCategories,
     productImages,

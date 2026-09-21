@@ -6,7 +6,6 @@ import {
     faAppleAlt,
     faBed,
     faChartLine,
-    faCheck,
     faCloudMoon,
     faComments,
     faCookieBite,
@@ -30,7 +29,10 @@ import {
     chatChipsForAge,
 } from '../utils/child-growth';
 import { buildOverallStatus, collectHealthTags, metricCaption, statusPhrase } from '../utils/child-snapshot';
-import ChildAvatar from './ChildAvatar';
+import PlayStoryCard from './PlayStoryCard';
+import './PlayStoryCard.css';
+import PlayStoryCard from './PlayStoryCard';
+import PlayStoryArt, { sceneForActivity } from './PlayStoryArt';
 import './ChildGrowthPage.css';
 
 const DOMAIN_TILES = [
@@ -53,15 +55,6 @@ const SLEEP_ART = [
     { emoji: '🛏️', icon: faBed, wash: '#e0e7ff', ink: '#3730a3' },
     { emoji: '🧸', icon: faCloudMoon, wash: '#fce7f3', ink: '#9d174d' },
     { emoji: '😴', icon: faMoon, wash: '#dbeafe', ink: '#1d4ed8' },
-];
-
-const PLAY_ART = [
-    { emoji: '🧸', wash: '#fce7f3', ink: '#be185d' },
-    { emoji: '🎵', wash: '#dbeafe', ink: '#1d4ed8' },
-    { emoji: '🫧', wash: '#ccfbf1', ink: '#0f766e' },
-    { emoji: '🪞', wash: '#fef3c7', ink: '#b45309' },
-    { emoji: '📚', wash: '#ede9fe', ink: '#6d28d9' },
-    { emoji: '🧩', wash: '#ffedd5', ink: '#c2410c' },
 ];
 
 const toEduCards = (items, problems, artSet) => {
@@ -100,8 +93,8 @@ const ChildGrowthPage = () => {
     const [openSection, setOpenSection] = useState('speech');
     const [eduTab, setEduTab] = useState('food');
     const [busyKey, setBusyKey] = useState('');
-    const [selectedActivity, setSelectedActivity] = useState(null);
     const [eduPopup, setEduPopup] = useState(null);
+    const [playIndex, setPlayIndex] = useState(0);
     const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
     const [chatError, setChatError] = useState('');
@@ -184,7 +177,6 @@ const ChildGrowthPage = () => {
                     item.id === activity.id ? { ...item, completed: true } : item
                 ),
             }));
-            setSelectedActivity(null);
         } catch (err) {
             alert(err.message);
         } finally {
@@ -409,26 +401,38 @@ const ChildGrowthPage = () => {
                     </div>
                 )}
                 {eduTab === 'play' && (
-                    <div className="cg-edu-grid">
-                        {(activities || []).map((activity, index) => {
-                            const art = PLAY_ART[index % PLAY_ART.length];
-                            return (
-                                <button
-                                    type="button"
-                                    key={activity.id}
-                                    className={`cg-edu-card${activity.completed ? ' is-done' : ''}`}
-                                    onClick={() => setSelectedActivity(activity)}
-                                >
-                                    <span className="cg-edu-art" style={{ background: art.wash, color: art.ink }}>
-                                        <span aria-hidden="true">{art.emoji}</span>
-                                        <FontAwesomeIcon icon={faPuzzlePiece} />
-                                    </span>
-                                    <strong>{activity.title}</strong>
-                                    <p>{activity.shortDescription || activity.goal || `${activity.duration} دقیقه بازی کوتاه`}</p>
-                                    <span className="cg-edu-more">{activity.completed ? 'انجام شد' : `${activity.duration} دقیقه · شروع`}</span>
-                                </button>
-                            );
-                        })}
+                    <div className="cg-play-stage">
+                        {(activities || []).length === 0 ? (
+                            <p className="cg-note">بازی پیشنهادی برای امروز ثبت نشده است.</p>
+                        ) : (
+                            <>
+                                <PlayStoryCard
+                                    activity={(activities[playIndex] || activities[0])}
+                                    busy={busyKey === `a-${(activities[playIndex] || activities[0]).id}`}
+                                    onComplete={handleCompleteActivity}
+                                    showClose={false}
+                                />
+                                {activities.length > 1 && (
+                                    <div className="cg-play-thumbs">
+                                        {activities.map((activity, index) => (
+                                            <button
+                                                type="button"
+                                                key={activity.id}
+                                                className={index === playIndex ? 'is-on' : ''}
+                                                onClick={() => setPlayIndex(index)}
+                                            >
+                                                <PlayStoryArt
+                                                    scene={sceneForActivity(activity)}
+                                                    imageUrl={activity.imageUrl}
+                                                    alt=""
+                                                />
+                                                <strong>{activity.title}</strong>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 )}
                 {eduTab === 'sleep' && (
@@ -536,37 +540,6 @@ const ChildGrowthPage = () => {
                         )}
                         <div className="cg-modal-actions">
                             <button type="button" className="cg-btn is-soft" onClick={() => setEduPopup(null)}>بستن</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {selectedActivity && (
-                <div className="cg-modal-overlay" role="presentation" onClick={() => setSelectedActivity(null)}>
-                    <div className="cg-modal cg-edu-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-                        <div className="cg-edu-modal-art" style={{ background: PLAY_ART[0].wash }}>
-                            <span aria-hidden="true">🧩</span>
-                        </div>
-                        <h3>{selectedActivity.title}</h3>
-                        <p className="cg-note">{selectedActivity.duration} دقیقه</p>
-                        {selectedActivity.goal && <p><strong>هدف:</strong> {selectedActivity.goal}</p>}
-                        {selectedActivity.materials && <p><strong>وسایل:</strong> {selectedActivity.materials}</p>}
-                        <ol>
-                            {(selectedActivity.instructions || []).map((step) => (
-                                <li key={step}>{step}</li>
-                            ))}
-                        </ol>
-                        {selectedActivity.tip && <p className="cg-note">{selectedActivity.tip}</p>}
-                        <div className="cg-modal-actions">
-                            <button
-                                type="button"
-                                className="cg-btn"
-                                disabled={busyKey === `a-${selectedActivity.id}` || selectedActivity.completed}
-                                onClick={() => handleCompleteActivity(selectedActivity)}
-                            >
-                                <FontAwesomeIcon icon={faCheck} /> انجام شد
-                            </button>
-                            <button type="button" className="cg-btn is-soft" onClick={() => setSelectedActivity(null)}>بستن</button>
                         </div>
                     </div>
                 </div>

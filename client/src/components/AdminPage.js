@@ -15,6 +15,7 @@ import VendorManagement from './admin/VendorManagement';
 import VendorDossierPage from './admin/VendorDossierPage';
 import OrderManagement from './admin/OrderManagement';
 import CommentModeration from './admin/CommentModeration';
+import PlayDesigner from './admin/PlayDesigner';
 
 const SHOP_LINKS = [
     { to: 'products', label: 'محصولات' },
@@ -82,6 +83,7 @@ const AdminPage = () => {
                 </div>
                 <nav className="admin-nav">
                     <NavLink to={`${url}/dashboard`} activeClassName="active">داشبورد</NavLink>
+                    <NavLink to={`${url}/growth-plays`} activeClassName="active">طراحی بازی</NavLink>
                     <NavLink to={`${url}/users`} activeClassName="active">مدیریت کاربران</NavLink>
                     <NavLink to={`${url}/messages`} activeClassName="active">پیام‌ها</NavLink>
                     <NavGroup
@@ -111,6 +113,7 @@ const AdminPage = () => {
                         <Redirect to={`${path}/dashboard`} />
                     </Route>
                     <Route path={`${path}/dashboard`} component={AdminDashboard} />
+                    <Route path={`${path}/growth-plays`} component={PlayDesigner} />
                     <Route exact path={`${path}/users`} component={UserManagement} />
                     <Route path={`${path}/users/:userId`} component={UserDetailPage} />
                     <Route path={`${path}/messages`} component={MessageManagement} />

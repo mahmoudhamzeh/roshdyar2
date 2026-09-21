@@ -52,6 +52,17 @@ assert.ok(payload.safetyTasks.length >= 1);
 assert.strictEqual(payload.today, dayA);
 assert.ok(payload.activities.length <= 3);
 
+const { mergePlayActivities } = require('./growth-plays-store');
+const merged = mergePlayActivities(payload.activities, [{
+    id: 'admin-play-1',
+    title: 'داستان تصویری',
+    duration: 8,
+    instructions: ['صفحه را با هم ببینید.'],
+    source: 'admin'
+}]);
+assert.strictEqual(merged[0].id, 'admin-play-1');
+assert.ok(merged.length <= 3);
+
 const older = buildAgeGuidePayload({
     firstName: 'آریا',
     lastName: 'تست',
