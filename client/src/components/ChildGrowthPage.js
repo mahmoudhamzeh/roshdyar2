@@ -18,6 +18,7 @@ import {
     faRobot,
     faSpinner,
     faSyringe,
+    faTimes,
     faUtensils,
 } from '@fortawesome/free-solid-svg-icons';
 import { analyzeGrowthMetric } from '../utils/growth-analyzer';
@@ -56,11 +57,19 @@ const SLEEP_ART = [
     { emoji: '😴', icon: faMoon, wash: '#dbeafe', ink: '#1d4ed8' },
 ];
 
+const teaserText = (value) => {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const match = text.match(/^(.+?[.؟!])(?:\s|$)/);
+    const first = (match && match[1]) || text;
+    return first.length > 72 ? `${first.slice(0, 70)}…` : first;
+};
+
 const toEduCards = (items, problems, artSet) => {
     const cards = (items || []).map((item, index) => ({
         key: `${item.title || 'tip'}-${index}`,
         title: item.title || 'نکته',
-        teaser: item.detail || item,
+        teaser: teaserText(item.detail || item),
         body: item.detail || item,
         steps: [],
         art: artSet[index % artSet.length],
@@ -70,8 +79,8 @@ const toEduCards = (items, problems, artSet) => {
         cards.push({
             key: item.id || item.title || `problem-${index}`,
             title: item.title,
-            teaser: 'اگر این موقعیت را دیدید، تصویر راهنما را باز کنید.',
-            body: (item.guidance || []).join('\n'),
+            teaser: 'اگر این موقعیت پیش آمد، راهنمای کامل را باز کنید.',
+            body: '',
             steps: item.guidance || [],
             art: artSet[(index + 2) % artSet.length],
             kind: 'problem',
@@ -165,6 +174,15 @@ const ChildGrowthPage = () => {
     useEffect(() => {
         if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, [messages]);
+
+    useEffect(() => {
+        if (!eduPopup) return undefined;
+        const previous = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previous;
+        };
+    }, [eduPopup]);
 
     const handleCompleteActivity = async (activity) => {
         setBusyKey(`a-${activity.id}`);
@@ -390,10 +408,12 @@ const ChildGrowthPage = () => {
                                         <span aria-hidden="true">{card.art.emoji}</span>
                                         <FontAwesomeIcon icon={card.art.icon} />
                                     </span>
-                                    {card.kind === 'problem' && <em>موقعیت رایج</em>}
-                                    <strong>{card.title}</strong>
-                                    <p>{card.teaser}</p>
-                                    <span className="cg-edu-more">نمایش راهنما</span>
+                                    <div className="cg-edu-card-copy">
+                                        {card.kind === 'problem' && <em>موقعیت رایج</em>}
+                                        <strong>{card.title}</strong>
+                                        <p>{card.teaser}</p>
+                                        <span className="cg-edu-more">راهنمای کامل</span>
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -467,10 +487,12 @@ const ChildGrowthPage = () => {
                                         <span aria-hidden="true">{card.art.emoji}</span>
                                         <FontAwesomeIcon icon={card.art.icon} />
                                     </span>
-                                    {card.kind === 'problem' && <em>موقعیت رایج</em>}
-                                    <strong>{card.title}</strong>
-                                    <p>{card.teaser}</p>
-                                    <span className="cg-edu-more">نمایش راهنما</span>
+                                    <div className="cg-edu-card-copy">
+                                        {card.kind === 'problem' && <em>موقعیت رایج</em>}
+                                        <strong>{card.title}</strong>
+                                        <p>{card.teaser}</p>
+                                        <span className="cg-edu-more">راهنمای کامل</span>
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -522,21 +544,31 @@ const ChildGrowthPage = () => {
 
             {eduPopup && (
                 <div className="cg-modal-overlay" role="presentation" onClick={() => setEduPopup(null)}>
-                    <div className="cg-modal cg-edu-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-                        {eduPopup.art && (
-                            <div className="cg-edu-modal-art" style={{ background: eduPopup.art.wash, color: eduPopup.art.ink }}>
-                                <span aria-hidden="true">{eduPopup.art.emoji}</span>
+                    <div className="cg-modal cg-edu-modal" role="dialog" aria-modal="true" aria-labelledby="cg-edu-modal-title" onClick={(e) => e.stopPropagation()}>
+                        <div className="cg-edu-modal-head">
+                            {eduPopup.art && (
+                                <div className="cg-edu-modal-art" style={{ background: eduPopup.art.wash, color: eduPopup.art.ink }}>
+                                    <span aria-hidden="true">{eduPopup.art.emoji}</span>
+                                </div>
+                            )}
+                            <div>
+                                {eduPopup.kind === 'problem' && <em>موقعیت رایج</em>}
+                                <h3 id="cg-edu-modal-title">{eduPopup.title}</h3>
                             </div>
-                        )}
-                        <h3>{eduPopup.title}</h3>
-                        {eduPopup.body && <p className="cg-edu-modal-body">{eduPopup.body}</p>}
-                        {(eduPopup.steps || []).length > 0 && (
-                            <ol>
-                                {eduPopup.steps.map((step) => (
-                                    <li key={step}>{step}</li>
-                                ))}
-                            </ol>
-                        )}
+                            <button type="button" className="cg-edu-modal-close" onClick={() => setEduPopup(null)} aria-label="بستن">
+                                <FontAwesomeIcon icon={faTimes} />
+                            </button>
+                        </div>
+                        <div className="cg-edu-modal-scroll">
+                            {eduPopup.body && <p className="cg-edu-modal-body">{eduPopup.body}</p>}
+                            {(eduPopup.steps || []).length > 0 && (
+                                <ol>
+                                    {eduPopup.steps.map((step) => (
+                                        <li key={step}>{step}</li>
+                                    ))}
+                                </ol>
+                            )}
+                        </div>
                         <div className="cg-modal-actions">
                             <button type="button" className="cg-btn is-soft" onClick={() => setEduPopup(null)}>بستن</button>
                         </div>

@@ -167,5 +167,15 @@ const teenWalk = chatGrowthAssistantLocal(
 );
 assert.ok(!teenWalk.includes('۱۸ ماهگی'), teenWalk);
 
+const fs = require('fs');
+const path = require('path');
+const growthPageSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/ChildGrowthPage.js'), 'utf8');
+const growthCss = fs.readFileSync(path.join(__dirname, '../client/src/components/ChildGrowthPage.css'), 'utf8');
+assert.ok(/cg-edu-modal-scroll/.test(growthPageSrc), 'education popup must have a dedicated scroll region');
+assert.ok(/document\.body\.style\.overflow/.test(growthPageSrc), 'education popup must lock page scroll');
+assert.ok(/z-index:\s*2600/.test(growthCss), 'education popup must sit above the mobile bottom nav');
+assert.ok(/overscroll-behavior:\s*contain/.test(growthCss));
+assert.ok(/cg-edu-card-copy/.test(growthCss), 'education cards should use a readable copy column');
+
 console.log('child growth unit tests passed');
 console.log('day key sample', calendarDayKey(new Date('2026-09-02T08:00:00.000Z')));
