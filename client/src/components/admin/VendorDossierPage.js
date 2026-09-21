@@ -65,6 +65,8 @@ const VendorDossierPage = () => {
 
     useEffect(() => {
         load();
+        // Reload whenever the route vendor changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [vendorId]);
 
     const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));

@@ -421,7 +421,7 @@
     background: #fff;
     width: min(920px, 100%);
     max-height: 92vh;
-    overflow: auto;
+    overflow: hidden;
     border-radius: 16px;
     box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
     display: flex;
@@ -441,6 +441,8 @@
     gap: 1rem;
     padding: 1rem 1.15rem;
     border-bottom: 1px solid #e8f0ee;
+    flex-shrink: 0;
+    background: #fff;
 }
 
 .vendor-modal-head h3,
@@ -471,6 +473,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.85rem;
+    overflow: auto;
+    min-height: 0;
+    flex: 1;
 }
 
 .vendor-modal-sub {
@@ -479,7 +484,11 @@
 }
 
 .vendor-modal-footer {
-    margin: 0 1.15rem 1.15rem;
+    margin: 0;
+    padding: 0.85rem 1.15rem 1.15rem;
+    border-top: 1px solid #e8f0ee;
+    flex-shrink: 0;
+    background: #f4faf8;
 }
 
 .vendor-doc-picker {
@@ -639,6 +648,8 @@
 
 .vendor-card-head {
     display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
     justify-content: space-between;
     align-items: center;
     gap: 0.75rem;
@@ -647,6 +658,7 @@
 
 .vendor-card-head h3 {
     margin: 0;
+    flex: 1 1 auto;
 }
 
 .vendor-edit-toggle {
@@ -657,6 +669,10 @@
     padding: 0.4rem 0.8rem;
     font-weight: 800;
     cursor: pointer;
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 14rem;
+    white-space: nowrap;
 }
 
 .vendor-edit-form label,
