@@ -3,6 +3,7 @@ const path = require('path');
 const { Pool, types } = require('pg');
 const shopStore = require('./shop-store');
 const magazineStore = require('./magazine-store');
+const growthPlaysStore = require('./growth-plays-store');
 const { buildCategoryTree } = require('./shop-model');
 const { normalizeTicketStatus, ticketPayload, foldStatusCounts } = require('./ticket-utils');
 
@@ -949,6 +950,7 @@ async function connect() {
             await pool.query(schemaSql);
             await shopStore.ensureShopSchemaPg(q, one, many);
             await magazineStore.ensureMagazineSchemaPg(q, one, many);
+            await growthPlaysStore.ensurePg(q);
             await seedShopCategories();
             const version = await getSchemaVersion();
             if (version < SCHEMA_VERSION) {
@@ -958,6 +960,7 @@ async function connect() {
             }
             await shopStore.ensureShopSchemaPg(q, one, many);
             await magazineStore.ensureMagazineSchemaPg(q, one, many);
+            await growthPlaysStore.ensurePg(q);
             await widenLegacyIntColumns();
             await pool.query('DELETE FROM otp_codes WHERE expires_at < $1', [Date.now()]);
             console.log(`Connected to PostgreSQL schema v${SCHEMA_VERSION}`);
@@ -2617,6 +2620,26 @@ module.exports = {
     videos,
     podcasts,
     tickets,
+    growthPlays: {
+        list() {
+            return connect().then(() => growthPlaysStore.listPg(many));
+        },
+        getById(id) {
+            return connect().then(() => growthPlaysStore.getPg(one, id));
+        },
+        create(payload) {
+            return connect().then(() => growthPlaysStore.createPg(q, one, payload));
+        },
+        update(id, payload) {
+            return connect().then(() => growthPlaysStore.updatePg(q, one, id, payload));
+        },
+        remove(id) {
+            return connect().then(() => growthPlaysStore.removePg(q, id));
+        },
+        listForAge(months, bandId) {
+            return connect().then(() => growthPlaysStore.listForAgePg(many, months, bandId));
+        }
+    },
     products,
     productCategories,
     productImages,
