@@ -2643,6 +2643,9 @@ module.exports = {
         getVendorByUser(userId) {
             return shopStore.getVendorByUserPg(one, many, userId);
         },
+        getVendorById(id) {
+            return shopStore.getVendorByIdPg(one, many, id);
+        },
         applyVendor(payload) {
             return shopStore.applyVendorPg(q, one, many, payload);
         },

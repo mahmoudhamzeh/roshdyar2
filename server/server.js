@@ -12,6 +12,7 @@ const fs = require('fs');
 const { vaccinationSchedule } = require('./vaccination-schedule');
 const { recommendedCheckupsData } = require('./recommendations');
 const store = require('./db');
+const shopStore = require('./shop-store');
 const { AGE_BANDS, flattenCategories, GENDER_OPTIONS, parseProductAttrs } = require('./shop-model');
 const zarinpal = require('./zarinpal');
 const rateLimit = require('express-rate-limit');
@@ -290,6 +291,9 @@ const API_CATALOG = {
             'DELETE /api/admin/products/:id',
             'GET /api/admin/orders',
             'PUT /api/admin/orders/:id',
+            'GET /api/admin/vendors',
+            'GET /api/admin/vendors/:id',
+            'PUT /api/admin/vendors/:id',
             'GET /api/admin/shop/comments',
             'PATCH /api/admin/shop/comments/:id',
             'POST /api/admin/magazine/posts',
@@ -3021,32 +3025,76 @@ app.post('/api/shop/vendors/me/docs', upload.array('docs', 8), async (req, res) 
 });
 
 const ALLOWED_VENDOR_STATUS = ['pending', 'active', 'suspended', 'returned', 'rejected'];
+const VENDOR_DOC_KIND_LABELS = {
+    national_card: 'کارت ملی',
+    company_id: 'شناسه ملی / آگهی',
+    business_license: 'جواز کسب',
+    bank_certificate: 'تأییدیه شبا',
+    other: 'سایر مدارک'
+};
+
+function vendorInvoicesFromOrders(orders) {
+    return (orders || []).map((order) => ({
+        id: `INV-${order.id}`,
+        orderId: order.id,
+        createdAt: order.createdAt,
+        status: order.status,
+        total: (order.items || []).reduce((sum, item) => sum + Number(item.lineTotal || 0), 0),
+        items: order.items || []
+    }));
+}
+
+function requestedDocsMessage(items) {
+    const names = (items || []).map((item) => {
+        const label = VENDOR_DOC_KIND_LABELS[item.kind] || item.kind;
+        return item.note ? `${label} (${item.note})` : label;
+    });
+    if (!names.length) return '';
+    return `لطفاً این مدارک را بارگذاری کنید: ${names.join('، ')}`;
+}
 
 app.get('/api/admin/vendors', isAdmin, async (req, res) => {
     res.json(await store.shop.listVendors());
 });
 
+app.get('/api/admin/vendors/:id', isAdmin, async (req, res) => {
+    const vendor = await store.shop.getVendorById(req.params.id);
+    if (!vendor) return res.status(404).json({ message: 'فروشنده یافت نشد' });
+    const [orders, finance, offers] = await Promise.all([
+        store.orders.listByVendor(vendor.id),
+        store.shop.vendorFinance(vendor.id),
+        store.shop.listOffersByVendor(vendor.id)
+    ]);
+    res.json({
+        vendor,
+        orders: orders || [],
+        finance: finance || null,
+        offers: offers || [],
+        invoices: vendorInvoicesFromOrders(orders)
+    });
+});
+
 app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
-    const current = (await store.shop.listVendors()).find((item) => Number(item.id) === Number(req.params.id));
+    const current = await store.shop.getVendorById(req.params.id);
     if (!current) return res.status(404).json({ message: 'فروشنده یافت نشد' });
     const status = req.body.status;
     if (status != null && !ALLOWED_VENDOR_STATUS.includes(status)) {
         return res.status(400).json({ message: 'وضعیت نامعتبر است' });
     }
-    if (status === 'active' && !current.profileComplete) {
-        return res.status(400).json({
-            message: 'مدارک و اطلاعات حقیقی/حقوقی و مالی هنوز کامل نیست',
-            profileGaps: current.profileGaps || []
-        });
+    const body = req.body || {};
+    const requestedDocs = body.requestedDocs !== undefined
+        ? shopStore.normalizeRequestedDocs(body.requestedDocs)
+        : undefined;
+    const reviewNoteRaw = body.reviewNote !== undefined
+        ? body.reviewNote
+        : body.note;
+    let reviewNote = reviewNoteRaw !== undefined ? String(reviewNoteRaw).trim() : undefined;
+    if (status === 'returned' && requestedDocs && requestedDocs.length && !reviewNote) {
+        reviewNote = requestedDocsMessage(requestedDocs);
     }
-    const reviewNoteRaw = req.body.reviewNote !== undefined
-        ? req.body.reviewNote
-        : req.body.note;
-    const reviewNote = reviewNoteRaw !== undefined ? String(reviewNoteRaw).trim() : undefined;
     if ((status === 'returned' || status === 'rejected') && !reviewNote) {
         return res.status(400).json({ message: 'برای رد، درخواست اصلاح یا درخواست مدارک، توضیح کارشناس لازم است' });
     }
-    const body = req.body || {};
     const kyc = vendorPayloadFromBody(body, null);
     const kycPatch = {};
     [
@@ -3062,8 +3110,16 @@ app.put('/api/admin/vendors/:id', isAdmin, async (req, res) => {
         ...(body.commissionPct !== undefined ? { commissionPct: body.commissionPct } : {}),
         ...(body.settlementCycle !== undefined ? { settlementCycle: body.settlementCycle } : {})
     };
-    if (status === 'active') patch.reviewNote = reviewNote || '';
-    else if (reviewNote !== undefined) patch.reviewNote = reviewNote;
+    if (status === 'active') {
+        patch.reviewNote = reviewNote || '';
+        patch.requestedDocs = requestedDocs !== undefined ? requestedDocs : [];
+    } else if (status === 'rejected') {
+        patch.reviewNote = reviewNote;
+        patch.requestedDocs = requestedDocs !== undefined ? requestedDocs : [];
+    } else {
+        if (reviewNote !== undefined) patch.reviewNote = reviewNote;
+        if (requestedDocs !== undefined) patch.requestedDocs = requestedDocs;
+    }
     const updated = await store.shop.updateVendor(req.params.id, patch);
     if (!updated) return res.status(404).json({ message: 'فروشنده یافت نشد' });
     res.json(updated);
@@ -3237,14 +3293,7 @@ app.get('/api/vendor/finance', requireVendor, async (req, res) => {
 
 app.get('/api/vendor/invoices', requireVendor, async (req, res) => {
     const orders = await store.orders.listByVendor(req.vendor.id);
-    res.json((orders || []).map((order) => ({
-        id: `INV-${order.id}`,
-        orderId: order.id,
-        createdAt: order.createdAt,
-        status: order.status,
-        total: (order.items || []).reduce((sum, item) => sum + Number(item.lineTotal || 0), 0),
-        items: order.items || []
-    })));
+    res.json(vendorInvoicesFromOrders(orders));
 });
 
 app.post('/api/vendor/wallet/withdraw', requireVendor, async (req, res) => {

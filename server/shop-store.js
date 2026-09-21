@@ -286,8 +286,42 @@ function mapVendorRow(row) {
         address: row.address || '',
         bankName: row.bank_name || '',
         bankSheba: row.bank_sheba || '',
-        bankAccount: row.bank_account || ''
+        bankAccount: row.bank_account || '',
+        requestedDocs: parseRequestedDocs(row.requested_docs)
     };
+}
+
+const VENDOR_DOC_KINDS = ['national_card', 'company_id', 'business_license', 'bank_certificate', 'other'];
+
+function normalizeRequestedDocs(items) {
+    const list = Array.isArray(items) ? items : [];
+    const seen = new Set();
+    const out = [];
+    list.forEach((item) => {
+        const kind = String((typeof item === 'string' ? item : (item && item.kind)) || '').trim();
+        if (!kind || seen.has(kind) || !VENDOR_DOC_KINDS.includes(kind)) return;
+        seen.add(kind);
+        out.push({
+            kind,
+            note: String((item && typeof item === 'object' && item.note) || '').trim()
+        });
+    });
+    return out;
+}
+
+function parseRequestedDocs(raw) {
+    if (Array.isArray(raw)) return normalizeRequestedDocs(raw);
+    if (!raw) return [];
+    if (typeof raw === 'object') return normalizeRequestedDocs(raw);
+    try {
+        return normalizeRequestedDocs(JSON.parse(raw));
+    } catch (_) {
+        return [];
+    }
+}
+
+function serializeRequestedDocs(value) {
+    return JSON.stringify(normalizeRequestedDocs(value));
 }
 
 function mapVendorDocRow(row) {
@@ -654,7 +688,8 @@ function ensureShopSchemaSqlite(db) {
         ['bank_name', 'TEXT'],
         ['bank_sheba', 'TEXT'],
         ['bank_account', 'TEXT'],
-        ['review_note', 'TEXT']
+        ['review_note', 'TEXT'],
+        ['requested_docs', 'TEXT']
     ].forEach(([col, type]) => {
         if (!sqliteHasColumn(db, 'shop_vendors', col)) {
             db.exec(`ALTER TABLE shop_vendors ADD COLUMN ${col} ${type}`);
@@ -830,7 +865,8 @@ function writeVendorSqlite(db, id, next) {
             display_name = ?, status = ?, commission_pct = ?, settlement_cycle = ?, phone = ?, docs_note = ?,
             review_note = ?,
             person_kind = ?, national_id = ?, legal_name = ?, registration_no = ?, economic_code = ?,
-            owner_name = ?, province = ?, city = ?, address = ?, bank_name = ?, bank_sheba = ?, bank_account = ?
+            owner_name = ?, province = ?, city = ?, address = ?, bank_name = ?, bank_sheba = ?, bank_account = ?,
+            requested_docs = ?
         WHERE id = ?
     `).run(
         next.displayName,
@@ -852,6 +888,7 @@ function writeVendorSqlite(db, id, next) {
         next.bankName || null,
         next.bankSheba || null,
         next.bankAccount || null,
+        serializeRequestedDocs(next.requestedDocs),
         Number(id)
     );
     return hydrateVendorSqlite(db, mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(id))));
@@ -890,8 +927,12 @@ function applyVendorSqlite(db, payload) {
     });
 }
 
+function getVendorByIdSqlite(db, id) {
+    return hydrateVendorSqlite(db, mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(id))));
+}
+
 function updateVendorSqlite(db, id, patch) {
-    const current = hydrateVendorSqlite(db, mapVendorRow(db.prepare('SELECT * FROM shop_vendors WHERE id = ?').get(Number(id))));
+    const current = getVendorByIdSqlite(db, id);
     if (!current) return null;
     return writeVendorSqlite(db, id, { ...current, ...compactPatch(patch) });
 }
@@ -1158,6 +1199,7 @@ async function ensureShopSchemaPg(q, one, many) {
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS phone TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS docs_note TEXT');
     await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS review_note TEXT');
+    await q('ALTER TABLE shop_vendors ADD COLUMN IF NOT EXISTS requested_docs TEXT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS placement TEXT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS product_id BIGINT');
     await q('ALTER TABLE banners ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0');
@@ -1376,8 +1418,9 @@ async function writeVendorPg(q, one, many, id, next) {
             display_name=$1, status=$2, commission_pct=$3, settlement_cycle=$4, phone=$5, docs_note=$6,
             review_note=$7,
             person_kind=$8, national_id=$9, legal_name=$10, registration_no=$11, economic_code=$12,
-            owner_name=$13, province=$14, city=$15, address=$16, bank_name=$17, bank_sheba=$18, bank_account=$19
-         WHERE id=$20 RETURNING *`,
+            owner_name=$13, province=$14, city=$15, address=$16, bank_name=$17, bank_sheba=$18, bank_account=$19,
+            requested_docs=$20
+         WHERE id=$21 RETURNING *`,
         [
             next.displayName,
             next.status,
@@ -1398,6 +1441,7 @@ async function writeVendorPg(q, one, many, id, next) {
             next.bankName || null,
             next.bankSheba || null,
             next.bankAccount || null,
+            serializeRequestedDocs(next.requestedDocs),
             Number(id)
         ]
     );
@@ -1428,8 +1472,12 @@ async function applyVendorPg(q, one, many, payload) {
     });
 }
 
+async function getVendorByIdPg(one, many, id) {
+    return hydrateVendorPg(many, mapVendorRow(await one('SELECT * FROM shop_vendors WHERE id = $1', [Number(id)])));
+}
+
 async function updateVendorPg(q, one, many, id, patch) {
-    const current = await hydrateVendorPg(many, mapVendorRow(await one('SELECT * FROM shop_vendors WHERE id = $1', [Number(id)])));
+    const current = await getVendorByIdPg(one, many, id);
     if (!current) return null;
     return writeVendorPg(q, one, many, id, { ...current, ...compactPatch(patch) });
 }
@@ -1681,6 +1729,7 @@ module.exports = {
     listVendorsSqlite,
     getVendorByUserSqlite,
     applyVendorSqlite,
+    getVendorByIdSqlite,
     updateVendorSqlite,
     addVendorDocSqlite,
     vendorFinanceSqlite,
@@ -1690,6 +1739,8 @@ module.exports = {
     offerPriceRangesSqlite,
     isVendorProfileComplete,
     vendorProfileGaps,
+    normalizeRequestedDocs,
+    VENDOR_DOC_KINDS,
     ensureShopSchemaPg,
     listSkillsPg,
     getInternalVendorPg,
@@ -1706,6 +1757,7 @@ module.exports = {
     listVendorsPg,
     getVendorByUserPg,
     applyVendorPg,
+    getVendorByIdPg,
     updateVendorPg,
     addVendorDocPg,
     vendorFinancePg,

@@ -759,19 +759,26 @@ async function run() {
         assert.ok(vendorListed.user.displayName);
         assert.ok(String(vendorListed.user.mobile || '').includes('0912') || String(vendorListed.userName || '').length > 0);
 
-        const blockApprove = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
-            headers: auth,
-            body: { status: 'active' }
-        });
-        assert.strictEqual(blockApprove.status, 400);
-        assert.ok(Array.isArray(blockApprove.data.profileGaps));
-        assert.ok(blockApprove.data.profileGaps.some((item) => String(item).includes('مدارک')));
-
         const listedVendors = await request('GET', '/api/admin/vendors', { headers: auth });
         const listedVendor = (listedVendors.data || []).find((item) => Number(item.id) === Number(vendorApply.data.id));
         assert.ok(listedVendor);
         assert.strictEqual(listedVendor.profileComplete, false);
         assert.ok((listedVendor.profileGaps || []).length > 0);
+
+        const approveIncomplete = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'active' }
+        });
+        assert.strictEqual(approveIncomplete.status, 200, JSON.stringify(approveIncomplete.data));
+        assert.strictEqual(approveIncomplete.data.status, 'active');
+        assert.strictEqual(approveIncomplete.data.profileComplete, false);
+
+        const resetPending = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { status: 'pending' }
+        });
+        assert.strictEqual(resetPending.status, 200, JSON.stringify(resetPending.data));
+        assert.strictEqual(resetPending.data.status, 'pending');
 
         const needNote = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
@@ -781,11 +788,22 @@ async function run() {
 
         const requestDocs = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
-            body: { status: 'returned', reviewNote: 'کارت ملی و تأییدیه شبا لازم است' }
+            body: {
+                status: 'returned',
+                reviewNote: 'کارت ملی و تأییدیه شبا لازم است',
+                requestedDocs: [
+                    { kind: 'national_card' },
+                    { kind: 'bank_certificate', note: 'با مهر بانک' }
+                ]
+            }
         });
         assert.strictEqual(requestDocs.status, 200, JSON.stringify(requestDocs.data));
         assert.strictEqual(requestDocs.data.status, 'returned');
         assert.strictEqual(requestDocs.data.reviewNote, 'کارت ملی و تأییدیه شبا لازم است');
+        assert.ok(Array.isArray(requestDocs.data.requestedDocs));
+        assert.strictEqual(requestDocs.data.requestedDocs.length, 2);
+        assert.ok(requestDocs.data.requestedDocs.some((item) => item.kind === 'national_card'));
+        assert.ok(requestDocs.data.requestedDocs.some((item) => item.kind === 'bank_certificate' && item.note === 'با مهر بانک'));
 
         const vendorSeesNote = await request('GET', '/api/shop/vendors/me', {
             headers: { Authorization: `Bearer ${verify.data.token}` }
@@ -793,6 +811,7 @@ async function run() {
         assert.strictEqual(vendorSeesNote.status, 200);
         assert.strictEqual(vendorSeesNote.data.status, 'returned');
         assert.strictEqual(vendorSeesNote.data.reviewNote, 'کارت ملی و تأییدیه شبا لازم است');
+        assert.strictEqual((vendorSeesNote.data.requestedDocs || []).length, 2);
 
         const rejectVendor = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
             headers: auth,
@@ -801,6 +820,7 @@ async function run() {
         assert.strictEqual(rejectVendor.status, 200, JSON.stringify(rejectVendor.data));
         assert.strictEqual(rejectVendor.data.status, 'rejected');
         assert.strictEqual(rejectVendor.data.reviewNote, 'اطلاعات با مدارک همخوانی ندارد');
+        assert.deepStrictEqual(rejectVendor.data.requestedDocs || [], []);
 
         const boundary = `----tatkids${Date.now()}`;
         const fileBody = Buffer.concat([
@@ -845,6 +865,27 @@ async function run() {
         assert.strictEqual(approveVendor.data.status, 'active');
         assert.strictEqual(approveVendor.data.personKind, 'individual');
         assert.strictEqual(approveVendor.data.reviewNote, '');
+        assert.deepStrictEqual(approveVendor.data.requestedDocs || [], []);
+
+        const adminEditVendor = await request('PUT', `/api/admin/vendors/${vendorApply.data.id}`, {
+            headers: auth,
+            body: { displayName: 'فروشگاه اصلاح‌شده ادمین', phone: '09123334455', commissionPct: 12 }
+        });
+        assert.strictEqual(adminEditVendor.status, 200, JSON.stringify(adminEditVendor.data));
+        assert.strictEqual(adminEditVendor.data.displayName, 'فروشگاه اصلاح‌شده ادمین');
+        assert.strictEqual(adminEditVendor.data.phone, '09123334455');
+        assert.strictEqual(Number(adminEditVendor.data.commissionPct), 12);
+        assert.strictEqual(adminEditVendor.data.status, 'active');
+
+        const vendorDossier = await request('GET', `/api/admin/vendors/${vendorApply.data.id}`, { headers: auth });
+        assert.strictEqual(vendorDossier.status, 200, JSON.stringify(vendorDossier.data));
+        assert.ok(vendorDossier.data.vendor);
+        assert.strictEqual(vendorDossier.data.vendor.displayName, 'فروشگاه اصلاح‌شده ادمین');
+        assert.ok(Array.isArray(vendorDossier.data.orders));
+        assert.ok(Array.isArray(vendorDossier.data.offers));
+        assert.ok(Array.isArray(vendorDossier.data.invoices));
+        assert.ok(vendorDossier.data.finance);
+        assert.ok(vendorDossier.data.finance.walletAvailable != null);
 
         const vendorProduct = await request('POST', '/api/vendor/products', {
             headers: { Authorization: `Bearer ${verify.data.token}` },
