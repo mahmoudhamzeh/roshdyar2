@@ -29,8 +29,7 @@ import {
     chatChipsForAge,
 } from '../utils/child-growth';
 import { buildOverallStatus, collectHealthTags, metricCaption, statusPhrase } from '../utils/child-snapshot';
-import PlayStoryCard from './PlayStoryCard';
-import './PlayStoryCard.css';
+import ChildAvatar from './ChildAvatar';
 import PlayStoryCard from './PlayStoryCard';
 import PlayStoryArt, { sceneForActivity } from './PlayStoryArt';
 import './ChildGrowthPage.css';
