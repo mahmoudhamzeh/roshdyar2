@@ -72,10 +72,11 @@ assert.ok(vendorSrc.includes('vendorLineOptions'));
 assert.ok(vendorSrc.includes('isVendorLineLocked'));
 
 const shippingSrc = fs.readFileSync(path.join(__dirname, '../client/src/components/CheckoutShippingPage.js'), 'utf8');
+const shippingAfterDays = shippingSrc.split('<h2>زمان ارسال</h2>')[1] || '';
 assert.ok(/checkout-days/.test(shippingSrc));
 assert.ok(/checkout-day/.test(shippingSrc));
 assert.ok(/checkout-slots/.test(shippingSrc));
 assert.ok(/weekday/.test(shippingSrc));
-assert.ok(!/checkout-chips/.test(shippingSrc.split('زمان ارسال')[1] || ''), 'delivery days must not use wrapping chips');
+assert.ok(!/checkout-chips/.test(shippingAfterDays), 'delivery days must not use wrapping chips');
 
 console.log('order status tests passed');
