@@ -22,46 +22,55 @@ export const sceneForActivity = (activity) => {
 
 const BlocksScene = () => (
     <svg viewBox="0 0 640 360" className="play-story-svg" role="img" aria-hidden="true">
-        <rect width="640" height="360" rx="28" fill="#f8efe4" />
-        <ellipse cx="318" cy="292" rx="210" ry="42" fill="#d8f3dc" />
-        <rect x="78" y="168" width="18" height="92" rx="6" fill="#9ad0a6" />
-        <ellipse cx="87" cy="168" rx="36" ry="22" fill="#7cbc8c" />
-        <ellipse cx="87" cy="158" rx="22" ry="10" fill="#5ea572" />
-        <circle cx="545" cy="248" r="28" fill="#e8b07a" />
-        <circle cx="534" cy="236" r="8" fill="#c9844e" />
-        <circle cx="556" cy="236" r="8" fill="#c9844e" />
-        <ellipse cx="545" cy="258" rx="16" ry="10" fill="#dca06f" />
-        <path d="M168 250c18-62 48-98 92-86 28 8 42 38 38 78" fill="#5bb8a4" />
-        <path d="M214 214c22-8 48-4 62 18" fill="#3f9d8c" />
-        <circle cx="248" cy="148" r="28" fill="#f3d1b8" />
-        <path d="M214 150c8-38 64-42 78-8 4 18-8 28-22 30-18 4-42 2-56-22z" fill="#f4b8c9" />
-        <path d="M226 142c18-6 48-4 58 10" fill="none" stroke="#e59aac" strokeWidth="10" strokeLinecap="round" />
-        <rect x="232" y="176" width="78" height="86" rx="28" fill="#5bb8a4" />
-        <rect x="214" y="198" width="28" height="54" rx="14" fill="#f3d1b8" />
-        <rect x="298" y="206" width="28" height="46" rx="14" fill="#f3d1b8" />
-        <rect x="248" y="248" width="22" height="36" rx="10" fill="#7a5a48" />
-        <rect x="274" y="248" width="22" height="36" rx="10" fill="#7a5a48" />
-        <rect x="268" y="208" width="22" height="22" rx="5" fill="#f4c14b" />
-        <circle cx="236" cy="146" r="3.2" fill="#5b3a2e" />
-        <circle cx="258" cy="146" r="3.2" fill="#5b3a2e" />
-        <path d="M238 160c8 8 20 8 28 0" fill="none" stroke="#c56b5a" strokeWidth="3" strokeLinecap="round" />
-        <circle cx="372" cy="176" r="26" fill="#f6d7be" />
-        <path d="M348 168c6-18 48-16 52 6-8 10-22 14-34 12-10-1-18-8-18-18z" fill="#c9844e" />
-        <rect x="348" y="198" width="56" height="62" rx="22" fill="#efe3c4" />
-        <rect x="338" y="214" width="20" height="36" rx="10" fill="#f6d7be" />
-        <rect x="392" y="214" width="20" height="36" rx="10" fill="#f6d7be" />
-        <rect x="356" y="250" width="16" height="28" rx="8" fill="#7a5a48" />
-        <rect x="376" y="250" width="16" height="28" rx="8" fill="#7a5a48" />
-        <circle cx="362" cy="174" r="2.8" fill="#5b3a2e" />
-        <circle cx="380" cy="174" r="2.8" fill="#5b3a2e" />
-        <path d="M364 186c6 6 14 6 20 0" fill="none" stroke="#c56b5a" strokeWidth="2.6" strokeLinecap="round" />
-        <rect x="292" y="236" width="28" height="28" rx="6" fill="#f26b6b" />
-        <rect x="318" y="218" width="24" height="24" rx="6" fill="#f4c14b" />
-        <rect x="308" y="242" width="22" height="22" rx="6" fill="#6db7f2" />
-        <rect x="332" y="236" width="20" height="20" rx="5" fill="#8ed08a" />
-        <rect x="300" y="258" width="18" height="18" rx="4" fill="#c9a0ff" />
-        <path d="M430 118c8 0 12 10 8 16-8 2-16-4-14-12 2-4 4-4 6-4z" fill="#f4b8c9" />
-        <path d="M452 132c8 0 12 10 8 16-8 2-16-4-14-12 2-4 4-4 6-4z" fill="#f4b8c9" />
+        <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor="#fbf4ea" />
+                <stop offset="1" stopColor="#f4e6d4" />
+            </linearGradient>
+        </defs>
+        <rect width="640" height="360" rx="28" fill="url(#sky)" />
+        <ellipse cx="320" cy="302" rx="228" ry="48" fill="#cfeecf" />
+        <rect x="92" y="168" width="16" height="108" rx="6" fill="#86c896" />
+        <ellipse cx="100" cy="170" rx="42" ry="26" fill="#7dbe8d" />
+        <ellipse cx="86" cy="156" rx="22" ry="14" fill="#5fa572" />
+        <ellipse cx="118" cy="160" rx="18" ry="12" fill="#6bb07c" />
+        <circle cx="548" cy="252" r="32" fill="#e2a36d" />
+        <ellipse cx="536" cy="238" rx="9" ry="10" fill="#c47d45" />
+        <ellipse cx="560" cy="238" rx="9" ry="10" fill="#c47d45" />
+        <ellipse cx="548" cy="266" rx="18" ry="11" fill="#d89055" />
+        <circle cx="538" cy="250" r="4" fill="#5b3a2e" />
+        <circle cx="558" cy="250" r="4" fill="#5b3a2e" />
+        <path d="M200 258c12-78 58-118 108-92 22 12 38 42 32 86" fill="#4fb3a0" />
+        <path d="M248 214c28-10 58 0 70 24" fill="#3b9a89" />
+        <circle cx="262" cy="142" r="32" fill="#f4d0b6" />
+        <path d="M224 148c10-46 78-50 92-8 2 20-16 34-36 36-22 2-48-6-56-28z" fill="#f3b7c8" />
+        <path d="M232 138c22-10 62-8 74 14" fill="none" stroke="#e59aac" strokeWidth="12" strokeLinecap="round" />
+        <rect x="236" y="172" width="92" height="96" rx="32" fill="#4fb3a0" />
+        <rect x="218" y="198" width="30" height="58" rx="15" fill="#f4d0b6" />
+        <rect x="312" y="206" width="30" height="50" rx="15" fill="#f4d0b6" />
+        <rect x="254" y="250" width="24" height="40" rx="10" fill="#7a5340" />
+        <rect x="284" y="250" width="24" height="40" rx="10" fill="#7a5340" />
+        <rect x="278" y="204" width="24" height="24" rx="6" fill="#f4c14b" />
+        <circle cx="250" cy="140" r="3.4" fill="#5b3a2e" />
+        <circle cx="274" cy="140" r="3.4" fill="#5b3a2e" />
+        <path d="M252 156c8 9 22 9 32 0" fill="none" stroke="#c56b5a" strokeWidth="3.2" strokeLinecap="round" />
+        <circle cx="384" cy="170" r="28" fill="#f7d7bc" />
+        <path d="M358 164c8-22 56-20 60 8-8 12-24 16-38 14-12-2-22-10-22-22z" fill="#c9844e" />
+        <rect x="356" y="194" width="64" height="70" rx="24" fill="#efe4c6" />
+        <rect x="344" y="210" width="22" height="40" rx="11" fill="#f7d7bc" />
+        <rect x="408" y="210" width="22" height="40" rx="11" fill="#f7d7bc" />
+        <rect x="366" y="250" width="18" height="32" rx="8" fill="#7a5340" />
+        <rect x="388" y="250" width="18" height="32" rx="8" fill="#7a5340" />
+        <circle cx="374" cy="168" r="3" fill="#5b3a2e" />
+        <circle cx="394" cy="168" r="3" fill="#5b3a2e" />
+        <path d="M376 182c6 6 16 6 22 0" fill="none" stroke="#c56b5a" strokeWidth="2.8" strokeLinecap="round" />
+        <rect x="300" y="236" width="30" height="30" rx="6" fill="#ef6b6b" />
+        <rect x="326" y="216" width="26" height="26" rx="6" fill="#f4c14b" />
+        <rect x="318" y="244" width="24" height="24" rx="6" fill="#6db7f2" />
+        <rect x="344" y="236" width="22" height="22" rx="5" fill="#8ed08a" />
+        <rect x="308" y="262" width="20" height="20" rx="4" fill="#c9a0ff" />
+        <path d="M438 112c10 0 14 12 8 18-10 2-18-6-16-14 1-3 4-4 8-4z" fill="#f4b8c9" />
+        <path d="M462 128c10 0 14 12 8 18-10 2-18-6-16-14 1-3 4-4 8-4z" fill="#f4b8c9" />
     </svg>
 );
 

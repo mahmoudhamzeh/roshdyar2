@@ -22,7 +22,7 @@ const PlayStoryCard = ({
             </div>
             <h3>{activity.title}</h3>
             {activity.duration != null && activity.duration !== '' && (
-                <span className="play-story-mins">{activity.duration} دقیقه</span>
+                <span className="play-story-mins">{Number(activity.duration).toLocaleString('fa-IR')} دقیقه</span>
             )}
             {activity.goal && <p className="play-story-goal">{activity.goal}</p>}
             <ol className="play-story-steps">
