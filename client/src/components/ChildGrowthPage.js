@@ -3,11 +3,15 @@ import { Link, useHistory, useParams } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faAllergies,
+    faAppleAlt,
     faBed,
     faChartLine,
     faCheck,
+    faCloudMoon,
     faComments,
+    faCookieBite,
     faHeart,
+    faMoon,
     faNotesMedical,
     faPaperPlane,
     faPersonWalking,
@@ -37,6 +41,53 @@ const DOMAIN_TILES = [
     { id: 'mood', title: 'رفتار', color: '#be185d', icon: faHeart },
 ];
 
+const FOOD_ART = [
+    { emoji: '🥣', icon: faUtensils, wash: '#ffedd5', ink: '#c2410c' },
+    { emoji: '🍌', icon: faAppleAlt, wash: '#fef9c3', ink: '#a16207' },
+    { emoji: '🥛', icon: faCookieBite, wash: '#e0f2fe', ink: '#0369a1' },
+    { emoji: '🥗', icon: faUtensils, wash: '#dcfce7', ink: '#15803d' },
+];
+
+const SLEEP_ART = [
+    { emoji: '🌙', icon: faMoon, wash: '#ede9fe', ink: '#6d28d9' },
+    { emoji: '🛏️', icon: faBed, wash: '#e0e7ff', ink: '#3730a3' },
+    { emoji: '🧸', icon: faCloudMoon, wash: '#fce7f3', ink: '#9d174d' },
+    { emoji: '😴', icon: faMoon, wash: '#dbeafe', ink: '#1d4ed8' },
+];
+
+const PLAY_ART = [
+    { emoji: '🧸', wash: '#fce7f3', ink: '#be185d' },
+    { emoji: '🎵', wash: '#dbeafe', ink: '#1d4ed8' },
+    { emoji: '🫧', wash: '#ccfbf1', ink: '#0f766e' },
+    { emoji: '🪞', wash: '#fef3c7', ink: '#b45309' },
+    { emoji: '📚', wash: '#ede9fe', ink: '#6d28d9' },
+    { emoji: '🧩', wash: '#ffedd5', ink: '#c2410c' },
+];
+
+const toEduCards = (items, problems, artSet) => {
+    const cards = (items || []).map((item, index) => ({
+        key: `${item.title || 'tip'}-${index}`,
+        title: item.title || 'نکته',
+        teaser: item.detail || item,
+        body: item.detail || item,
+        steps: [],
+        art: artSet[index % artSet.length],
+        kind: 'tip',
+    }));
+    (problems || []).forEach((item, index) => {
+        cards.push({
+            key: item.id || item.title || `problem-${index}`,
+            title: item.title,
+            teaser: 'اگر این موقعیت را دیدید، تصویر راهنما را باز کنید.',
+            body: (item.guidance || []).join('\n'),
+            steps: item.guidance || [],
+            art: artSet[(index + 2) % artSet.length],
+            kind: 'problem',
+        });
+    });
+    return cards;
+};
+
 const ChildGrowthPage = () => {
     const { childId } = useParams();
     const history = useHistory();
@@ -50,6 +101,7 @@ const ChildGrowthPage = () => {
     const [eduTab, setEduTab] = useState('food');
     const [busyKey, setBusyKey] = useState('');
     const [selectedActivity, setSelectedActivity] = useState(null);
+    const [eduPopup, setEduPopup] = useState(null);
     const [messages, setMessages] = useState([]);
     const [draft, setDraft] = useState('');
     const [chatError, setChatError] = useState('');
@@ -195,8 +247,16 @@ const ChildGrowthPage = () => {
     const welcome = `سلام، من دستیار رشد ${child.name} هستم. از وضعیت کلی، غذا، خواب یا نگرانی‌تان بپرسید.`;
     const shownMessages = messages.length ? messages : [{ role: 'assistant', content: welcome }];
     const chatChips = chatChipsForAge(child.ageInMonths);
-    const foodTips = (nutrition?.priorities || nutrition?.guidance || []).slice(0, 3);
-    const sleepTips = (sleep?.routine || []).slice(0, 3);
+    const foodCards = toEduCards(
+        nutrition?.priorities || nutrition?.guidance || [{ title: 'غذای خانواده', detail: 'لقمه‌های نرم و متنوع روی میز خانواده.' }],
+        nutrition?.problems,
+        FOOD_ART
+    );
+    const sleepCards = toEduCards(
+        sleep?.routine || [{ title: 'روتین ثابت', detail: 'هر شب همان سه کار کوتاه را تکرار کنید.' }],
+        sleep?.problems,
+        SLEEP_ART
+    );
 
     return (
         <div className="child-growth-page">
@@ -207,6 +267,8 @@ const ChildGrowthPage = () => {
                 <div>
                     <p className="cg-kicker">{band?.title} · {child.ageLabel}</p>
                     <h2>{child.name}</h2>
+                    {overall.tone === 'watch' && <span className="cg-hero-badge">نیاز به توجه</span>}
+                    {overall.tone === 'muted' && <span className="cg-hero-badge is-muted">ناقص</span>}
                     <strong>{overall.title}</strong>
                     <p>{overall.detail}</p>
                 </div>
@@ -286,7 +348,7 @@ const ChildGrowthPage = () => {
             <section className="cg-block">
                 <header className="cg-block-head">
                     <h3>۳. آموزش این سن</h3>
-                    <p>چی بخورد، چه بازی کند، خوابش چطور باشد.</p>
+                    <p>کارت تصویر را بزنید تا راهنمای کامل در پنجره باز شود.</p>
                 </header>
                 <div className="cg-edu-tabs">
                     {[
@@ -305,45 +367,110 @@ const ChildGrowthPage = () => {
                     ))}
                 </div>
                 {eduTab === 'food' && (
-                    <div className="cg-edu-body">
-                        {nutrition?.overview && <p>{nutrition.overview}</p>}
-                        <ul>
-                            {(foodTips.length ? foodTips : [{ title: 'غذای خانواده', detail: 'لقمه‌های نرم و متنوع روی میز خانواده.' }]).map((item) => (
-                                <li key={item.title || item}>
-                                    <strong>{item.title || 'نکته'}.</strong> {item.detail || item}
-                                </li>
+                    <div className="cg-edu-visual">
+                        {nutrition?.overview && (
+                            <button
+                                type="button"
+                                className="cg-edu-overview"
+                                onClick={() => setEduPopup({
+                                    title: 'تصویر کلی تغذیه',
+                                    body: nutrition.overview,
+                                    art: FOOD_ART[0],
+                                })}
+                            >
+                                <span className="cg-edu-art" style={{ background: FOOD_ART[0].wash, color: FOOD_ART[0].ink }}>
+                                    <span aria-hidden="true">{FOOD_ART[0].emoji}</span>
+                                </span>
+                                <div>
+                                    <strong>چی بخورد؟</strong>
+                                    <p>{nutrition.overview}</p>
+                                </div>
+                            </button>
+                        )}
+                        <div className="cg-edu-grid">
+                            {foodCards.map((card) => (
+                                <button
+                                    type="button"
+                                    key={card.key}
+                                    className={`cg-edu-card${card.kind === 'problem' ? ' is-problem' : ''}`}
+                                    onClick={() => setEduPopup(card)}
+                                >
+                                    <span className="cg-edu-art" style={{ background: card.art.wash, color: card.art.ink }}>
+                                        <span aria-hidden="true">{card.art.emoji}</span>
+                                        <FontAwesomeIcon icon={card.art.icon} />
+                                    </span>
+                                    {card.kind === 'problem' && <em>موقعیت رایج</em>}
+                                    <strong>{card.title}</strong>
+                                    <p>{card.teaser}</p>
+                                    <span className="cg-edu-more">نمایش راهنما</span>
+                                </button>
                             ))}
-                        </ul>
+                        </div>
                     </div>
                 )}
                 {eduTab === 'play' && (
-                    <div className="cg-list">
-                        {(activities || []).map((activity) => (
-                            <button
-                                type="button"
-                                key={activity.id}
-                                className={`cg-list-item${activity.completed ? ' is-done' : ''}`}
-                                onClick={() => setSelectedActivity(activity)}
-                            >
-                                <div>
+                    <div className="cg-edu-grid">
+                        {(activities || []).map((activity, index) => {
+                            const art = PLAY_ART[index % PLAY_ART.length];
+                            return (
+                                <button
+                                    type="button"
+                                    key={activity.id}
+                                    className={`cg-edu-card${activity.completed ? ' is-done' : ''}`}
+                                    onClick={() => setSelectedActivity(activity)}
+                                >
+                                    <span className="cg-edu-art" style={{ background: art.wash, color: art.ink }}>
+                                        <span aria-hidden="true">{art.emoji}</span>
+                                        <FontAwesomeIcon icon={faPuzzlePiece} />
+                                    </span>
                                     <strong>{activity.title}</strong>
-                                    <span>{activity.duration} دقیقه</span>
-                                </div>
-                                <em>{activity.completed ? 'انجام شد' : 'شروع'}</em>
-                            </button>
-                        ))}
+                                    <p>{activity.shortDescription || activity.goal || `${activity.duration} دقیقه بازی کوتاه`}</p>
+                                    <span className="cg-edu-more">{activity.completed ? 'انجام شد' : `${activity.duration} دقیقه · شروع`}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
                 {eduTab === 'sleep' && (
-                    <div className="cg-edu-body">
-                        {sleep?.overview && <p>{sleep.overview}</p>}
-                        <ul>
-                            {(sleepTips.length ? sleepTips : [{ title: 'روتین ثابت', detail: 'هر شب همان سه کار کوتاه را تکرار کنید.' }]).map((item) => (
-                                <li key={item.title}>
-                                    <strong>{item.title}.</strong> {item.detail}
-                                </li>
+                    <div className="cg-edu-visual">
+                        {sleep?.overview && (
+                            <button
+                                type="button"
+                                className="cg-edu-overview"
+                                onClick={() => setEduPopup({
+                                    title: 'تصویر کلی خواب',
+                                    body: sleep.overview,
+                                    art: SLEEP_ART[0],
+                                })}
+                            >
+                                <span className="cg-edu-art" style={{ background: SLEEP_ART[0].wash, color: SLEEP_ART[0].ink }}>
+                                    <span aria-hidden="true">{SLEEP_ART[0].emoji}</span>
+                                </span>
+                                <div>
+                                    <strong>خواب این سن</strong>
+                                    <p>{sleep.overview}</p>
+                                </div>
+                            </button>
+                        )}
+                        <div className="cg-edu-grid">
+                            {sleepCards.map((card) => (
+                                <button
+                                    type="button"
+                                    key={card.key}
+                                    className={`cg-edu-card${card.kind === 'problem' ? ' is-problem' : ''}`}
+                                    onClick={() => setEduPopup(card)}
+                                >
+                                    <span className="cg-edu-art" style={{ background: card.art.wash, color: card.art.ink }}>
+                                        <span aria-hidden="true">{card.art.emoji}</span>
+                                        <FontAwesomeIcon icon={card.art.icon} />
+                                    </span>
+                                    {card.kind === 'problem' && <em>موقعیت رایج</em>}
+                                    <strong>{card.title}</strong>
+                                    <p>{card.teaser}</p>
+                                    <span className="cg-edu-more">نمایش راهنما</span>
+                                </button>
                             ))}
-                        </ul>
+                        </div>
                     </div>
                 )}
             </section>
@@ -390,17 +517,46 @@ const ChildGrowthPage = () => {
 
             <p className="cg-disclaimer">{disclaimer}</p>
 
+            {eduPopup && (
+                <div className="cg-modal-overlay" role="presentation" onClick={() => setEduPopup(null)}>
+                    <div className="cg-modal cg-edu-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+                        {eduPopup.art && (
+                            <div className="cg-edu-modal-art" style={{ background: eduPopup.art.wash, color: eduPopup.art.ink }}>
+                                <span aria-hidden="true">{eduPopup.art.emoji}</span>
+                            </div>
+                        )}
+                        <h3>{eduPopup.title}</h3>
+                        {eduPopup.body && <p className="cg-edu-modal-body">{eduPopup.body}</p>}
+                        {(eduPopup.steps || []).length > 0 && (
+                            <ol>
+                                {eduPopup.steps.map((step) => (
+                                    <li key={step}>{step}</li>
+                                ))}
+                            </ol>
+                        )}
+                        <div className="cg-modal-actions">
+                            <button type="button" className="cg-btn is-soft" onClick={() => setEduPopup(null)}>بستن</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {selectedActivity && (
                 <div className="cg-modal-overlay" role="presentation" onClick={() => setSelectedActivity(null)}>
-                    <div className="cg-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+                    <div className="cg-modal cg-edu-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+                        <div className="cg-edu-modal-art" style={{ background: PLAY_ART[0].wash }}>
+                            <span aria-hidden="true">🧩</span>
+                        </div>
                         <h3>{selectedActivity.title}</h3>
                         <p className="cg-note">{selectedActivity.duration} دقیقه</p>
                         {selectedActivity.goal && <p><strong>هدف:</strong> {selectedActivity.goal}</p>}
+                        {selectedActivity.materials && <p><strong>وسایل:</strong> {selectedActivity.materials}</p>}
                         <ol>
                             {(selectedActivity.instructions || []).map((step) => (
                                 <li key={step}>{step}</li>
                             ))}
                         </ol>
+                        {selectedActivity.tip && <p className="cg-note">{selectedActivity.tip}</p>}
                         <div className="cg-modal-actions">
                             <button
                                 type="button"

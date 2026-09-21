@@ -2,17 +2,22 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBell, faTimes, faPlusCircle } from '@fortawesome/free-solid-svg-icons';
+import { faBell, faTimes, faPlusCircle, faCalendarAlt, faListUl } from '@fortawesome/free-solid-svg-icons';
 import AddReminderModal from './AddReminderModal';
+import RemindersCalendar from './RemindersCalendar';
+import { fetchAllReminders } from '../utils/reminders';
 import { formatToShamsi } from '../utils/dateConverter';
 import './Reminders.css';
 
 const Reminders = () => {
     const [reminders, setReminders] = useState([]);
+    const [calendarReminders, setCalendarReminders] = useState([]);
     const [isOpen, setIsOpen] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeChildId, setActiveChildId] = useState(null);
     const [panelStyle, setPanelStyle] = useState(null);
+    const [panelView, setPanelView] = useState('list');
+    const [selectedCalKey, setSelectedCalKey] = useState('');
     const [isMobile, setIsMobile] = useState(
         typeof window !== 'undefined' ? window.innerWidth <= 768 : true
     );
@@ -20,26 +25,21 @@ const Reminders = () => {
     const panelRef = useRef(null);
     const location = useLocation();
 
-    const getSeenReminders = () => {
-        try {
-            return JSON.parse(localStorage.getItem('seenReminders') || '[]');
-        } catch {
-            return [];
-        }
-    };
-
     const updateLayout = useCallback(() => {
         const mobile = window.innerWidth <= 768;
         setIsMobile(mobile);
         if (!isOpen || !bellRef.current) return;
+
+        const nav = document.querySelector('.navbar');
+        const topOffset = nav ? Math.round(nav.getBoundingClientRect().bottom + 8) : 72;
 
         if (mobile) {
             setPanelStyle({
                 position: 'fixed',
                 left: '0.75rem',
                 right: '0.75rem',
-                bottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
-                top: 'auto',
+                top: `${topOffset}px`,
+                bottom: 'auto',
                 width: 'auto',
                 maxWidth: 'none'
             });
@@ -47,13 +47,13 @@ const Reminders = () => {
         }
 
         const bellRect = bellRef.current.getBoundingClientRect();
-        const panelWidth = Math.min(350, window.innerWidth - 16);
+        const panelWidth = Math.min(360, window.innerWidth - 16);
         let left = bellRect.left + bellRect.width / 2 - panelWidth / 2;
         left = Math.max(8, Math.min(left, window.innerWidth - panelWidth - 8));
 
         setPanelStyle({
             position: 'fixed',
-            top: `${bellRect.bottom + 10}px`,
+            top: `${Math.max(bellRect.bottom + 10, topOffset)}px`,
             left: `${left}px`,
             right: 'auto',
             bottom: 'auto',
@@ -72,83 +72,25 @@ const Reminders = () => {
         };
     }, [updateLayout]);
 
-    const fetchReminders = useCallback(async () => {
+    const loadReminders = useCallback(async () => {
         try {
-            const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-            if (!loggedInUser || !loggedInUser.id) {
-                setReminders([]);
-                setActiveChildId(null);
-                return;
-            }
-
-            const seen = getSeenReminders();
-            const collected = [];
-
-            const childrenRes = await fetch('/api/children', {
-                headers: { 'x-user-id': loggedInUser.id }
-            });
-            let childrenData = [];
-            if (childrenRes.ok) {
-                childrenData = await childrenRes.json();
-            }
-
-            if (childrenData.length > 0) {
-                setActiveChildId(childrenData[0].id);
-                const childReminderLists = await Promise.all(
-                    childrenData.map(async (child) => {
-                        try {
-                            const res = await fetch(`/api/reminders/all/${child.id}`);
-                            if (!res.ok) return [];
-                            const data = await res.json();
-                            return (data || []).map((r) => ({
-                                ...r,
-                                childId: child.id,
-                                childName: child.name || `${child.firstName || ''} ${child.lastName || ''}`.trim()
-                            }));
-                        } catch {
-                            return [];
-                        }
-                    })
-                );
-                childReminderLists.flat().forEach((r) => collected.push(r));
-            } else {
-                setActiveChildId(null);
-            }
-
-            try {
-                const userRes = await fetch('/api/user-reminders', {
-                    headers: { 'x-user-id': loggedInUser.id }
-                });
-                if (userRes.ok) {
-                    const userData = await userRes.json();
-                    (userData || []).forEach((r) => {
-                        collected.push({
-                            ...r,
-                            type: r.type || 'custom',
-                            source: 'user',
-                            message: r.description || r.message
-                        });
-                    });
-                }
-            } catch (error) {
-                console.error('Failed to fetch user reminders', error);
-            }
-
-            setReminders(
-                collected.filter((r) => {
-                    if (r.source === 'auto' && r.type === 'danger') return true;
-                    return !seen.includes(r.id);
-                })
-            );
+            const [badge, all] = await Promise.all([
+                fetchAllReminders({ includeSeen: false }),
+                fetchAllReminders({ includeSeen: true }),
+            ]);
+            setReminders(badge.reminders);
+            setCalendarReminders(all.reminders);
+            setActiveChildId(all.activeChildId);
         } catch (error) {
             console.error('Failed to fetch reminders', error);
             setReminders([]);
+            setCalendarReminders([]);
         }
     }, []);
 
     useEffect(() => {
-        fetchReminders();
-    }, [location.pathname, fetchReminders]);
+        loadReminders();
+    }, [location.pathname, loadReminders]);
 
     useEffect(() => {
         if (!isOpen) return undefined;
@@ -170,9 +112,13 @@ const Reminders = () => {
     }, [isOpen]);
 
     const addSeenReminder = (reminderId) => {
-        const seen = getSeenReminders();
-        if (!seen.includes(reminderId)) {
-            localStorage.setItem('seenReminders', JSON.stringify([...seen, reminderId]));
+        try {
+            const seen = JSON.parse(localStorage.getItem('seenReminders') || '[]');
+            if (!seen.includes(reminderId)) {
+                localStorage.setItem('seenReminders', JSON.stringify([...seen, reminderId]));
+            }
+        } catch {
+            localStorage.setItem('seenReminders', JSON.stringify([reminderId]));
         }
     };
 
@@ -207,6 +153,7 @@ const Reminders = () => {
 
         addSeenReminder(reminder.id);
         setReminders((prev) => prev.filter((r) => r.id !== reminder.id));
+        setCalendarReminders((prev) => prev.filter((r) => r.id !== reminder.id));
     };
 
     const openAddModal = () => {
@@ -222,14 +169,22 @@ const Reminders = () => {
             <>
                 <div className="reminders-backdrop" onClick={() => setIsOpen(false)} />
                 <div
-                    className={`reminders-dropdown${isMobile ? ' is-mobile' : ''}`}
+                    className={`reminders-dropdown is-top${isMobile ? ' is-mobile' : ''}`}
                     ref={panelRef}
                     style={panelStyle || undefined}
                 >
                     <div className="reminders-header">
                         <h4>یادآورها</h4>
                         <div className="reminders-header-actions">
-                            <button type="button" className="add-reminder-btn" title="افزودن یادآور جدید" onClick={openAddModal}>
+                            <button
+                                type="button"
+                                className={`add-reminder-btn${panelView === 'calendar' ? ' is-on' : ''}`}
+                                title="تقویم یادآوری‌ها"
+                                onClick={() => setPanelView((view) => (view === 'calendar' ? 'list' : 'calendar'))}
+                            >
+                                <FontAwesomeIcon icon={panelView === 'calendar' ? faListUl : faCalendarAlt} />
+                            </button>
+                            <button type="button" className="add-reminder-btn" title="ثبت یادآوری" onClick={openAddModal}>
                                 <FontAwesomeIcon icon={faPlusCircle} />
                             </button>
                             <button type="button" className="reminders-close-btn" aria-label="بستن" onClick={() => setIsOpen(false)}>
@@ -237,7 +192,15 @@ const Reminders = () => {
                             </button>
                         </div>
                     </div>
-                    {reminders.length === 0 ? (
+                    {panelView === 'calendar' ? (
+                        <RemindersCalendar
+                            reminders={calendarReminders}
+                            compact
+                            showLink
+                            selectedKey={selectedCalKey}
+                            onSelectDay={(key) => setSelectedCalKey(key)}
+                        />
+                    ) : reminders.length === 0 ? (
                         <p className="no-reminders">
                             یادآوری فعالی ندارید.
                             {activeChildId ? ' با دکمه + می‌توانید یادآور جدید بسازید.' : ' ابتدا از بخش فرزندان، یک کودک اضافه کنید.'}
@@ -287,6 +250,11 @@ const Reminders = () => {
                             })}
                         </ul>
                     )}
+                    {panelView === 'list' && (
+                        <Link className="reminders-cal-link" to="/reminders" onClick={() => setIsOpen(false)}>
+                            تقویم یادآوری‌ها
+                        </Link>
+                    )}
                 </div>
             </>,
             document.body
@@ -312,7 +280,7 @@ const Reminders = () => {
                     isOpen={isModalOpen}
                     onRequestClose={() => setIsModalOpen(false)}
                     childId={activeChildId}
-                    onReminderAdded={fetchReminders}
+                    onReminderAdded={loadReminders}
                 />
             )}
         </div>

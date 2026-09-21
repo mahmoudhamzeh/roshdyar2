@@ -36,14 +36,14 @@ const AddChildPage = () => {
         birthWeight: '',
         birthHeight: '',
         birthHeadCircumference: '',
-        birthType: 'natural',
+        birthType: '',
         gestationalAge: '',
         birthPlace: '',
         apgar1: '',
         apgar5: '',
         height: '',
         weight: '',
-        bloodType: 'A+',
+        bloodType: '',
         allergies: {
             types: { ...DEFAULT_ALLERGY_TYPES },
             description: ''
@@ -146,6 +146,8 @@ const AddChildPage = () => {
             const formattedBirthDate = gregorianDate.toISOString().split('T')[0];
             const childData = {
                 ...formData,
+                birthType: formData.birthType || null,
+                bloodType: formData.bloodType || null,
                 userId: loggedInUser.id,
                 birthDate: formattedBirthDate,
                 name: `${formData.firstName || ''} ${formData.lastName || ''}`.trim(),
@@ -354,24 +356,32 @@ const AddChildPage = () => {
                                     <label>دور سر (سانتی‌متر)</label>
                                     <input type="number" name="birthHeadCircumference" value={formData.birthHeadCircumference} onChange={handleChange} placeholder="مثال: ۳۵" />
                                 </div>
-                                <div className="form-group">
-                                    <label>نوع زایمان</label>
-                                    <div className="choice-pills">
-                                        <button
-                                            type="button"
-                                            className={`choice-pill ${formData.birthType === 'natural' ? 'selected' : ''}`}
-                                            onClick={() => setFormData((p) => ({ ...p, birthType: 'natural' }))}
-                                        >
-                                            طبیعی
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`choice-pill ${formData.birthType === 'cesarean' ? 'selected' : ''}`}
-                                            onClick={() => setFormData((p) => ({ ...p, birthType: 'cesarean' }))}
-                                        >
-                                            سزارین
-                                        </button>
-                                    </div>
+                                <div className="form-group" />
+                            </div>
+                            <div className="form-group">
+                                <label>نوع زایمان</label>
+                                <div className="choice-pills">
+                                    <button
+                                        type="button"
+                                        className={`choice-pill ${!formData.birthType ? 'selected' : ''}`}
+                                        onClick={() => setFormData((p) => ({ ...p, birthType: '' }))}
+                                    >
+                                        انتخاب نشده
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`choice-pill ${formData.birthType === 'natural' ? 'selected' : ''}`}
+                                        onClick={() => setFormData((p) => ({ ...p, birthType: 'natural' }))}
+                                    >
+                                        طبیعی
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`choice-pill ${formData.birthType === 'cesarean' ? 'selected' : ''}`}
+                                        onClick={() => setFormData((p) => ({ ...p, birthType: 'cesarean' }))}
+                                    >
+                                        سزارین
+                                    </button>
                                 </div>
                             </div>
                             <div className="form-row">
@@ -414,15 +424,15 @@ const AddChildPage = () => {
                                 <div className="form-group">
                                     <label>گروه خونی</label>
                                     <select name="bloodType" value={formData.bloodType} onChange={handleChange}>
-                                        <option>A+</option>
-                                        <option>A-</option>
-                                        <option>B+</option>
-                                        <option>B-</option>
-                                        <option>AB+</option>
-                                        <option>AB-</option>
-                                        <option>O+</option>
-                                        <option>O-</option>
-                                        <option value="">نمی‌دانم</option>
+                                        <option value="">انتخاب نشده</option>
+                                        <option value="A+">A+</option>
+                                        <option value="A-">A-</option>
+                                        <option value="B+">B+</option>
+                                        <option value="B-">B-</option>
+                                        <option value="AB+">AB+</option>
+                                        <option value="AB-">AB-</option>
+                                        <option value="O+">O+</option>
+                                        <option value="O-">O-</option>
                                     </select>
                                 </div>
                                 <div className="form-group" />

@@ -1,0 +1,61 @@
+.reminders-page {
+  min-height: 100vh;
+  padding-bottom: 5.5rem;
+  direction: rtl;
+}
+
+.reminders-page-card {
+  margin: 0.85rem var(--page-pad) 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.reminders-page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.4rem;
+}
+
+.reminders-page-head p {
+  margin: 0;
+  color: var(--ink-muted);
+  line-height: 1.7;
+}
+
+.reminders-page-add {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  padding: 0.55rem 0.9rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.reminders-page-error {
+  margin: 0 1rem;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.reminders-page-selected {
+  padding: 0 1rem 1rem;
+}
+
+@media (min-width: 701px) {
+  .reminders-page-card {
+    max-width: 720px;
+    margin-right: auto;
+    margin-left: auto;
+  }
+}
