@@ -7,6 +7,7 @@ const {
     buildOtpMessage,
     buildAuthHeaders,
     deliverOtp,
+    deliverText,
     resetTokenCache
 } = require('./sms');
 
@@ -129,6 +130,34 @@ async function run() {
     } catch (err) {
         assert.ok(/IP این سرور/.test(err.message), err.message);
     }
+
+    const textLog = await deliverText('09120000000', 'تیکت شما پاسخ داده شده است', {
+        env: { SMS_PROVIDER: 'log' }
+    });
+    assert.strictEqual(textLog.channel, 'log');
+
+    const textFn = mockRequest(async () => ({
+        statusCode: 200,
+        data: {
+            message: 'Successfully done.',
+            succeeded: true,
+            data: ['ticket-sms'],
+            resultCode: 100
+        },
+        raw: ''
+    }));
+    const textSent = await deliverText('09121234567', 'تیکت شما پاسخ داده شده است', {
+        env: {
+            SMS_PROVIDER: 'idekavan',
+            SMS_API_KEY: 'test-key',
+            SMS_LINE_NUMBER: '989982007916',
+            SMS_PATTERN_ID: '638698763364455987'
+        },
+        requestFn: textFn
+    });
+    assert.strictEqual(textSent.channel, 'idekavan');
+    assert.ok(textFn.calls[0].url.endsWith('/api/1/message/send'));
+    assert.strictEqual(textFn.calls[0].options.body[0].MessageText, 'تیکت شما پاسخ داده شده است');
 
     resetTokenCache();
     console.log('sms unit tests passed');

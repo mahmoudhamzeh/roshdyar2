@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import TicketThreadModal from './TicketThreadModal';
 import './TicketsPage.css';
 
 const API = '';
@@ -33,8 +34,6 @@ const TicketsPage = () => {
     const [files, setFiles] = useState([]);
     const [submitting, setSubmitting] = useState(false);
     const [selected, setSelected] = useState(null);
-    const [reply, setReply] = useState('');
-    const [replying, setReplying] = useState(false);
 
     const loadTickets = async (keepSelectedId) => {
         setLoading(true);
@@ -94,32 +93,7 @@ const TicketsPage = () => {
         }
     };
 
-    const handleReply = async (e) => {
-        e.preventDefault();
-        if (!selected || !reply.trim()) return;
-        setReplying(true);
-        setError('');
-        try {
-            const res = await fetch(`${API}/api/tickets/${selected.id}/replies`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: reply.trim() })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.message || 'ارسال پاسخ ناموفق بود');
-            setReply('');
-            setSelected(data);
-            setSuccess('پاسخ شما ثبت شد.');
-            await loadTickets(data.id);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setReplying(false);
-        }
-    };
-
     const subgroups = groups[groupName] || [];
-    const canReply = selected && selected.status !== 'closed';
 
     return (
         <div className="tickets-page">
@@ -172,7 +146,7 @@ const TicketsPage = () => {
                 <ul className="tickets-list">
                     {tickets.map((ticket) => (
                         <li key={ticket.id} className="ui-card tickets-item">
-                            <button type="button" onClick={() => { setSelected(ticket); setReply(''); }}>
+                            <button type="button" onClick={() => setSelected(ticket)}>
                                 <span>
                                     <strong>{ticket.subject}</strong>
                                     <small className="ticket-number">{ticketNumberOf(ticket)}</small>
@@ -187,52 +161,14 @@ const TicketsPage = () => {
             )}
 
             {selected && (
-                <div className="tickets-detail ui-card">
-                    <div className="tickets-detail-head">
-                        <h3>{selected.subject}</h3>
-                        <button type="button" className="ui-btn-secondary ui-btn" onClick={() => setSelected(null)}>بستن</button>
-                    </div>
-                    <p className="ticket-number">شماره تیکت: {ticketNumberOf(selected)}</p>
-                    <p>{selected.groupName} / {selected.subgroup}</p>
-                    <span className={`ticket-pill status-${selected.status}`}>
-                        {STATUS_LABELS[selected.status] || selected.status}
-                    </span>
-                    <div className="tickets-thread">
-                        <div className="tickets-reply is-user">
-                            <strong>پیام شما</strong>
-                            <p>{selected.content || selected.message}</p>
-                        </div>
-                        {(selected.attachments || []).map((url) => (
-                            <a key={url} href={url} target="_blank" rel="noreferrer">مشاهده پیوست</a>
-                        ))}
-                        {(selected.replies || []).map((item, index) => (
-                            <div key={`${item.createdAt || index}-${index}`} className={`tickets-reply ${item.authorRole === 'admin' ? 'is-admin' : 'is-user'}`}>
-                                <strong>{item.authorRole === 'admin' ? (item.authorName || 'پشتیبانی') : 'پیام شما'}</strong>
-                                <p>{item.content}</p>
-                            </div>
-                        ))}
-                    </div>
-                    {canReply ? (
-                        <form className="tickets-reply-form" onSubmit={handleReply}>
-                            <label>
-                                پاسخ شما
-                                <textarea
-                                    className="ui-textarea"
-                                    rows="3"
-                                    value={reply}
-                                    onChange={(e) => setReply(e.target.value)}
-                                    placeholder="اگر پشتیبانی سؤال کرده، اینجا جواب بدهید."
-                                    required
-                                />
-                            </label>
-                            <button type="submit" className="ui-btn" disabled={replying || !reply.trim()}>
-                                {replying ? 'در حال ارسال...' : 'ارسال پاسخ'}
-                            </button>
-                        </form>
-                    ) : (
-                        <p className="tickets-closed">این تیکت بسته شده است.</p>
-                    )}
-                </div>
+                <TicketThreadModal
+                    ticket={selected}
+                    onClose={() => setSelected(null)}
+                    onUpdated={(data) => {
+                        setSelected(data);
+                        loadTickets(data.id);
+                    }}
+                />
             )}
         </div>
     );

@@ -30,6 +30,7 @@ import {
 } from '../utils/orderStatus';
 import CategoryCascade from './CategoryCascade';
 import ProductAttrFields from './ProductAttrFields';
+import TicketThreadModal from './TicketThreadModal';
 import './VendorPanelPage.css';
 
 const DOC_KINDS = [
@@ -133,6 +134,7 @@ const VendorPanelPage = () => {
     const [pickerOpen, setPickerOpen] = useState(false);
     const [pickedProduct, setPickedProduct] = useState(null);
     const [ticketForm, setTicketForm] = useState({ subject: '', content: '', subgroup: 'محصول' });
+    const [selectedTicket, setSelectedTicket] = useState(null);
     const [payoutAmount, setPayoutAmount] = useState('');
     const [editingProduct, setEditingProduct] = useState(null);
     const [editingOffer, setEditingOffer] = useState(null);
@@ -995,14 +997,30 @@ const VendorPanelPage = () => {
                                         {tickets.length === 0 && <li className="vendor-empty">تیکتی ثبت نشده است.</li>}
                                         {tickets.map((ticket) => (
                                             <li key={ticket.id}>
-                                                <div>
-                                                    <strong>#{ticket.id} · {ticket.subject}</strong>
-                                                    <p>{ticket.groupName} / {ticket.subgroup}</p>
-                                                </div>
-                                                <span className="vendor-pill">{TICKET_STATUS_LABELS[ticket.status] || ticket.status || 'باز'}</span>
+                                                <button
+                                                    type="button"
+                                                    className="vendor-ticket-open"
+                                                    onClick={() => setSelectedTicket(ticket)}
+                                                >
+                                                    <div>
+                                                        <strong>#{ticket.id} · {ticket.subject}</strong>
+                                                        <p>{ticket.groupName} / {ticket.subgroup}</p>
+                                                    </div>
+                                                    <span className="vendor-pill">{TICKET_STATUS_LABELS[ticket.status] || ticket.status || 'باز'}</span>
+                                                </button>
                                             </li>
                                         ))}
                                     </ul>
+                                    {selectedTicket && (
+                                        <TicketThreadModal
+                                            ticket={selectedTicket}
+                                            onClose={() => setSelectedTicket(null)}
+                                            onUpdated={(data) => {
+                                                setSelectedTicket(data);
+                                                load();
+                                            }}
+                                        />
+                                    )}
                                 </section>
                             )}
 

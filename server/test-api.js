@@ -660,6 +660,48 @@ async function run() {
         assert.strictEqual(userFollowUp.data.status, 'open');
         assert.ok((userFollowUp.data.replies || []).some((item) => item.content.includes('سؤال دیگری')));
 
+        const signup = await request('POST', '/api/signup', {
+            body: { login: 'ticket-user@example.com', password: 'secret12' }
+        });
+        assert.strictEqual(signup.status, 201, JSON.stringify(signup.data));
+        const userAuth = { Authorization: `Bearer ${signup.data.token}` };
+        const userId = signup.data.user.id;
+        const profile = await request('PUT', `/api/users/${userId}`, {
+            headers: userAuth,
+            body: { firstName: 'کاربر', lastName: 'تیکت', mobile: '09120001122' }
+        });
+        assert.strictEqual(profile.status, 200, JSON.stringify(profile.data));
+
+        const userTicket = await request('POST', '/api/tickets', {
+            headers: userAuth,
+            body: { subject: 'سؤال کاربر', content: 'متن تیکت کاربر', groupName: 'سایر', subgroup: 'عمومی' }
+        });
+        assert.strictEqual(userTicket.status, 201, JSON.stringify(userTicket.data));
+
+        const adminAnswer = await request('PUT', `/api/admin/tickets/${userTicket.data.id}`, {
+            headers: auth,
+            body: { reply: 'پاسخ پشتیبانی برای اعلان' }
+        });
+        assert.strictEqual(adminAnswer.status, 200, JSON.stringify(adminAnswer.data));
+        assert.strictEqual(adminAnswer.data.status, 'waiting_user');
+
+        const inbox = await request('GET', '/api/messages', { headers: userAuth });
+        assert.strictEqual(inbox.status, 200, JSON.stringify(inbox.data));
+        const ticketNotice = (inbox.data || []).find((item) => item.type === 'ticket');
+        assert.ok(ticketNotice, 'user must receive ticket reply notification');
+        assert.ok(/پاسخ/.test(ticketNotice.title) || /پاسخ/.test(ticketNotice.body));
+        assert.strictEqual(ticketNotice.link, '/profile?tab=tickets');
+
+        const userReplyWithFile = await requestMultipart('POST', `/api/tickets/${userTicket.data.id}/replies`, {
+            headers: userAuth,
+            fields: { content: 'پاسخ با فایل' },
+            files: [{ field: 'attachments', filename: 'note.png', body: TINY_PNG }]
+        });
+        assert.strictEqual(userReplyWithFile.status, 201, JSON.stringify(userReplyWithFile.data));
+        const lastReply = (userReplyWithFile.data.replies || []).slice(-1)[0];
+        assert.ok(lastReply && lastReply.content.includes('پاسخ با فایل'));
+        assert.ok((lastReply.attachments || []).some((url) => String(url).startsWith('/uploads/')));
+
         const filteredOpen = await request('GET', '/api/admin/tickets?status=open', { headers: auth });
         assert.ok(filteredOpen.data.tickets.every((item) => item.status === 'open'));
         assert.ok(filteredOpen.data.tickets.some((item) => item.id === ticket.data.id));

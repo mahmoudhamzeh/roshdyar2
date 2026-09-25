@@ -428,6 +428,21 @@ body.vendor-world .magazine-mini-player {
   font-size: 0.86rem;
 }
 
+.vendor-ticket-open {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: right;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
 .vendor-list-actions {
   display: flex;
   flex-direction: column;

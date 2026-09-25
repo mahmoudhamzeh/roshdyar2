@@ -204,7 +204,7 @@ async function idekavanHeaders(env, requestFn = httpRequest) {
     throw new Error('برای ایده کاوان SMS_API_KEY یا SMS_USERNAME/SMS_PASSWORD تنظیم نشده است');
 }
 
-async function sendIdekavanMessage({ phone, text, code, env, requestFn = httpRequest }) {
+async function sendIdekavanMessage({ phone, text, code, env, requestFn = httpRequest, forceText = false }) {
     const line = envValue(env, 'SMS_LINE_NUMBER', envValue(env, 'SMS_LINE'));
     if (!line) {
         throw new Error('SMS_LINE_NUMBER برای ایده کاوان تنظیم نشده است');
@@ -216,7 +216,7 @@ async function sendIdekavanMessage({ phone, text, code, env, requestFn = httpReq
     const source = toIdekavanSource(line);
     const patternId = envValue(env, 'SMS_PATTERN_ID', envValue(env, 'SMS_TEMPLATE_ID')).trim();
 
-    if (patternId) {
+    if (patternId && !forceText) {
         const response = await requestFn(
             'POST',
             `${idekavanBase(env)}/api/PatternMessage/send`,
@@ -293,6 +293,31 @@ async function sendSmsIrMessage({ phone, code, env, requestFn = httpRequest }) {
     throw new Error('SMS_TEMPLATE_ID یا SMS_LINE_NUMBER برای sms.ir تنظیم نشده است');
 }
 
+async function sendSmsIrText({ phone, text, env, requestFn = httpRequest }) {
+    const apiKey = envValue(env, 'SMS_API_KEY').trim();
+    const lineNumber = envValue(env, 'SMS_LINE_NUMBER', envValue(env, 'SMS_LINE'));
+    if (!apiKey) {
+        throw new Error('SMS_API_KEY برای sms.ir تنظیم نشده است');
+    }
+    if (!lineNumber) {
+        throw new Error('SMS_LINE_NUMBER برای ارسال متن آزاد sms.ir تنظیم نشده است');
+    }
+    const mobile = toSmsIrMobile(phone);
+    const response = await requestFn('POST', 'https://api.sms.ir/v1/send/bulk', {
+        headers: { 'x-api-key': apiKey, Accept: 'text/plain' },
+        body: {
+            lineNumber: Number(lineNumber),
+            messageText: String(text || ''),
+            mobiles: [mobile],
+            sendDateTime: null
+        }
+    });
+    if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
+        return { delivered: true, channel: 'sms.ir-bulk', data: response.data.data };
+    }
+    throw idekavanError('sms.ir bulk failed', response);
+}
+
 async function fetchUserInfo(env, requestFn = httpRequest) {
     const headers = await idekavanHeaders(env, requestFn);
     const response = await requestFn('GET', `${idekavanBase(env)}/api/user/userinfo`, { headers });
@@ -335,12 +360,44 @@ async function deliverOtp(phone, code, deps = {}) {
     throw new Error(`SMS_PROVIDER ناشناخته است: ${provider}`);
 }
 
+async function deliverText(phone, text, deps = {}) {
+    const env = deps.env || process.env;
+    const requestFn = deps.requestFn || httpRequest;
+    const provider = providerName(env);
+    const message = String(text || '').trim();
+    if (!message) {
+        throw new Error('متن پیامک خالی است');
+    }
+
+    if (provider === 'console' || provider === 'log') {
+        console.log(`[SMS] برای ${phone}: ${message}`);
+        return { delivered: true, channel: 'log' };
+    }
+
+    if (provider === 'idekavan' || provider === 'idekavan.com') {
+        return sendIdekavanMessage({
+            phone,
+            text: message,
+            env,
+            requestFn,
+            forceText: true
+        });
+    }
+
+    if (provider === 'sms.ir' || provider === 'smsir') {
+        return sendSmsIrText({ phone, text: message, env, requestFn });
+    }
+
+    throw new Error(`SMS_PROVIDER ناشناخته است: ${provider}`);
+}
+
 function resetTokenCache() {
     cachedBearer = null;
 }
 
 module.exports = {
     deliverOtp,
+    deliverText,
     sendIdekavanMessage,
     fetchUserInfo,
     pingProvider,
