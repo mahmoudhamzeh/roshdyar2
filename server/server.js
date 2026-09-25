@@ -1761,8 +1761,11 @@ async function notifyTicketAnswered(ticket, actor) {
         if (!phone) {
             console.error('ticket sms notify skipped: no mobile', ownerId);
         } else {
-            await deliverText(phone, smsText);
-            sms = true;
+            const sent = await deliverText(phone, smsText, {
+                patternParam: number.replace(/\D/g, '') || String(source.id)
+            });
+            sms = Boolean(sent && sent.delivered);
+            console.log('[tickets] sms channel', sent && sent.channel, phone.replace(/^(\d{4})\d+(\d{2})$/, '$1****$2'));
         }
     } catch (err) {
         console.error('ticket sms notify failed', err);
@@ -1843,10 +1846,11 @@ app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     }
     ticket.updatedAt = new Date().toISOString();
     const updated = await store.tickets.update(id, ticket);
+    const payload = await serializeTicket(updated);
     if (replyText) {
-        await notifyTicketAnswered(updated || ticket, req.user);
+        payload.notify = await notifyTicketAnswered(updated || ticket, req.user);
     }
-    res.json(await serializeTicket(updated));
+    res.json(payload);
 });
 
 app.get('/api/admin/stats', isAdmin, async (req, res) => {

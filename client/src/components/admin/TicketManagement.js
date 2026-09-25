@@ -131,7 +131,13 @@ const TicketManagement = () => {
             if (!response.ok) throw new Error(data.message || 'ثبت تغییرات ناموفق بود');
             setSelected(data);
             setReply('');
-            setNotice(replyText ? 'پاسخ ثبت شد و تیکت در انتظار پاسخ کاربر است.' : `وضعیت به «${STATUS_LABELS[data.status] || data.status}» تغییر کرد.`);
+            setNotice(replyText
+                ? (data.notify && data.notify.sms
+                    ? 'پاسخ ثبت شد و پیامک برای کاربر ارسال شد.'
+                    : (data.notify && data.notify.inbox
+                        ? 'پاسخ ثبت شد و در پیام‌های کاربر آمد؛ ارسال پیامک ناموفق بود.'
+                        : 'پاسخ ثبت شد و تیکت در انتظار پاسخ کاربر است.'))
+                : `وضعیت به «${STATUS_LABELS[data.status] || data.status}» تغییر کرد.`);
             await fetchTickets(filter, query);
         } catch (err) {
             setError(err.message);

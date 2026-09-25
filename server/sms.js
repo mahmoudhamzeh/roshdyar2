@@ -293,29 +293,35 @@ async function sendSmsIrMessage({ phone, code, env, requestFn = httpRequest }) {
     throw new Error('SMS_TEMPLATE_ID یا SMS_LINE_NUMBER برای sms.ir تنظیم نشده است');
 }
 
-async function sendSmsIrText({ phone, text, env, requestFn = httpRequest }) {
+async function sendSmsIrText({ phone, text, code, env, requestFn = httpRequest }) {
     const apiKey = envValue(env, 'SMS_API_KEY').trim();
     const lineNumber = envValue(env, 'SMS_LINE_NUMBER', envValue(env, 'SMS_LINE'));
+    const templateId = envValue(env, 'SMS_TEMPLATE_ID').trim();
     if (!apiKey) {
         throw new Error('SMS_API_KEY برای sms.ir تنظیم نشده است');
     }
-    if (!lineNumber) {
-        throw new Error('SMS_LINE_NUMBER برای ارسال متن آزاد sms.ir تنظیم نشده است');
-    }
-    const mobile = toSmsIrMobile(phone);
-    const response = await requestFn('POST', 'https://api.sms.ir/v1/send/bulk', {
-        headers: { 'x-api-key': apiKey, Accept: 'text/plain' },
-        body: {
-            lineNumber: Number(lineNumber),
-            messageText: String(text || ''),
-            mobiles: [mobile],
-            sendDateTime: null
+    if (lineNumber) {
+        const mobile = toSmsIrMobile(phone);
+        const response = await requestFn('POST', 'https://api.sms.ir/v1/send/bulk', {
+            headers: { 'x-api-key': apiKey, Accept: 'text/plain' },
+            body: {
+                lineNumber: Number(lineNumber),
+                messageText: String(text || ''),
+                mobiles: [mobile],
+                sendDateTime: null
+            }
+        });
+        if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
+            return { delivered: true, channel: 'sms.ir-bulk', data: response.data.data };
         }
-    });
-    if (response.statusCode >= 200 && response.statusCode < 300 && response.data && response.data.status === 1) {
-        return { delivered: true, channel: 'sms.ir-bulk', data: response.data.data };
+        if (!templateId) {
+            throw idekavanError('sms.ir bulk failed', response);
+        }
     }
-    throw idekavanError('sms.ir bulk failed', response);
+    if (templateId) {
+        return sendSmsIrMessage({ phone, code: code != null ? code : text, env, requestFn });
+    }
+    throw new Error('SMS_TEMPLATE_ID یا SMS_LINE_NUMBER برای ارسال پیامک تنظیم نشده است');
 }
 
 async function fetchUserInfo(env, requestFn = httpRequest) {
@@ -360,6 +366,13 @@ async function deliverOtp(phone, code, deps = {}) {
     throw new Error(`SMS_PROVIDER ناشناخته است: ${provider}`);
 }
 
+function shortSmsParam(value, fallback = '') {
+    const raw = String(value != null && value !== '' ? value : fallback).trim();
+    const digits = raw.replace(/\D/g, '');
+    if (digits) return digits.slice(-8);
+    return raw.slice(0, 20);
+}
+
 async function deliverText(phone, text, deps = {}) {
     const env = deps.env || process.env;
     const requestFn = deps.requestFn || httpRequest;
@@ -368,49 +381,53 @@ async function deliverText(phone, text, deps = {}) {
     if (!message) {
         throw new Error('متن پیامک خالی است');
     }
+    const patternParam = shortSmsParam(deps.patternParam, message);
 
     if (provider === 'console' || provider === 'log') {
         console.log(`[SMS] برای ${phone}: ${message}`);
-        return { delivered: true, channel: 'log' };
+        return { delivered: true, channel: 'log', param: patternParam };
     }
 
     if (provider === 'idekavan' || provider === 'idekavan.com') {
         const ticketPattern = envValue(env, 'SMS_TICKET_PATTERN_ID').trim();
+        const otpPattern = envValue(env, 'SMS_PATTERN_ID', envValue(env, 'SMS_TEMPLATE_ID')).trim();
         if (ticketPattern) {
             return sendIdekavanMessage({
                 phone,
                 text: message,
-                code: message,
+                code: message.slice(0, 40),
                 env: { ...env, SMS_PATTERN_ID: ticketPattern },
                 requestFn,
                 forceText: false
             });
         }
-        try {
-            return await sendIdekavanMessage({
-                phone,
-                text: message,
-                env,
-                requestFn,
-                forceText: true
-            });
-        } catch (err) {
-            const patternId = envValue(env, 'SMS_PATTERN_ID', envValue(env, 'SMS_TEMPLATE_ID')).trim();
-            if (!patternId) throw err;
-            console.error('free-text SMS failed, falling back to pattern:', err.message);
+        if (otpPattern) {
             return sendIdekavanMessage({
                 phone,
                 text: message,
-                code: message,
+                code: patternParam,
                 env,
                 requestFn,
                 forceText: false
             });
         }
+        return sendIdekavanMessage({
+            phone,
+            text: message,
+            env,
+            requestFn,
+            forceText: true
+        });
     }
 
     if (provider === 'sms.ir' || provider === 'smsir') {
-        return sendSmsIrText({ phone, text: message, env, requestFn });
+        return sendSmsIrText({
+            phone,
+            text: message,
+            code: patternParam,
+            env,
+            requestFn
+        });
     }
 
     throw new Error(`SMS_PROVIDER ناشناخته است: ${provider}`);

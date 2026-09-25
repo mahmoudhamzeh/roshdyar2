@@ -684,6 +684,8 @@ async function run() {
         });
         assert.strictEqual(adminAnswer.status, 200, JSON.stringify(adminAnswer.data));
         assert.strictEqual(adminAnswer.data.status, 'waiting_user');
+        assert.ok(adminAnswer.data.notify && adminAnswer.data.notify.inbox, JSON.stringify(adminAnswer.data.notify));
+        assert.ok(adminAnswer.data.notify.sms, JSON.stringify(adminAnswer.data.notify));
 
         const inbox = await request('GET', '/api/messages', { headers: userAuth });
         assert.strictEqual(inbox.status, 200, JSON.stringify(inbox.data));
