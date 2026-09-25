@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './TicketsPage.css';
 
 const STATUS_LABELS = {
@@ -30,25 +30,32 @@ const TicketThreadModal = ({ ticket, onClose, onUpdated }) => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
 
-    useEffect(() => {
-        setDetail(ticket);
-        setReply('');
-        setFiles([]);
-        setError('');
-        setSuccess('');
-    }, [ticket]);
+    const ticketId = ticket && ticket.id;
+    const lastTicketId = useRef(null);
 
     useEffect(() => {
-        if (!ticket || ticket.id == null) return undefined;
+        const idChanged = lastTicketId.current !== ticketId;
+        lastTicketId.current = ticketId;
+        if (ticket) setDetail(ticket);
+        if (idChanged) {
+            setReply('');
+            setFiles([]);
+            setError('');
+            setSuccess('');
+        }
+    }, [ticket, ticketId]);
+
+    useEffect(() => {
+        if (ticketId == null) return undefined;
         let cancelled = false;
-        fetch(`/api/tickets/${ticket.id}`)
+        fetch(`/api/tickets/${ticketId}`)
             .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
                 if (!cancelled && data) setDetail(data);
             })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [ticket]);
+    }, [ticketId]);
 
     useEffect(() => {
         const onKey = (event) => {
