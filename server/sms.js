@@ -375,13 +375,38 @@ async function deliverText(phone, text, deps = {}) {
     }
 
     if (provider === 'idekavan' || provider === 'idekavan.com') {
-        return sendIdekavanMessage({
-            phone,
-            text: message,
-            env,
-            requestFn,
-            forceText: true
-        });
+        const ticketPattern = envValue(env, 'SMS_TICKET_PATTERN_ID').trim();
+        if (ticketPattern) {
+            return sendIdekavanMessage({
+                phone,
+                text: message,
+                code: message,
+                env: { ...env, SMS_PATTERN_ID: ticketPattern },
+                requestFn,
+                forceText: false
+            });
+        }
+        try {
+            return await sendIdekavanMessage({
+                phone,
+                text: message,
+                env,
+                requestFn,
+                forceText: true
+            });
+        } catch (err) {
+            const patternId = envValue(env, 'SMS_PATTERN_ID', envValue(env, 'SMS_TEMPLATE_ID')).trim();
+            if (!patternId) throw err;
+            console.error('free-text SMS failed, falling back to pattern:', err.message);
+            return sendIdekavanMessage({
+                phone,
+                text: message,
+                code: message,
+                env,
+                requestFn,
+                forceText: false
+            });
+        }
     }
 
     if (provider === 'sms.ir' || provider === 'smsir') {

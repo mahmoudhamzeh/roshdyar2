@@ -691,6 +691,8 @@ async function run() {
         assert.ok(ticketNotice, 'user must receive ticket reply notification');
         assert.ok(/پاسخ/.test(ticketNotice.title) || /پاسخ/.test(ticketNotice.body));
         assert.strictEqual(ticketNotice.link, '/profile?tab=tickets');
+        const unread = await request('GET', '/api/messages/unread-count', { headers: userAuth });
+        assert.ok((unread.data && unread.data.count) >= 1);
 
         const userReplyWithFile = await requestMultipart('POST', `/api/tickets/${userTicket.data.id}/replies`, {
             headers: userAuth,

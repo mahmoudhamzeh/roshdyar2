@@ -159,6 +159,32 @@ async function run() {
     assert.ok(textFn.calls[0].url.endsWith('/api/1/message/send'));
     assert.strictEqual(textFn.calls[0].options.body[0].MessageText, 'تیکت شما پاسخ داده شده است');
 
+    const fallbackFn = mockRequest(async (method, url) => {
+        if (String(url).includes('/api/1/message/send')) {
+            return {
+                statusCode: 403,
+                data: '<html><h1>403</h1><h2>Forbidden</h2></html>',
+                raw: '<html><h1>403</h1><h2>Forbidden</h2></html>'
+            };
+        }
+        return {
+            statusCode: 200,
+            data: { message: 'Successfully done.', succeeded: true, data: ['pat'], resultCode: 100 },
+            raw: ''
+        };
+    });
+    const fallback = await deliverText('09121234567', 'تیکت شما پاسخ داده شده است', {
+        env: {
+            SMS_PROVIDER: 'idekavan',
+            SMS_API_KEY: 'test-key',
+            SMS_LINE_NUMBER: '989982007916',
+            SMS_PATTERN_ID: '638698763364455987'
+        },
+        requestFn: fallbackFn
+    });
+    assert.strictEqual(fallback.channel, 'idekavan-pattern');
+    assert.ok(fallbackFn.calls.some((call) => String(call.url).includes('/api/PatternMessage/send')));
+
     resetTokenCache();
     console.log('sms unit tests passed');
 }

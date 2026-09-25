@@ -36,6 +36,19 @@
   border-radius: 8px;
 }
 
+.tickets-alert {
+  color: #1d4ed8;
+  background: #dbeafe;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  font-weight: 700;
+  margin: 0 0 1rem;
+}
+
+.tickets-item.is-answered {
+  outline: 2px solid #2563eb;
+}
+
 .ticket-number {
   display: block;
   color: var(--ink-muted);

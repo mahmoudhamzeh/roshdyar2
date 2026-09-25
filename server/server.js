@@ -505,6 +505,7 @@ function normalizePhone(phone) {
     if (p.startsWith('+98')) p = `0${p.slice(3)}`;
     else if (p.startsWith('0098')) p = `0${p.slice(4)}`;
     else if (p.startsWith('98') && p.length === 12) p = `0${p.slice(2)}`;
+    if (/^9\d{9}$/.test(p)) p = `0${p}`;
     return p;
 }
 
@@ -1708,16 +1709,35 @@ function requestedTicketStatus(value) {
     return TICKET_STATUSES.includes(value) || value === 'answered' ? status : '';
 }
 
-async function notifyTicketAnswered(ticket, actor) {
-    const ownerId = Number(ticket && ticket.userId);
-    if (!Number.isFinite(ownerId)) return { notified: false };
-    if (actor && Number(actor.id) === ownerId) return { notified: false };
+function resolveUserPhone(user) {
+    if (!user) return '';
+    const candidates = [user.mobile, user.username, user.phone, user.email];
+    for (const value of candidates) {
+        const phone = normalizePhone(value);
+        if (isValidIranMobile(phone)) return phone;
+    }
+    return '';
+}
 
-    const number = ticketNumberOf(ticket);
+async function notifyTicketAnswered(ticket, actor) {
+    const source = ticket || {};
+    const ownerId = Number(source.userId);
+    if (!Number.isFinite(ownerId) || ownerId <= 0) {
+        console.error('ticket notify skipped: missing owner', source && source.id);
+        return { inbox: false, sms: false };
+    }
+
+    const number = ticketNumberOf(source);
     const title = 'تیکت شما پاسخ داده شد';
     const body = number
         ? `تیکت ${number} پاسخ داده شده است. برای مشاهده و پاسخ به پروفایل > پشتیبانی مراجعه کنید.`
         : 'تیکت شما پاسخ داده شده است. برای مشاهده و پاسخ به پروفایل > پشتیبانی مراجعه کنید.';
+    const smsText = number
+        ? `تیکت شما پاسخ داده شده است\nشماره تیکت: ${number}`
+        : 'تیکت شما پاسخ داده شده است';
+
+    let inbox = false;
+    let sms = false;
 
     try {
         await store.messages.create({
@@ -1730,23 +1750,26 @@ async function notifyTicketAnswered(ticket, actor) {
             createdAt: new Date().toISOString(),
             createdBy: actor && actor.id != null ? Number(actor.id) : null
         });
+        inbox = true;
     } catch (err) {
         console.error('ticket inbox notify failed', err);
     }
 
     try {
         const owner = await store.users.getById(ownerId);
-        const phone = normalizePhone(owner && (owner.mobile || owner.username || ''));
-        if (isValidIranMobile(phone)) {
-            await deliverText(phone, number
-                ? `تیکت شما پاسخ داده شده است\nشماره تیکت: ${number}`
-                : 'تیکت شما پاسخ داده شده است');
+        const phone = resolveUserPhone(owner) || resolveUserPhone(source.user);
+        if (!phone) {
+            console.error('ticket sms notify skipped: no mobile', ownerId);
+        } else {
+            await deliverText(phone, smsText);
+            sms = true;
         }
     } catch (err) {
         console.error('ticket sms notify failed', err);
     }
 
-    return { notified: true };
+    console.log('[tickets] notify', { ticketId: source.id, ownerId, inbox, sms });
+    return { inbox, sms };
 }
 
 app.get('/api/admin/tickets', isAdmin, async (req, res) => {
@@ -1821,7 +1844,7 @@ app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     ticket.updatedAt = new Date().toISOString();
     const updated = await store.tickets.update(id, ticket);
     if (replyText) {
-        await notifyTicketAnswered(updated, req.user);
+        await notifyTicketAnswered(updated || ticket, req.user);
     }
     res.json(await serializeTicket(updated));
 });
@@ -1929,7 +1952,7 @@ app.post('/api/tickets/:id/replies', maybeMultipart('attachments', 4), async (re
     ticket.updatedAt = new Date().toISOString();
     const updated = await store.tickets.update(ticket.id, ticket);
     if (asAdmin) {
-        await notifyTicketAnswered(updated, user);
+        await notifyTicketAnswered(updated || ticket, user);
     }
     res.status(201).json(await serializeTicket(updated));
 });

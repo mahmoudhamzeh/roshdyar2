@@ -24,12 +24,42 @@ const ProfilePage = () => {
     const [activeTab, setActiveTab] = useState(
         PROFILE_TABS.includes(requestedTab) ? requestedTab : 'userInfo'
     );
+    const [unreadMessages, setUnreadMessages] = useState(0);
+    const [answeredTickets, setAnsweredTickets] = useState(0);
 
     useEffect(() => {
         if (PROFILE_TABS.includes(requestedTab)) {
             setActiveTab(requestedTab);
         }
     }, [requestedTab]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadBadges = async () => {
+            try {
+                const [msgRes, ticketRes] = await Promise.all([
+                    fetch('/api/messages/unread-count'),
+                    fetch('/api/tickets')
+                ]);
+                if (cancelled) return;
+                if (msgRes.ok) {
+                    const data = await msgRes.json();
+                    setUnreadMessages(Number(data && data.count) || 0);
+                }
+                if (ticketRes.ok) {
+                    const list = await ticketRes.json();
+                    const tickets = Array.isArray(list) ? list : (list.tickets || []);
+                    setAnsweredTickets(tickets.filter((item) => (
+                        item.status === 'waiting_user' || item.status === 'answered'
+                    )).length);
+                }
+            } catch (_) {
+                /* badges are optional */
+            }
+        };
+        loadBadges();
+        return () => { cancelled = true; };
+    }, [activeTab]);
     const [childrenOpen, setChildrenOpen] = useState(false);
     const [children, setChildren] = useState([]);
     const [selectedChild, setSelectedChild] = useState('');
@@ -74,8 +104,8 @@ const ProfilePage = () => {
     const tabs = [
         { id: 'userInfo', label: 'اطلاعات' },
         { id: 'myChildren', label: 'کودکان من', onClick: openChildrenPicker },
-        { id: 'messages', label: 'پیام‌ها' },
-        { id: 'tickets', label: 'پشتیبانی' },
+        { id: 'messages', label: unreadMessages ? `پیام‌ها (${unreadMessages})` : 'پیام‌ها' },
+        { id: 'tickets', label: answeredTickets ? `پشتیبانی (${answeredTickets})` : 'پشتیبانی' },
         { id: 'orders', label: 'سفارش‌ها', href: '/orders' },
         { id: 'changePassword', label: 'رمز عبور' }
     ];

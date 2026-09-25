@@ -94,6 +94,9 @@ const TicketsPage = () => {
     };
 
     const subgroups = groups[groupName] || [];
+    const answeredTickets = tickets.filter((ticket) => (
+        ticket.status === 'waiting_user' || ticket.status === 'answered'
+    ));
 
     return (
         <div className="tickets-page">
@@ -137,6 +140,11 @@ const TicketsPage = () => {
             </form>
 
             {success && <p className="tickets-success">{success}</p>}
+            {answeredTickets.length > 0 && (
+                <p className="tickets-alert" role="status">
+                    تیکت شما پاسخ داده شده است. روی تیکت بزنید تا پاسخ پشتیبانی را ببینید و جواب بدهید.
+                </p>
+            )}
             {error && <p className="tickets-error">{error}</p>}
             {loading ? (
                 <p>در حال بارگذاری...</p>
@@ -145,7 +153,7 @@ const TicketsPage = () => {
             ) : (
                 <ul className="tickets-list">
                     {tickets.map((ticket) => (
-                        <li key={ticket.id} className="ui-card tickets-item">
+                        <li key={ticket.id} className={`ui-card tickets-item${ticket.status === 'waiting_user' || ticket.status === 'answered' ? ' is-answered' : ''}`}>
                             <button type="button" onClick={() => setSelected(ticket)}>
                                 <span>
                                     <strong>{ticket.subject}</strong>
