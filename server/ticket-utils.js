@@ -25,10 +25,20 @@ function publicTicketUser(user) {
     };
 }
 
+function ticketNumberOf(ticket) {
+    if (!ticket) return '';
+    if (ticket.ticketNumber) return String(ticket.ticketNumber);
+    if (ticket.id != null) return `TK-${String(ticket.id).padStart(5, '0')}`;
+    return '';
+}
+
 function normalizeReply(reply, fallback = {}) {
     if (!reply || typeof reply !== 'object') return null;
     const content = String(reply.content || reply.message || '').trim();
-    if (!content) return null;
+    const attachments = Array.isArray(reply.attachments)
+        ? reply.attachments.map((item) => String(item || '').trim()).filter(Boolean)
+        : [];
+    if (!content && attachments.length === 0) return null;
     const authorRole = reply.authorRole === 'admin' || reply.role === 'admin' ? 'admin' : 'user';
     const userId = reply.userId != null && reply.userId !== ''
         ? Number(reply.userId)
@@ -42,6 +52,7 @@ function normalizeReply(reply, fallback = {}) {
             || (authorRole === 'admin' ? 'پشتیبانی' : 'کاربر')
         ).trim(),
         content,
+        attachments,
         createdAt: reply.createdAt || new Date().toISOString()
     };
 }
@@ -54,7 +65,7 @@ function ticketPayload(ticket) {
         subgroup: ticket.subgroup || '',
         attachments: Array.isArray(ticket.attachments) ? ticket.attachments : [],
         replies: (Array.isArray(ticket.replies) ? ticket.replies : []).map((item) => normalizeReply(item)).filter(Boolean),
-        ticketNumber: ticket.ticketNumber || (ticket.id != null ? `TK-${String(ticket.id).padStart(5, '0')}` : '')
+        ticketNumber: ticketNumberOf(ticket)
     };
 }
 
@@ -97,6 +108,7 @@ module.exports = {
     normalizeTicketStatus,
     displayUserName,
     publicTicketUser,
+    ticketNumberOf,
     normalizeReply,
     ticketPayload,
     presentTicket,

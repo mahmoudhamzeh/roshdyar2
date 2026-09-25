@@ -249,8 +249,11 @@ const TicketManagement = () => {
                             {(selected.replies || []).map((item, index) => (
                                 <div key={`${item.createdAt || index}-${index}`} className={`ticket-bubble ${item.authorRole === 'admin' ? 'is-admin' : 'is-user'}`}>
                                     <strong>{item.authorName || (item.authorRole === 'admin' ? 'پشتیبانی' : userLabel(selected))}</strong>
-                                    <p>{item.content}</p>
+                                    {item.content ? <p>{item.content}</p> : null}
                                     <small>{formatWhen(item.createdAt)}</small>
+                                    {(item.attachments || []).map((url) => (
+                                        <p key={url}><a href={url} target="_blank" rel="noreferrer">پیوست</a></p>
+                                    ))}
                                 </div>
                             ))}
                         </div>

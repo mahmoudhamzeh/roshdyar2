@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useHistory, useLocation } from 'react-router-dom';
 import Modal from 'react-modal';
 import UserInfo from './UserInfo';
@@ -12,13 +12,24 @@ import './ProfilePage.css';
 
 Modal.setAppElement('#root');
 
+const PROFILE_TABS = ['userInfo', 'messages', 'tickets', 'changePassword'];
+
 const ProfilePage = () => {
     const history = useHistory();
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const needsComplete = searchParams.get('complete') === '1';
     const nextPath = searchParams.get('next') || '';
-    const [activeTab, setActiveTab] = useState('userInfo');
+    const requestedTab = searchParams.get('tab');
+    const [activeTab, setActiveTab] = useState(
+        PROFILE_TABS.includes(requestedTab) ? requestedTab : 'userInfo'
+    );
+
+    useEffect(() => {
+        if (PROFILE_TABS.includes(requestedTab)) {
+            setActiveTab(requestedTab);
+        }
+    }, [requestedTab]);
     const [childrenOpen, setChildrenOpen] = useState(false);
     const [children, setChildren] = useState([]);
     const [selectedChild, setSelectedChild] = useState('');

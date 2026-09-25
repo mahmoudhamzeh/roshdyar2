@@ -177,6 +177,12 @@ function run() {
     const ticketUtils = require('./ticket-utils');
     assert.strictEqual(ticketUtils.normalizeTicketStatus('answered'), 'waiting_user');
     assert.strictEqual(ticketUtils.displayUserName({ firstName: 'علی', lastName: 'فروشنده' }), 'علی فروشنده');
+    const fileReply = ticketUtils.normalizeReply({ attachments: ['/uploads/a.png'] });
+    assert.ok(fileReply);
+    assert.deepStrictEqual(fileReply.attachments, ['/uploads/a.png']);
+    assert.strictEqual(fileReply.content, '');
+    const textReply = ticketUtils.normalizeReply({ content: 'فایل', attachments: ['/uploads/b.png'] });
+    assert.deepStrictEqual(textReply.attachments, ['/uploads/b.png']);
 
     const ticket = store.tickets.create({
         userId: createdUser.id,

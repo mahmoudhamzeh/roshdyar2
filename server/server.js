@@ -35,7 +35,7 @@ const {
     calendarDayKey,
     isCompletedOnDay
 } = require('./child-growth-data');
-const { deliverOtp } = require('./sms');
+const { deliverOtp, deliverText } = require('./sms');
 const { analyzeConcernWithModel, chatGrowthAssistant, buildAssistantContext } = require('./child-growth-ai');
 const { registerMagazineRoutes, overlayLegacyContent } = require('./magazine-routes');
 const growthPlaysStore = require('./growth-plays-store');
@@ -43,6 +43,7 @@ const {
     TICKET_STATUSES,
     normalizeTicketStatus,
     displayUserName,
+    ticketNumberOf,
     normalizeReply,
     presentTicket
 } = require('./ticket-utils');
@@ -1707,6 +1708,47 @@ function requestedTicketStatus(value) {
     return TICKET_STATUSES.includes(value) || value === 'answered' ? status : '';
 }
 
+async function notifyTicketAnswered(ticket, actor) {
+    const ownerId = Number(ticket && ticket.userId);
+    if (!Number.isFinite(ownerId)) return { notified: false };
+    if (actor && Number(actor.id) === ownerId) return { notified: false };
+
+    const number = ticketNumberOf(ticket);
+    const title = 'تیکت شما پاسخ داده شد';
+    const body = number
+        ? `تیکت ${number} پاسخ داده شده است. برای مشاهده و پاسخ به پروفایل > پشتیبانی مراجعه کنید.`
+        : 'تیکت شما پاسخ داده شده است. برای مشاهده و پاسخ به پروفایل > پشتیبانی مراجعه کنید.';
+
+    try {
+        await store.messages.create({
+            title,
+            body,
+            link: '/profile?tab=tickets',
+            type: 'ticket',
+            isBulk: false,
+            recipientIds: [ownerId],
+            createdAt: new Date().toISOString(),
+            createdBy: actor && actor.id != null ? Number(actor.id) : null
+        });
+    } catch (err) {
+        console.error('ticket inbox notify failed', err);
+    }
+
+    try {
+        const owner = await store.users.getById(ownerId);
+        const phone = normalizePhone(owner && (owner.mobile || owner.username || ''));
+        if (isValidIranMobile(phone)) {
+            await deliverText(phone, number
+                ? `تیکت شما پاسخ داده شده است\nشماره تیکت: ${number}`
+                : 'تیکت شما پاسخ داده شده است');
+        }
+    } catch (err) {
+        console.error('ticket sms notify failed', err);
+    }
+
+    return { notified: true };
+}
+
 app.get('/api/admin/tickets', isAdmin, async (req, res) => {
     const all = await store.tickets.list();
     const counts = store.tickets.countByStatus
@@ -1778,6 +1820,9 @@ app.put('/api/admin/tickets/:id', isAdmin, async (req, res) => {
     }
     ticket.updatedAt = new Date().toISOString();
     const updated = await store.tickets.update(id, ticket);
+    if (replyText) {
+        await notifyTicketAnswered(updated, req.user);
+    }
     res.json(await serializeTicket(updated));
 });
 
@@ -1853,7 +1898,7 @@ app.get('/api/tickets/:id', async (req, res) => {
     res.json(await serializeTicket(ticket));
 });
 
-app.post('/api/tickets/:id/replies', async (req, res) => {
+app.post('/api/tickets/:id/replies', maybeMultipart('attachments', 4), async (req, res) => {
     const user = await requireUser(req, res);
     if (!user) return;
     const ticket = await store.tickets.getById(req.params.id);
@@ -1862,8 +1907,9 @@ app.post('/api/tickets/:id/replies', async (req, res) => {
         return res.status(403).json({ message: 'دسترسی غیرمجاز' });
     }
     const content = String((req.body && (req.body.content || req.body.reply || req.body.message)) || '').trim();
-    if (!content) {
-        return res.status(400).json({ message: 'متن پاسخ الزامی است' });
+    const attachments = (req.files || []).map((file) => `/uploads/${file.filename}`);
+    if (!content && attachments.length === 0) {
+        return res.status(400).json({ message: 'متن پاسخ یا پیوست الزامی است' });
     }
     const current = normalizeTicketStatus(ticket.status);
     if (current === 'closed') {
@@ -1876,11 +1922,15 @@ app.post('/api/tickets/:id/replies', async (req, res) => {
         authorRole: asAdmin ? 'admin' : 'user',
         authorName: displayUserName(user),
         content,
+        attachments,
         createdAt: new Date().toISOString()
     }));
     ticket.status = asAdmin ? 'waiting_user' : 'open';
     ticket.updatedAt = new Date().toISOString();
     const updated = await store.tickets.update(ticket.id, ticket);
+    if (asAdmin) {
+        await notifyTicketAnswered(updated, user);
+    }
     res.status(201).json(await serializeTicket(updated));
 });
 
